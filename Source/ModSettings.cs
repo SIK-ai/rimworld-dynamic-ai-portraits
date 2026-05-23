@@ -61,6 +61,7 @@ namespace AIPortraits
 
         // UI states (not serialized)
         private int activeTab = 0; // 0 = API Settings, 1 = Pawn Gallery
+        private bool showAdvanced = false;
         private Vector2 leftScrollPosition = Vector2.zero;
         private Vector2 rightScrollPosition = Vector2.zero;
         private Vector2 vibeScrollPosition = Vector2.zero;
@@ -190,97 +191,144 @@ namespace AIPortraits
             Rect styleRow = listing.GetRect(28f);
             float styleW = styleRow.width / 3f;
 
-            Rect btnKorean  = new Rect(styleRow.x,                    styleRow.y, styleW - 4f, 28f);
-            Rect btnWestern = new Rect(styleRow.x + styleW,           styleRow.y, styleW - 4f, 28f);
-            Rect btnPixel   = new Rect(styleRow.x + styleW * 2f,      styleRow.y, styleW - 4f, 28f);
+            Rect btnKorean  = new Rect(styleRow.x,             styleRow.y, styleW - 4f, 28f);
+            Rect btnWestern = new Rect(styleRow.x + styleW,    styleRow.y, styleW - 4f, 28f);
+            Rect btnPixel   = new Rect(styleRow.x + styleW*2f, styleRow.y, styleW - 4f, 28f);
 
-            // Highlight active style
-            if (portraitStyle == PortraitStyle.Realistic_Korean)
-                GUI.color = new Color(0.5f, 0.9f, 1f);
-            if (Widgets.ButtonText(btnKorean, "🎨 Realistic (Korean)"))
-                portraitStyle = PortraitStyle.Realistic_Korean;
+            if (portraitStyle == PortraitStyle.Realistic_Korean)  GUI.color = new Color(0.5f, 0.9f, 1f);
+            if (Widgets.ButtonText(btnKorean,  "🎨 Realistic (Korean)"))  portraitStyle = PortraitStyle.Realistic_Korean;
             GUI.color = Color.white;
 
-            if (portraitStyle == PortraitStyle.Realistic_Western)
-                GUI.color = new Color(0.5f, 0.9f, 1f);
-            if (Widgets.ButtonText(btnWestern, "⚔ Realistic (Western)"))
-                portraitStyle = PortraitStyle.Realistic_Western;
+            if (portraitStyle == PortraitStyle.Realistic_Western) GUI.color = new Color(0.5f, 0.9f, 1f);
+            if (Widgets.ButtonText(btnWestern, "⚔ Realistic (Western)")) portraitStyle = PortraitStyle.Realistic_Western;
             GUI.color = Color.white;
 
-            if (portraitStyle == PortraitStyle.DotPixel)
-                GUI.color = new Color(0.5f, 0.9f, 1f);
-            if (Widgets.ButtonText(btnPixel, "🟦 Pixel / Dot"))
-                portraitStyle = PortraitStyle.DotPixel;
+            if (portraitStyle == PortraitStyle.DotPixel)          GUI.color = new Color(0.5f, 0.9f, 1f);
+            if (Widgets.ButtonText(btnPixel,   "🟦 Pixel / Dot"))          portraitStyle = PortraitStyle.DotPixel;
             GUI.color = Color.white;
 
             listing.Gap(6f);
-            string styleDesc;
-            if (portraitStyle == PortraitStyle.Realistic_Korean)
-                styleDesc = "Semi-realistic Korean RPG fan-art: dramatic chiaroscuro, warm/cool color contrast, expressive faces.";
-            else if (portraitStyle == PortraitStyle.Realistic_Western)
-                styleDesc = "Western dark fantasy: oil painting, Path of Exile / Pillars of Eternity character card aesthetic.";
-            else if (portraitStyle == PortraitStyle.DotPixel)
-                styleDesc = "Retro pixel art: dithered palette, crisp pixel edges, GBA/SNES RPG portrait style.";
-            else
-                styleDesc = "";
+            string styleDesc =
+                portraitStyle == PortraitStyle.Realistic_Korean  ? "Semi-realistic Korean manhwa / JRPG anime style — painterly brushwork, warm/cool contrast." :
+                portraitStyle == PortraitStyle.Realistic_Western ? "Western dark fantasy oil painting — Path of Exile / Pillars of Eternity aesthetic." :
+                portraitStyle == PortraitStyle.DotPixel          ? "16-bit pixel art — classic JRPG sprite style, strict pixel grid, cel-shading bands." : "";
             Text.Font = GameFont.Tiny;
-            Widgets.Label(listing.GetRect(32f), styleDesc);
+            Widgets.Label(listing.GetRect(28f), styleDesc);
             Text.Font = GameFont.Small;
 
             listing.Gap(12f);
             listing.GapLine();
+            listing.Gap(8f);
+
+            // ── BACKEND TOGGLE ────────────────────────────────────────────────────
+            listing.Label("AI Backend");
             listing.Gap(6f);
 
-            // ── BACKEND ───────────────────────────────────────────────────────────
-            listing.Label("AI Backend Settings");
-            if (listing.ButtonText("Backend: " + backendType.ToString()))
+            bool isFree = (backendType == BackendType.Pollinations);
+            bool isPaid = (backendType == BackendType.GoogleImagen);
+
+            Rect modeRow = listing.GetRect(36f);
+            float halfW  = modeRow.width / 2f;
+            Rect btnFree = new Rect(modeRow.x,         modeRow.y, halfW - 4f, 36f);
+            Rect btnPaid = new Rect(modeRow.x + halfW, modeRow.y, halfW - 4f, 36f);
+
+            // Free button
+            if (isFree) GUI.color = new Color(0.3f, 0.85f, 0.4f);
+            if (Widgets.ButtonText(btnFree, "🆓  Free  —  Pollinations"))
             {
-                // Only surface backends that QueueGeneration actually implements.
-                BackendType[] implemented = { BackendType.Pollinations, BackendType.HuggingFace, BackendType.GoogleImagen };
-                var list = new System.Collections.Generic.List<FloatMenuOption>();
-                foreach (BackendType type in implemented)
-                {
-                    BackendType currentType = type;
-                    list.Add(new FloatMenuOption(currentType.ToString(), delegate()
-                    {
-                        backendType = currentType;
-                        if      (backendType == BackendType.HuggingFace)  { apiUrl = "https://api-inference.huggingface.co"; modelName = "stabilityai/stable-diffusion-xl-base-1.0"; }
-                        else if (backendType == BackendType.Pollinations) { apiUrl = "https://image.pollinations.ai";        modelName = "sana"; }
-                        else if (backendType == BackendType.GoogleImagen) { apiUrl = "https://generativelanguage.googleapis.com"; modelName = "imagen-3.0-fast-generate-001"; }
-                    }));
-                }
-                Find.WindowStack.Add(new FloatMenu(list));
+                backendType = BackendType.Pollinations;
+                apiUrl      = "https://image.pollinations.ai";
+                modelName   = "sana";
+                apiKey      = "";
             }
+            GUI.color = Color.white;
 
-            listing.Gap(6f);
-            listing.Label("API URL");
-            apiUrl = listing.TextEntry(apiUrl);
+            // Paid button
+            if (isPaid) GUI.color = new Color(0.9f, 0.7f, 0.2f);
+            if (Widgets.ButtonText(btnPaid, "💎  Paid  —  Google Imagen 4"))
+            {
+                backendType = BackendType.GoogleImagen;
+                apiUrl      = "https://generativelanguage.googleapis.com";
+                modelName   = "imagen-4.0-fast-generate-001";
+            }
+            GUI.color = Color.white;
 
-            listing.Gap(6f);
-            listing.Label("API Key (Required for Cloud Backends)");
-            apiKey = listing.TextEntry(apiKey);
+            listing.Gap(10f);
 
-            listing.Gap(6f);
-            listing.Label("Model Identifier / Checkpoint Name");
-            modelName = listing.TextEntry(modelName);
+            if (isFree)
+            {
+                // Free tier info
+                Rect infoRect = listing.GetRect(44f);
+                Widgets.DrawBoxSolid(infoRect, new Color(0.1f, 0.2f, 0.1f, 0.6f));
+                Text.Font = GameFont.Tiny;
+                Widgets.Label(infoRect.ContractedBy(6f),
+                    "No API key needed. Model: Sana (via Pollinations). ~50s per generation.\n" +
+                    "Outputs JPEG — portraits have an opaque background, not true transparency.");
+                Text.Font = GameFont.Small;
+            }
+            else if (isPaid)
+            {
+                // Paid tier info + API key field
+                Rect infoRect = listing.GetRect(28f);
+                Widgets.DrawBoxSolid(infoRect, new Color(0.2f, 0.15f, 0.05f, 0.6f));
+                Text.Font = GameFont.Tiny;
+                Widgets.Label(infoRect.ContractedBy(6f),
+                    "$0.02 / image (Fast). ~3s generation. True transparent PNG output. Best quality.");
+                Text.Font = GameFont.Small;
+
+                listing.Gap(8f);
+                listing.Label("Google AI Studio API Key");
+                apiKey = listing.TextEntry(apiKey);
+                listing.Gap(2f);
+                Text.Font = GameFont.Tiny;
+                GUI.color = new Color(0.6f, 0.6f, 0.6f);
+                Widgets.Label(listing.GetRect(20f), "  Get a free key at: aistudio.google.com/app/apikey");
+                GUI.color = Color.white;
+                Text.Font = GameFont.Small;
+            }
+            else
+            {
+                // HuggingFace or other — show minimal fields
+                listing.Gap(4f);
+                listing.Label("API Key");
+                apiKey = listing.TextEntry(apiKey);
+            }
 
             listing.Gap(12f);
             listing.GapLine();
             listing.Gap(6f);
 
-            listing.Label("Extra Style Prompt (appended to every generation)");
-            baseStylePrompt = listing.TextEntry(baseStylePrompt, 2);
+            // ── ADVANCED ──────────────────────────────────────────────────────────
+            Rect advHeaderRect = listing.GetRect(26f);
+            string advLabel = (showAdvanced ? "▼" : "▶") + "  Advanced Settings";
+            if (Widgets.ButtonText(advHeaderRect, advLabel))
+                showAdvanced = !showAdvanced;
 
-            listing.Gap(6f);
-            listing.Label("Negative Prompt");
-            baseNegativePrompt = listing.TextEntry(baseNegativePrompt, 2);
+            if (showAdvanced)
+            {
+                listing.Gap(6f);
+                listing.Label("API URL");
+                apiUrl = listing.TextEntry(apiUrl);
 
-            listing.Gap(6f);
-            listing.Label("Steps: " + steps);
-            steps = (int)listing.Slider(steps, 5, 50);
+                listing.Gap(6f);
+                listing.Label("Model Name");
+                modelName = listing.TextEntry(modelName);
 
-            listing.Label("CFG Scale: " + cfgScale.ToString("F1"));
-            cfgScale = listing.Slider(cfgScale, 1f, 15f);
+                listing.Gap(6f);
+                listing.Label("Extra Style Prompt (appended to every generation)");
+                baseStylePrompt = listing.TextEntry(baseStylePrompt, 2);
+
+                listing.Gap(6f);
+                listing.Label("Negative Prompt");
+                baseNegativePrompt = listing.TextEntry(baseNegativePrompt, 2);
+
+                listing.Gap(6f);
+                listing.Label("Steps: " + steps + "  (HuggingFace only)");
+                steps = (int)listing.Slider(steps, 5, 50);
+
+                listing.Label("CFG Scale: " + cfgScale.ToString("F1") + "  (HuggingFace only)");
+                cfgScale = listing.Slider(cfgScale, 1f, 15f);
+            }
 
             listing.End();
         }

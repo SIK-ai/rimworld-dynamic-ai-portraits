@@ -147,7 +147,7 @@ namespace AIPortraits
         private static IEnumerator GenerateGoogleImagen(string prompt, string negativePrompt, AIPortraitsSettings settings, PortraitCallback callback)
         {
             string baseUrl = string.IsNullOrEmpty(settings.apiUrl) ? "https://generativelanguage.googleapis.com" : settings.apiUrl.TrimEnd('/');
-            string model = string.IsNullOrEmpty(settings.modelName) ? "imagen-3.0-fast-generate-001" : settings.modelName;
+            string model = string.IsNullOrEmpty(settings.modelName) ? "imagen-4.0-fast-generate-001" : settings.modelName;
             string url = baseUrl + "/v1beta/models/" + model + ":predict";
 
             string fullPrompt = PromptCompiler.CompileImagenSystemPrompt(settings.portraitStyle) + "\n\n" + prompt;
