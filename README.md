@@ -38,18 +38,20 @@ Generates AI portraits of your colonists that reflect their real-time state: app
 ### Pollinations — Free, no key
 
 - Select **Pollinations** as the backend.
-- Default model: `flux`. Leave the API URL as-is.
-- No API key needed. Expect ~10–30 s per generation; Pollinations is rate-limited on free traffic.
+- Default model: `sana` (the only model currently available on Pollinations). Leave the API URL as-is.
+- No API key needed.
+- Expect ~60 s per fresh generation; results are cached so repeat generations are instant.
+- **Note:** Pollinations outputs JPEG, not PNG. Portraits will have an opaque background rather than true transparency. Quality is good for a free option but noticeably below Imagen.
 
 ### HuggingFace Inference API
 
 - Select **HuggingFace** as the backend.
-- Create a free account at [huggingface.co](https://huggingface.co) and generate an API token under **Settings → Access Tokens**.
+- Create an account at [huggingface.co](https://huggingface.co) and generate an API token under **Settings → Access Tokens**. An API token is required — requests without one are rejected.
 - Paste the token into the **API Key** field.
 - Set **Model** to any image generation model ID available on the Inference API, e.g.:
   - `stabilityai/stable-diffusion-xl-base-1.0`
   - `black-forest-labs/FLUX.1-dev`
-- Free-tier models go cold between requests — the first generation may take up to 2 minutes while the model loads. Subsequent requests are faster.
+- HuggingFace provides a small monthly free credit allocation. Models go cold between requests — the first generation may take up to 2 minutes while the model loads. Pro plan ($9/month) removes rate limits.
 
 ### Google Imagen 3
 

@@ -28,7 +28,7 @@ namespace AIPortraits
         public BackendType backendType = BackendType.Pollinations;
         public string apiKey = "";
         public string apiUrl = "https://image.pollinations.ai";
-        public string modelName = "flux";
+        public string modelName = "sana";
 
         public PortraitStyle portraitStyle = PortraitStyle.Realistic_Korean;
 
@@ -245,7 +245,7 @@ namespace AIPortraits
                     {
                         backendType = currentType;
                         if      (backendType == BackendType.HuggingFace)  { apiUrl = "https://api-inference.huggingface.co"; modelName = "stabilityai/stable-diffusion-xl-base-1.0"; }
-                        else if (backendType == BackendType.Pollinations) { apiUrl = "https://image.pollinations.ai";        modelName = "flux"; }
+                        else if (backendType == BackendType.Pollinations) { apiUrl = "https://image.pollinations.ai";        modelName = "sana"; }
                         else if (backendType == BackendType.GoogleImagen) { apiUrl = "https://generativelanguage.googleapis.com"; modelName = "imagen-3.0-fast-generate-001"; }
                     }));
                 }
