@@ -151,7 +151,6 @@ namespace AIPortraits
             string url = baseUrl + "/v1beta/models/" + model + ":predict";
 
             string fullPrompt = PromptCompiler.CompileImagenSystemPrompt(settings.portraitStyle) + "\n\n" + prompt;
-            string imagenNeg  = PromptCompiler.CompileImagenNegativePrompt();
 
             StringBuilder json = new StringBuilder();
             json.Append("{");
@@ -162,7 +161,6 @@ namespace AIPortraits
             json.Append("\"sampleCount\":1,");
             json.Append("\"aspectRatio\":\"1:1\",");
             json.Append("\"outputMimeType\":\"image/png\"");
-            json.Append(",\"negativePrompt\":\"").Append(EscapeJson(imagenNeg)).Append("\"");
             json.Append("}}");
 
             byte[] jsonBytes = Encoding.UTF8.GetBytes(json.ToString());

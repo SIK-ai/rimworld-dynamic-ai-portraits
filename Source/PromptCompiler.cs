@@ -76,12 +76,6 @@ Content: Render the character's appearance, expression, gear, and any special ef
             }
         }
 
-        // Short negative prompt tuned for Imagen — the SD-style 150-word list is counterproductive there.
-        public static string CompileImagenNegativePrompt()
-        {
-            return "background, scenery, environment, multiple characters, text, watermark, signature, solid background, gradient background, blurry, low quality, deformed anatomy, extra limbs";
-        }
-
         // ──────────────────────────────────────────────────────────────────────────
         // ART STYLE HEADERS (positive prompt preamble for all backends)
         // ──────────────────────────────────────────────────────────────────────────

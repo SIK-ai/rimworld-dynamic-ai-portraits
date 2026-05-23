@@ -2,12 +2,10 @@
 echo Building RimWorld AI Portraits Mod (RimWorld 1.6)...
 if not exist 1.6\Assemblies mkdir 1.6\Assemblies
 
-:: ── CONFIGURE THESE PATHS FOR YOUR MACHINE ────────────────────────────────
-:: Point RIMWORLD_MANAGED to: <RimWorld install>\RimWorldWin64_Data\Managed
-:: Point HARMONY_PATH    to: <RimWorld install>\Mods\Harmony\Current\Assemblies\0Harmony.dll
+:: Point these to your RimWorld install. Default below is the standard Steam path.
+:: If your install is elsewhere, change RIMWORLD_MANAGED and HARMONY_PATH.
 set "RIMWORLD_MANAGED=C:\Program Files (x86)\Steam\steamapps\common\RimWorld\RimWorldWin64_Data\Managed"
 set "HARMONY_PATH=C:\Program Files (x86)\Steam\steamapps\common\RimWorld\Mods\Harmony\Current\Assemblies\0Harmony.dll"
-:: ──────────────────────────────────────────────────────────────────────────
 
 C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /target:library /nostdlib /noconfig /out:1.6\Assemblies\AIPortraits.dll /r:"%RIMWORLD_MANAGED%\mscorlib.dll","%RIMWORLD_MANAGED%\System.dll","%RIMWORLD_MANAGED%\System.Core.dll","%RIMWORLD_MANAGED%\Assembly-CSharp.dll","%RIMWORLD_MANAGED%\UnityEngine.dll","%RIMWORLD_MANAGED%\UnityEngine.CoreModule.dll","%RIMWORLD_MANAGED%\UnityEngine.IMGUIModule.dll","%RIMWORLD_MANAGED%\UnityEngine.ImageConversionModule.dll","%RIMWORLD_MANAGED%\UnityEngine.UnityWebRequestModule.dll","%RIMWORLD_MANAGED%\UnityEngine.TextRenderingModule.dll","%RIMWORLD_MANAGED%\netstandard.dll","%HARMONY_PATH%" /recurse:Source\*.cs
 

@@ -20,15 +20,19 @@ namespace AIPortraits
             IInspectPane activePane = __instance as IInspectPane;
             if (activePane == null) return;
 
-            // Respect the user's tab choice — only overlay when no tab is open.
+            // Only draw when no inspect tab is open.
             if (activePane.OpenTabType != null) return;
 
-            Rect paneRect = __instance.windowRect;
-            float portraitW = paneRect.width;
-            float totalH = UI_AIPortraitCard.TotalHeight(portraitW);
-            Rect portraitRect = new Rect(paneRect.x, paneRect.y - totalH, portraitW, totalH);
+            // Only draw when there is an actual portrait to show — no placeholder box.
+            GenerationStatus status; string error;
+            Texture2D portrait = AIPortraitsManager.GetPortraitTexture(pawn, out status, out error);
+            if (portrait == null) return;
 
-            UI_AIPortraitCard.DrawPortraitBio(portraitRect, pawn);
+            Rect paneRect = __instance.windowRect;
+            float side = paneRect.width;
+            Rect portraitRect = new Rect(paneRect.x, paneRect.y - side, side, side);
+
+            GUI.DrawTexture(portraitRect, portrait, ScaleMode.ScaleToFit);
         }
     }
 
