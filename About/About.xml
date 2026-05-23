@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ModMetaData>
+  <name>Dynamic AI Portraits</name>
+  <author>Antigravity</author>
+  <packageId>antigravity.aiportraits</packageId>
+  <supportedVersions>
+    <li>1.6</li>
+  </supportedVersions>
+  <description>Dynamically generates and displays high-quality AI portraits of pawns reflecting their real-time characteristics, apparel, health status, and mental states using local or cloud AI backends.</description>
+</ModMetaData>

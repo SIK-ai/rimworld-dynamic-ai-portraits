@@ -1,0 +1,9 @@
+# Personal Claude Code session data
+.claude/
+
+# Build artifacts (keep compiled DLLs for mod distribution)
+*.pdb
+
+# Windows
+Thumbs.db
+desktop.ini
