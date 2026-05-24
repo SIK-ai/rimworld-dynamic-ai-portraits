@@ -21,12 +21,19 @@ namespace AIPortraits
     public static class BackgroundRemover
     {
         // Per-channel tolerance for first pass — strict enough to avoid the subject.
-        private const int ToleranceStrict = 40;
+        // Lowered from 40→35 because painterly outputs have subject pixels (skin highlights,
+        // pale-fabric folds) within 40 units of common pale backgrounds, causing bleed.
+        private const int ToleranceStrict = 35;
 
-        // Looser tolerance for second-pass cleanup — only applied to pixels that are
-        // already adjacent to a transparent pixel, so halos get caught without bleeding
-        // into the subject's interior.
-        private const int ToleranceLoose = 70;
+        // Looser tolerance for halo cleanup — only applied from already-transparent neighbours.
+        // Lowered from 70→48 because the previous value was so wide it routinely flooded into
+        // pale skin / light hair tones adjacent to a light background.
+        private const int ToleranceLoose = 48;
+
+        // Sanity floor: if the flood fill grabbed more than this fraction of the image, the
+        // edge sample is probably wrong (subject filled the frame) and we should abort to
+        // avoid producing a mostly-transparent portrait.
+        private const float MaxRemovedFraction = 0.80f;
 
         // Only skip processing if all four corners are EXTREMELY transparent.
         private const byte AlreadyTransparentAlpha = 10;
@@ -116,8 +123,10 @@ namespace AIPortraits
                 }
             }
 
-            // Sanity guard
-            if (removed >= pixels.Length * 0.99f) return source;
+            // Sanity guard — if more than 80% of pixels are being marked transparent, the
+            // edge-mode sample probably caught the subject's colour. Abort to avoid producing
+            // a faded/ghosted portrait.
+            if (removed >= pixels.Length * MaxRemovedFraction) return source;
 
             // If nothing was removed, the image had no detectable background — return
             // original to save the cost of a re-encode.

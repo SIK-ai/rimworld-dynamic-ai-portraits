@@ -258,10 +258,69 @@ namespace AIPortraits
             }
 
             // ── EQUIPMENT ─────────────────────────────────────────────────────────
+            // Build a rich weapon descriptor mirroring apparel: quality + stuff + color + label + damage
             if (pawn.equipment != null && pawn.equipment.Primary != null && pawn.equipment.Primary.def != null)
             {
-                s.primaryWeapon = pawn.equipment.Primary.def.label;
-                s.weaponType    = pawn.equipment.Primary.def.IsMeleeWeapon ? "melee" : "ranged";
+                ThingWithComps wpn = pawn.equipment.Primary;
+                string wpnLabel = wpn.def.label;
+
+                // Quality
+                string wpnQuality = "";
+                QualityCategory wq;
+                if (wpn.TryGetQuality(out wq))
+                {
+                    if      (wq == QualityCategory.Awful)      wpnQuality = "battered ";
+                    else if (wq == QualityCategory.Poor)       wpnQuality = "rough ";
+                    else if (wq == QualityCategory.Excellent)  wpnQuality = "finely crafted ";
+                    else if (wq == QualityCategory.Masterwork) wpnQuality = "masterwork ornate ";
+                    else if (wq == QualityCategory.Legendary)  wpnQuality = "legendary gleaming ";
+                }
+
+                // Stuff (material) — real material, not name-guessed
+                string wpnStuff = "";
+                if (wpn.Stuff != null)
+                {
+                    string sl = wpn.Stuff.defName.ToLower();
+                    if      (sl.Contains("uranium"))     wpnStuff = "dense uranium ";
+                    else if (sl.Contains("plasteel"))    wpnStuff = "high-tech plasteel ";
+                    else if (sl.Contains("gold"))        wpnStuff = "gilded gold ";
+                    else if (sl.Contains("silver"))      wpnStuff = "polished silver ";
+                    else if (sl.Contains("jade"))        wpnStuff = "carved jade ";
+                    else if (sl.Contains("steel"))       wpnStuff = "steel ";
+                    else if (sl.Contains("wood"))        wpnStuff = "wooden ";
+                    else if (sl.Contains("bone"))        wpnStuff = "bone ";
+                    else if (sl.Contains("stone") || sl.Contains("granite") || sl.Contains("slate"))
+                                                          wpnStuff = "rough stone ";
+                }
+                else
+                {
+                    // No-stuff weapons (most guns) — derive material vibe from name
+                    string wnLc = wpnLabel.ToLower();
+                    if      (wnLc.Contains("charge") || wnLc.Contains("plasma") ||
+                             wnLc.Contains("laser")  || wnLc.Contains("pulse"))   wpnStuff = "glowing-energy ";
+                    else if (wnLc.Contains("sniper") || wnLc.Contains("assault") ||
+                             wnLc.Contains("rifle"))                              wpnStuff = "military-grade ";
+                }
+
+                // Color (only if it's notable — pure white/grey defaults skipped to avoid noise)
+                string wpnColor = "";
+                Color dc = wpn.DrawColor;
+                float maxC = Mathf.Max(dc.r, Mathf.Max(dc.g, dc.b));
+                float minC = Mathf.Min(dc.r, Mathf.Min(dc.g, dc.b));
+                if ((maxC - minC) > 0.15f) // saturated → worth describing
+                    wpnColor = GetColorDescription(dc) + " ";
+
+                // Damage
+                string wpnDamage = "";
+                if (wpn.MaxHitPoints > 0)
+                {
+                    float hpFrac = (float)wpn.HitPoints / wpn.MaxHitPoints;
+                    if      (hpFrac < 0.35f) wpnDamage = ", chipped and notched from use";
+                    else if (hpFrac < 0.60f) wpnDamage = ", well-worn";
+                }
+
+                s.primaryWeapon = (wpnQuality + wpnStuff + wpnColor + wpnLabel + wpnDamage).Trim();
+                s.weaponType    = wpn.def.IsMeleeWeapon ? "melee" : "ranged";
             }
             else
             {

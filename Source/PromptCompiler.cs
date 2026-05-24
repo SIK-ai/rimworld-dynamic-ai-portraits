@@ -286,10 +286,11 @@ Content: Render the character's appearance, expression, gear, and any special ef
         {
             if (!string.IsNullOrEmpty(state.primaryWeapon))
             {
-                string weapMaterial = GuessWeaponMaterial(state.primaryWeapon);
+                // primaryWeapon already carries quality + stuff + colour + label + damage
+                // (built in PawnStateExtractor), so no name-based material-guessing needed.
                 string weapStyle = state.weaponType == "melee"
-                    ? "holding a " + weapMaterial + state.primaryWeapon + " in hand, "
-                    : "armed with a " + weapMaterial + state.primaryWeapon + " slung on back, ";
+                    ? "holding a " + state.primaryWeapon + " in hand, "
+                    : "armed with a " + state.primaryWeapon + " slung on back, ";
                 p.Append(weapStyle);
             }
             else if (state.isViolentIncapable)
@@ -305,57 +306,38 @@ Content: Render the character's appearance, expression, gear, and any special ef
             }
         }
 
-        private static string GuessWeaponMaterial(string weaponLabel)
-        {
-            string wl = weaponLabel.ToLower();
-            if (wl.Contains("uranium"))                                               return "dense uranium ";
-            if (wl.Contains("plasteel"))                                              return "high-tech plasteel ";
-            if (wl.Contains("steel") || wl.Contains("blade"))                         return "steel ";
-            if (wl.Contains("wood") || wl.Contains("tribal"))                         return "crude wooden ";
-            if (wl.Contains("charge") || wl.Contains("plasma") ||
-                wl.Contains("laser") || wl.Contains("pulse"))                         return "glowing energy ";
-            if (wl.Contains("sniper") || wl.Contains("rifle"))                        return "military-grade ";
-            if (wl.Contains("bone"))                                                  return "bone ";
-            return "";
-        }
-
         private static string BuildGearLine(PawnState state)
         {
+            // Apparel strings already include quality + stuff + colour + label + damage
+            // (built in PawnStateExtractor) — no name-based material-guessing needed.
             if (state.apparelStyle == "heavily armored")
             {
-                List<string> armorPieces = new List<string>();
-                for (int i = 0; i < Math.Min(state.apparel.Count, 2); i++)
-                    armorPieces.Add(GuessArmorMaterial(state.apparel[i]) + state.apparel[i]);
-                return "wearing heavy armor: " + string.Join(", ", armorPieces.ToArray());
+                int max = Math.Min(state.apparel.Count, 3);
+                string[] pieces = new string[max];
+                for (int i = 0; i < max; i++) pieces[i] = state.apparel[i];
+                return "wearing heavy armor: " + string.Join(", ", pieces);
             }
             if (state.apparelStyle == "noble robes")
-                return "wearing ornate noble robes and regalia";
+            {
+                int max = Math.Min(state.apparel.Count, 3);
+                string[] pieces = new string[max];
+                for (int i = 0; i < max; i++) pieces[i] = state.apparel[i];
+                return "wearing ornate noble regalia: " + string.Join(", ", pieces);
+            }
             if (state.apparelStyle == "tribal")
-                return "wearing rough tribal clothing and pelts";
+            {
+                int max = Math.Min(state.apparel.Count, 3);
+                string[] pieces = new string[max];
+                for (int i = 0; i < max; i++) pieces[i] = state.apparel[i];
+                return "wearing tribal garb: " + string.Join(", ", pieces);
+            }
             if (state.apparel.Count > 0)
             {
                 int max = Math.Min(state.apparel.Count, 3);
                 string[] pieces = new string[max];
-                for (int i = 0; i < max; i++)
-                    pieces[i] = GuessArmorMaterial(state.apparel[i]) + state.apparel[i];
+                for (int i = 0; i < max; i++) pieces[i] = state.apparel[i];
                 return "wearing " + string.Join(", ", pieces);
             }
-            return "";
-        }
-
-        private static string GuessArmorMaterial(string apparelLabel)
-        {
-            string al = apparelLabel.ToLower();
-            if (al.Contains("plate") || al.Contains("cataphract")) return "heavy steel-plate ";
-            if (al.Contains("marine") || al.Contains("power"))     return "powered composite ";
-            if (al.Contains("flak"))                                return "military-grade flak ";
-            if (al.Contains("duster") || al.Contains("jacket"))    return "worn leather ";
-            if (al.Contains("robe") || al.Contains("noble"))       return "silk embroidered ";
-            if (al.Contains("pelt") || al.Contains("tribal"))      return "rough hide ";
-            if (al.Contains("bone"))                                return "carved bone ";
-            if (al.Contains("uranium"))                             return "dense uranium-plate ";
-            if (al.Contains("plasteel"))                            return "lightweight plasteel ";
-            if (al.Contains("prestige") || al.Contains("royal"))   return "gold-trimmed ";
             return "";
         }
 
