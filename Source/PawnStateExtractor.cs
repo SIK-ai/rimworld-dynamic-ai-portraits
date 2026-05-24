@@ -335,7 +335,6 @@ namespace AIPortraits
                 int armorCount   = 0;
                 int tribalCount  = 0;
                 int royalCount   = 0;
-                int nudistCount  = 0;
 
                 foreach (Apparel item in pawn.apparel.WornApparel)
                 {
@@ -405,14 +404,12 @@ namespace AIPortraits
                         tribalCount++;
                     if (defLc.Contains("royal") || defLc.Contains("noble") || defLc.Contains("prestige"))
                         royalCount++;
-                    if (s.apparel.Count < 2)
-                        nudistCount++;
                 }
 
                 if      (armorCount  >= 2) s.apparelStyle = "heavily armored";
                 else if (royalCount  >= 1) s.apparelStyle = "noble robes";
                 else if (tribalCount >= 2) s.apparelStyle = "tribal";
-                else if (nudistCount == 0) s.apparelStyle = "lightly clothed";
+                else if (s.apparel.Count == 0) s.apparelStyle = "nude";
                 else                       s.apparelStyle = "civilian";
             }
 
