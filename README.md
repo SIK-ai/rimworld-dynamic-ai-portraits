@@ -1,106 +1,171 @@
 # Dynamic AI Portraits — RimWorld 1.6 Mod
 
-Generates AI portraits of your colonists that reflect their real-time state: apparel, health, injuries, mental breaks, xenotype, ideology role, and mood. Portraits update automatically as your pawns change. When you select a pawn with no inspect tab open, the portrait floats above the inspect pane as a clean transparent overlay.
+Generates AI portraits of your colonists that reflect their real-time state: apparel, weapons, health, injuries, mental breaks, xenotype, ideology role, mood, royal title, addictions, pregnancy, and more. Portrait floats above the inspect pane as a clean transparent overlay whenever a colonist is selected and no inspect tab is open.
 
 ---
 
 ## Features
 
-- **Dynamic generation** — portrait regenerates when pawn state changes (gear, health, mood, mental state)
-- **Three art styles** — Korean manhwa anime, Western dark fantasy oil painting, 16-bit pixel-art JRPG
-- **Three AI backends** — Pollinations (free, no key), HuggingFace Inference API, Google Imagen 3
-- **Portrait overlay** — transparent PNG displayed above the inspect pane when a pawn is selected and no tab is open; disappears when you open any tab
-- **Lock portraits** — pin any generated portrait as a pawn's permanent portrait from the Pawn Gallery
-- **Pawn Gallery** — browse, set active, copy prompt, and delete saved portraits from mod settings
-- **Cross-save isolation** — portraits are keyed per world-save so colonists don't bleed between saves
-- **Continuity token** — re-generations maintain consistent style for the same pawn
+- **6 image-generation backends** in one dropdown — free, local, cheap-paid, premium-paid
+- **3 art styles** — Korean Webtoon (Solo Leveling), Rick & Morty Cartoon, 16-bit Pixel JRPG
+- **Per-pawn framing** — portrait, full-body shot, or special themed scene; each cached independently
+- **Optional Gemini Flash prompt engineering** — LLM rewrites pawn data into a creative image prompt
+- **Refresh button on the overlay** — regenerate any portrait in one click
+- **Pawn Gallery** — browse, set active, copy prompts, delete saved portraits
+- **Prompt Preview tab** — see exactly what was sent to the image API, no API call required
+- **Perceptual YCbCr background removal** — preserves arms, faces, and skin tones
+- **Cross-save isolation** — portraits keyed per world save
+- **No auto-regeneration** — once a pawn has a portrait, it persists until you click refresh
 
 ---
 
 ## Installation
 
-### Manual (no Steam Workshop)
-
-1. Go to the [Releases](https://github.com/SIK-ai/rimworld-dynamic-ai-portraits/releases) page and download the latest zip, **or** click **Code → Download ZIP** on the main page.
-2. Extract the folder and rename it to `AIPortraits`.
+1. Download the latest release zip from [Releases](https://github.com/SIK-ai/rimworld-dynamic-ai-portraits/releases) (or **Code → Download ZIP** on the main page).
+2. Extract and rename the folder to `AIPortraits`.
 3. Move `AIPortraits/` into your RimWorld `Mods` folder:
    - **Windows (Steam):** `C:\Program Files (x86)\Steam\steamapps\common\RimWorld\Mods\`
-   - **Windows (GOG/manual):** next to your `RimWorldWin64.exe`
-4. In RimWorld, enable **Harmony** first, then **Dynamic AI Portraits**, and restart if prompted.
-5. Open **Options → Mod Settings → Dynamic AI Portraits** and configure your backend.
+   - **Windows (GOG):** next to `RimWorldWin64.exe`
+4. In RimWorld's mod list, enable **Harmony** first, then **Dynamic AI Portraits**.
+5. Open **Options → Mod Settings → Dynamic AI Portraits** and pick a provider.
 
-> **Harmony** is required. Get it from the [Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=2009463077) or include the DLL from your existing Harmony install.
-
----
-
-## Backend Setup
-
-### Pollinations — Free, no key
-
-- Select **Pollinations** as the backend.
-- Default model: `sana` (the only model currently available on Pollinations). Leave the API URL as-is.
-- No API key needed.
-- Expect ~60 s per fresh generation; results are cached so repeat generations are instant.
-- **Note:** Pollinations outputs JPEG, not PNG. Portraits will have an opaque background rather than true transparency. Quality is good for a free option but noticeably below Imagen.
-
-### HuggingFace Inference API
-
-- Select **HuggingFace** as the backend.
-- Create an account at [huggingface.co](https://huggingface.co) and generate an API token under **Settings → Access Tokens**. An API token is required — requests without one are rejected.
-- Paste the token into the **API Key** field.
-- Set **Model** to any image generation model ID available on the Inference API, e.g.:
-  - `stabilityai/stable-diffusion-xl-base-1.0`
-  - `black-forest-labs/FLUX.1-dev`
-- HuggingFace provides a small monthly free credit allocation. Models go cold between requests — the first generation may take up to 2 minutes while the model loads. Pro plan ($9/month) removes rate limits.
-
-### Google Imagen 3
-
-- Select **Google Imagen** as the backend.
-- Get an API key from [Google AI Studio](https://aistudio.google.com/app/apikey) (free tier available).
-- Paste the key into the **API Key** field.
-- Default model: `imagen-3.0-fast-generate-001`. If you have access to Imagen 4 preview, you can try `imagen-4.0-generate-preview-05-20`.
-- Google Imagen produces the highest quality portraits and best follows the style prompts.
-
-### Local GPU (your own machine — free, no internet)
-
-- Select **🖥 Local GPU** as the backend.
-- Install and run one of these locally — all expose the same A1111-compatible API:
-  - **AUTOMATIC1111** — [github.com/AUTOMATIC1111/stable-diffusion-webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui)
-  - **Forge** (A1111 fork, faster) — [github.com/lllyasviel/stable-diffusion-webui-forge](https://github.com/lllyasviel/stable-diffusion-webui-forge)
-  - **SD.Next** — [github.com/vladmandic/sdnext](https://github.com/vladmandic/sdnext)
-  - **ComfyUI** with A1111-compat extension
-  - **Stability Matrix** (one-click installer that bundles the above) — [lykos.ai](https://lykos.ai)
-- Launch the server with the `--api` flag so port 7860 accepts requests. For A1111 / Forge:
-  ```
-  webui-user.bat   (edit it and add --api to COMMANDLINE_ARGS)
-  ```
-- Default URL: `http://127.0.0.1:7860` (configurable in mod settings).
-- Recommended models (download to your server's `models/Stable-diffusion/` folder):
-  - **SDXL fine-tune** (Juggernaut XL, AutismMix, Pony) — best for stylised portraits
-  - **FLUX.1 Schnell** (fp8) — fastest with great quality
-  - **FLUX.1 Dev** — highest quality, needs 12GB+ VRAM
-- Generation time: ~2–5 seconds per portrait on RTX 4070-class or better, 5–10s on older cards.
-- VRAM: 6GB minimum (SDXL fine-tunes), 12GB recommended (FLUX).
-- Free forever, no rate limits, totally offline.
+> **Harmony is required.** Get it from the [Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=2009463077).
 
 ---
 
-## How It Works
+## Backend / Provider Selection
 
-1. When you select a pawn, the mod extracts their current state (xenotype, apparel, health, mood, traits, ideology role, weapon, etc.).
-2. That state is hashed and checked against a local disk cache. If a matching portrait exists, it is shown immediately.
-3. If no cache hit, a prompt is compiled from the pawn state and sent to your configured AI backend.
-4. When the image returns it is saved to cache, shown as the pawn's overlay portrait, and also written to `Documents/RimWorld Portraits/<PawnName>/`.
-5. The portrait regenerates automatically when the pawn's state hash changes (e.g. they equip new armor or enter a mental break).
+The mod's API Settings tab has a **Provider** dropdown. Pick one, optionally pick a **Model**, paste an **API key** if needed. The provider dropdown is the only choice that matters — model defaults sensibly per provider.
+
+### 🆓 Pollinations — Free, no signup
+- Truly free, no account or key required
+- Model: `sana` (the only one Pollinations serves now)
+- ~50s per portrait, outputs JPEG (background remover post-processes)
+- Best for: trying the mod with zero friction
+
+### ☁ Cloudflare Workers AI — Best value
+- **10,000 free requests/day**, then ~$0.0005/image
+- Models: FLUX.1 Schnell, SDXL, Dreamshaper, SDXL Lightning
+- ~2–4s per portrait
+- **Setup:** sign up at [dash.cloudflare.com](https://dash.cloudflare.com), grab your **Account ID** from the dashboard right sidebar, create an **API Token** with `Workers AI Read` permission, paste both into the mod's API Key field as `account_id:token` (single colon between them)
+- Best for: most users — effectively free for any colony size
+
+### 💎 Google Imagen 4 — Best quality
+- $0.02 per image (Fast tier)
+- ~3s per portrait, **true transparent PNG output** (the only backend that does)
+- Models: `imagen-4.0-fast`, `imagen-4.0-generate`, `imagen-4.0-ultra`, `imagen-3.0-fast`
+- **Setup:** get a free API key at [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey), paste it
+- Best for: best style adherence + clean cutouts, willing to pay
+
+### ⚡ DeepInfra — Cheapest paid
+- ~$0.0005 per image, no free tier
+- Models: FLUX-1-schnell, FLUX-1-dev, sdxl-turbo
+- ~2–5s per portrait
+- **Setup:** sign up at [deepinfra.com](https://deepinfra.com) (GitHub OAuth, ~2 min), paste your API token
+- Best for: bulk generation when Cloudflare's free tier doesn't fit
+
+### 🤗 HuggingFace Inference — Limited free
+- Small monthly free credit, then pay-as-you-go
+- Models: FLUX.1-schnell, FLUX.1-dev, SDXL
+- ~30s–2min on cold start, then fast
+- **Setup:** create a token at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
+- Best for: occasional generation when other free tiers are exhausted
+
+### 🖥 Local GPU — Free forever
+- Runs on your own machine, no API costs ever
+- Works with **AUTOMATIC1111**, **Forge**, **SD.Next**, or **ComfyUI** (A1111-compat mode)
+- ~2–5s per portrait on modern dGPU, slower on integrated graphics
+- **Setup:**
+  1. Install a server. Easiest: [Stability Matrix](https://lykos.ai/) → one-click installs Forge
+  2. Download a model (e.g. **FLUX.1 Schnell fp8** ~8GB, or **Juggernaut XL** ~6GB)
+  3. Launch with `--api` flag (edit `webui-user.bat`, add `--api` to `COMMANDLINE_ARGS`)
+  4. Wait for `Running on local URL: http://127.0.0.1:7860`
+  5. In the mod, select **Local GPU** — default URL is already set
+- Best for: anyone with NVIDIA RTX 3060+ / Apple Silicon / wants total privacy
+
+> **Tip:** if you have a desktop + laptop, run the server on the desktop with `--listen` flag, then point the laptop at the desktop's LAN IP (e.g. `http://192.168.1.42:7860`). Game stays light, generation stays fast.
+
+---
+
+## Art Styles
+
+| Style | Aesthetic |
+|---|---|
+| **🎨 Korean Webtoon** | Solo Leveling — sharp inked line art, dramatic chiaroscuro, saturated focal colors |
+| **📺 Rick & Morty Cartoon** | Adult Swim cartoon — thick black outlines, flat 2D fills, bulging eyes, wonky proportions |
+| **🟦 Pixel / Dot** | 16-bit JRPG sprite (Tactics Ogre, Final Fantasy Tactics) — strict pixel grid, cel-shading bands |
+
+Switching styles affects new generations. Existing cached portraits keep their original style. Click ↻ to regenerate with the current style.
+
+---
+
+## Per-Pawn Framing
+
+Three small **P / B / S** buttons appear next to the ↻ refresh button on each pawn's portrait overlay:
+
+- **P — Portrait** (default): standard bust-up
+- **B — Bodyshot**: full-length character illustration
+- **S — Special**: dynamic themed scene
+
+Switching framing triggers a new generation under a separate cache key, so each pawn can have three saved portraits (one per framing). Switching back to a previously-generated framing shows the cached version instantly.
+
+---
+
+## Optional: Gemini Flash Prompt Engineering
+
+In API Settings → **Prompt Generation** section, switch from `No — Compiled Template` to `Gemini Flash Lite`. The mod will send pawn metadata to Gemini, which rewrites it into a creative, optimized image prompt before sending to your image backend.
+
+- Free Google AI Studio key works (same key as Imagen if you're already using it)
+- Costs ~$0.0001 per call on Gemini Flash Lite (essentially free)
+- Falls back to the built-in template if Gemini fails
+- Visible in the **Prompt Preview** tab — shows the actual LLM output
+
+---
+
+## Prompt Preview Tab
+
+Third tab in mod settings. Pick any colonist to see:
+
+1. **Last actual prompt sent** (read from disk, no API call)
+2. **Pawn data sheet** — every field the extractor captured
+3. **Compiled prompt** — what the template would produce (or LLM fallback)
+4. **LLM system instruction** — only shown when Gemini Flash is on
+
+Use this to debug "why didn't the helmet show up?" — the Apparel line on the data sheet tells you whether extraction missed it or the image model deprioritized it.
+
+---
+
+## Pawn Gallery Tab
+
+Browse all saved portraits per colonist with thumbnails. For each portrait you can:
+
+- **Set Active** — pin it as that pawn's permanent portrait
+- **Delete** — remove the file
+- **Click image** — copy the prompt to clipboard
+- **Open Folder** — reveal `Documents/RimWorld Portraits/<PawnName>/`
+- **Create New Portrait** — same as the ↻ button, generates a fresh one
+
+---
+
+## How Generation Triggers
+
+The mod **never auto-regenerates** on state change. Once a pawn has a portrait it persists until you explicitly refresh:
+
+- **First selection** of a pawn → one-time generation
+- **↻ button** on the overlay → regenerate + auto-pin as active
+- **Create New Portrait** in Pawn Gallery → same as ↻
+- State changes (gear, mood, addiction, drafted) → **no effect**, portrait stays
+
+Generation is faction-gated: only colonists, prisoners, and slaves of the player faction trigger generation. Raiders, traders, animals, and mechs are skipped (no wasted API calls).
 
 ---
 
 ## Building from Source
 
-Requirements: Windows, .NET Framework 4.x (`csc.exe` at `C:\Windows\Microsoft.NET\Framework64\v4.0.30319\`), RimWorld 1.6.
+Requirements: Windows, .NET Framework 4.x (`csc.exe` at the standard path), RimWorld 1.6.
 
-1. Edit `build.bat` and set `RIMWORLD_MANAGED` to your RimWorld `RimWorldWin64_Data\Managed` folder and `HARMONY_PATH` to your Harmony `0Harmony.dll`.
-2. Run `build.bat`. The compiled `AIPortraits.dll` is written to `1.6\Assemblies\` and copied to `Assemblies\`.
+1. Edit `build.bat` and set `RIMWORLD_MANAGED` to your `RimWorldWin64_Data\Managed` folder and `HARMONY_PATH` to your Harmony `0Harmony.dll`.
+2. Run `build.bat`. Compiled `AIPortraits.dll` lands in `1.6\Assemblies\` and `Assemblies\`.
 
 ---
 
@@ -108,11 +173,12 @@ Requirements: Windows, .NET Framework 4.x (`csc.exe` at `C:\Windows\Microsoft.NE
 
 - RimWorld **1.6** only
 - Requires **Harmony**
-- Compatible with Biotech, Ideology, and Anomaly content (xenotypes, genes, ideology roles, anomaly mental states)
-- Should be compatible with most other mods — the mod only patches `MainTabWindow_Inspect.ExtraOnGUI` (postfix) and `PortraitsCache.Get` (postfix)
+- Compatible with **Biotech**, **Ideology**, **Royalty**, and **Anomaly** DLCs (xenotypes, genes, ideology roles, royal titles, psylink, ghoul/inhumanized states)
+- Patches `MainTabWindow_Inspect.ExtraOnGUI` (postfix) only — minimal mod surface area
+- Tested alongside RimTalk, Simple Sidearms, Character Editor (no known conflicts)
 
 ---
 
 ## License
 
-MIT — free to use, modify, and redistribute with attribution.
+MIT — see [LICENSE](LICENSE). Free to use, modify, and redistribute with attribution.

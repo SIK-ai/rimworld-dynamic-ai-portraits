@@ -3,7 +3,25 @@
 
 # Build artifacts (keep compiled DLLs for mod distribution)
 *.pdb
+Source/obj/
+Source/bin/
 
-# Windows
+# Visual Studio user files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+
+# JetBrains
+.idea/
+*.csproj.DotSettings.user
+
+# Local helper scripts (per-machine paths, not portable)
+_build_local.bat
+build_local.bat
+
+# OS
 Thumbs.db
 desktop.ini
+.DS_Store
