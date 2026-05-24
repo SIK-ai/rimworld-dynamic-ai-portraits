@@ -158,16 +158,21 @@ namespace AIPortraits
 
         public void DoSettingsWindowContents(Rect inRect)
         {
-            // Draw tabs
-            Rect tabRect = new Rect(inRect.x, inRect.y, inRect.width, 35f);
+            // Leave room at the top for the window's "Dynamic AI Portraits" title bar —
+            // without this padding the tab strip renders directly under the title and overlaps it.
+            const float TitleBarPadding = 32f;
+
+            Rect tabRect = new Rect(inRect.x, inRect.y + TitleBarPadding, inRect.width, 35f);
             List<TabRecord> tabs = new List<TabRecord>();
             tabs.Add(new TabRecord("API Settings", () => { activeTab = 0; }, activeTab == 0));
             tabs.Add(new TabRecord("Pawn Gallery", () => { activeTab = 1; }, activeTab == 1));
 
             TabDrawer.DrawTabs(tabRect, tabs);
 
-            // Compute main content rect below tabs
-            Rect mainRect = new Rect(inRect.x, inRect.y + 40f, inRect.width, inRect.height - 40f);
+            // Main content sits below the tab strip
+            float mainTop    = inRect.y + TitleBarPadding + 40f;
+            float mainHeight = inRect.height - TitleBarPadding - 40f;
+            Rect mainRect = new Rect(inRect.x, mainTop, inRect.width, mainHeight);
 
             if (activeTab == 0)
             {

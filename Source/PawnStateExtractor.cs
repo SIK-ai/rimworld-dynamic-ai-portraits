@@ -298,7 +298,16 @@ namespace AIPortraits
                         continue;
                     }
 
-                    s.apparel.Add(item.def.label);
+                    // Build a color-prefixed apparel string ("dark blue button-down shirt") so the
+                    // generated portrait actually reflects what the pawn is wearing in-game.
+                    string itemLabel = item.def.label;
+                    string colorDesc = GetColorDescription(item.DrawColor);
+                    string apparelDesc = string.IsNullOrEmpty(colorDesc)
+                        ? itemLabel
+                        : colorDesc + " " + itemLabel;
+
+                    s.apparel.Add(apparelDesc);
+
                     if (defLc.Contains("armor") || defLc.Contains("plate") || defLc.Contains("marine"))
                         armorCount++;
                     if (defLc.Contains("tribal") || defLc.Contains("pelt") || defLc.Contains("cloth"))
