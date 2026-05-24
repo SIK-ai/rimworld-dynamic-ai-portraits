@@ -49,6 +49,9 @@ namespace AIPortraits
                 case BackendType.GoogleImagen:
                     CoroutineRunner.Instance.StartCoroutine(GenerateGoogleImagen(positivePrompt, negativePrompt, settings, callback));
                     break;
+                case BackendType.LocalA1111:
+                    CoroutineRunner.Instance.StartCoroutine(GenerateLocalA1111(positivePrompt, negativePrompt, settings, callback));
+                    break;
                 default:
                     callback(null, null, "Backend type " + settings.backendType + " is not implemented.");
                     break;
@@ -207,6 +210,95 @@ namespace AIPortraits
                 {
                     callback(null, null, "Google Imagen parse exception: " + ex.Message);
                 }
+            }
+        }
+
+        // ── Local A1111 (AUTOMATIC1111 / Forge / SD.Next / ComfyUI A1111-compat) ───
+        private static IEnumerator GenerateLocalA1111(string prompt, string negativePrompt, AIPortraitsSettings settings, PortraitCallback callback)
+        {
+            string baseUrl = string.IsNullOrEmpty(settings.apiUrl) ? "http://127.0.0.1:7860" : settings.apiUrl.TrimEnd('/');
+            string url = baseUrl + "/sdapi/v1/txt2img";
+
+            StringBuilder json = new StringBuilder();
+            json.Append("{");
+            json.Append("\"prompt\":\"").Append(EscapeJson(prompt)).Append("\",");
+            json.Append("\"negative_prompt\":\"").Append(EscapeJson(negativePrompt)).Append("\",");
+            json.Append("\"steps\":").Append(settings.steps).Append(",");
+            json.Append("\"width\":512,");
+            json.Append("\"height\":512,");
+            json.Append("\"cfg_scale\":").Append(settings.cfgScale.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)).Append(",");
+            json.Append("\"sampler_name\":\"DPM++ 2M Karras\",");
+            json.Append("\"seed\":-1");
+            if (!string.IsNullOrEmpty(settings.modelName))
+            {
+                json.Append(",\"override_settings\":{\"sd_model_checkpoint\":\"")
+                    .Append(EscapeJson(settings.modelName)).Append("\"}");
+            }
+            json.Append("}");
+
+            byte[] jsonBytes = Encoding.UTF8.GetBytes(json.ToString());
+
+            using (UnityWebRequest request = new UnityWebRequest(url, "POST"))
+            {
+                request.uploadHandler   = new UploadHandlerRaw(jsonBytes);
+                request.downloadHandler = new DownloadHandlerBuffer();
+                request.SetRequestHeader("Content-Type", "application/json");
+                // Local server can be slow on first generation (model load). Allow 5 min.
+                request.timeout = 300;
+
+                Log.Message("[Dynamic AI Portraits] Local A1111 URL: " + url);
+
+                yield return request.SendWebRequest();
+
+                if (!IsSuccess(request))
+                {
+                    string hint = " | Is your local server running at " + baseUrl + "? " +
+                                  "Start AUTOMATIC1111/Forge with --api flag before generating.";
+                    callback(null, null, "Local A1111 API Error: " + request.error + hint +
+                                         " | " + Truncate(request.downloadHandler.text, 200));
+                    yield break;
+                }
+
+                string text = request.downloadHandler.text;
+
+                string base64 = null;
+                string parseErr = null;
+                try
+                {
+                    // Response: {"images":["base64data", ...], "parameters":{...}, "info":"..."}
+                    int keyIdx = text.IndexOf("\"images\"");
+                    if (keyIdx == -1) { parseErr = "No 'images' field in A1111 response: " + Truncate(text, 300); }
+                    else
+                    {
+                        int bracketIdx = text.IndexOf('[', keyIdx);
+                        int openQuote  = text.IndexOf('"', bracketIdx + 1);
+                        int closeQuote = text.IndexOf('"', openQuote + 1);
+                        if (openQuote == -1 || closeQuote == -1)
+                            parseErr = "Malformed images array in A1111 response.";
+                        else
+                            base64 = text.Substring(openQuote + 1, closeQuote - openQuote - 1);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    parseErr = "Local A1111 parse exception: " + ex.Message;
+                }
+
+                if (parseErr != null)
+                {
+                    callback(null, null, parseErr);
+                    yield break;
+                }
+
+                byte[] imgBytes;
+                try { imgBytes = Convert.FromBase64String(base64); }
+                catch (Exception ex)
+                {
+                    callback(null, null, "Local A1111 base64 decode failed: " + ex.Message);
+                    yield break;
+                }
+
+                DeliverImage(imgBytes, "Local A1111", callback);
             }
         }
 

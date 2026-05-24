@@ -61,6 +61,28 @@ Generates AI portraits of your colonists that reflect their real-time state: app
 - Default model: `imagen-3.0-fast-generate-001`. If you have access to Imagen 4 preview, you can try `imagen-4.0-generate-preview-05-20`.
 - Google Imagen produces the highest quality portraits and best follows the style prompts.
 
+### Local GPU (your own machine — free, no internet)
+
+- Select **🖥 Local GPU** as the backend.
+- Install and run one of these locally — all expose the same A1111-compatible API:
+  - **AUTOMATIC1111** — [github.com/AUTOMATIC1111/stable-diffusion-webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui)
+  - **Forge** (A1111 fork, faster) — [github.com/lllyasviel/stable-diffusion-webui-forge](https://github.com/lllyasviel/stable-diffusion-webui-forge)
+  - **SD.Next** — [github.com/vladmandic/sdnext](https://github.com/vladmandic/sdnext)
+  - **ComfyUI** with A1111-compat extension
+  - **Stability Matrix** (one-click installer that bundles the above) — [lykos.ai](https://lykos.ai)
+- Launch the server with the `--api` flag so port 7860 accepts requests. For A1111 / Forge:
+  ```
+  webui-user.bat   (edit it and add --api to COMMANDLINE_ARGS)
+  ```
+- Default URL: `http://127.0.0.1:7860` (configurable in mod settings).
+- Recommended models (download to your server's `models/Stable-diffusion/` folder):
+  - **SDXL fine-tune** (Juggernaut XL, AutismMix, Pony) — best for stylised portraits
+  - **FLUX.1 Schnell** (fp8) — fastest with great quality
+  - **FLUX.1 Dev** — highest quality, needs 12GB+ VRAM
+- Generation time: ~2–5 seconds per portrait on RTX 4070-class or better, 5–10s on older cards.
+- VRAM: 6GB minimum (SDXL fine-tunes), 12GB recommended (FLUX).
+- Free forever, no rate limits, totally offline.
+
 ---
 
 ## How It Works

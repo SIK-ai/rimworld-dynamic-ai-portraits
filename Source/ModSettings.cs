@@ -13,6 +13,7 @@ namespace AIPortraits
         HuggingFace,
         Pollinations,
         GoogleImagen,
+        LocalA1111,   // AUTOMATIC1111 / Forge / SD.Next / ComfyUI (A1111-compat) on localhost
         Custom
     }
 
@@ -229,17 +230,19 @@ namespace AIPortraits
             listing.Label("AI Backend");
             listing.Gap(6f);
 
-            bool isFree = (backendType == BackendType.Pollinations);
-            bool isPaid = (backendType == BackendType.GoogleImagen);
+            bool isFree  = (backendType == BackendType.Pollinations);
+            bool isPaid  = (backendType == BackendType.GoogleImagen);
+            bool isLocal = (backendType == BackendType.LocalA1111);
 
-            Rect modeRow = listing.GetRect(36f);
-            float halfW  = modeRow.width / 2f;
-            Rect btnFree = new Rect(modeRow.x,         modeRow.y, halfW - 4f, 36f);
-            Rect btnPaid = new Rect(modeRow.x + halfW, modeRow.y, halfW - 4f, 36f);
+            // Three-button row
+            Rect modeRow  = listing.GetRect(36f);
+            float thirdW  = modeRow.width / 3f;
+            Rect btnFree  = new Rect(modeRow.x,               modeRow.y, thirdW - 4f, 36f);
+            Rect btnPaid  = new Rect(modeRow.x + thirdW,      modeRow.y, thirdW - 4f, 36f);
+            Rect btnLocal = new Rect(modeRow.x + thirdW * 2f, modeRow.y, thirdW - 4f, 36f);
 
-            // Free button
             if (isFree) GUI.color = new Color(0.3f, 0.85f, 0.4f);
-            if (Widgets.ButtonText(btnFree, "🆓  Free  —  Pollinations"))
+            if (Widgets.ButtonText(btnFree, "🆓  Free — Pollinations"))
             {
                 backendType = BackendType.Pollinations;
                 apiUrl      = "https://image.pollinations.ai";
@@ -248,9 +251,8 @@ namespace AIPortraits
             }
             GUI.color = Color.white;
 
-            // Paid button
             if (isPaid) GUI.color = new Color(0.9f, 0.7f, 0.2f);
-            if (Widgets.ButtonText(btnPaid, "💎  Paid  —  Google Imagen 4"))
+            if (Widgets.ButtonText(btnPaid, "💎  Paid — Imagen 4"))
             {
                 backendType = BackendType.GoogleImagen;
                 apiUrl      = "https://generativelanguage.googleapis.com";
@@ -258,11 +260,20 @@ namespace AIPortraits
             }
             GUI.color = Color.white;
 
+            if (isLocal) GUI.color = new Color(0.5f, 0.7f, 1f);
+            if (Widgets.ButtonText(btnLocal, "🖥  Local GPU"))
+            {
+                backendType = BackendType.LocalA1111;
+                apiUrl      = "http://127.0.0.1:7860";
+                modelName   = ""; // empty = use whatever model the local server has loaded
+                apiKey      = "";
+            }
+            GUI.color = Color.white;
+
             listing.Gap(10f);
 
             if (isFree)
             {
-                // Free tier info
                 Rect infoRect = listing.GetRect(44f);
                 Widgets.DrawBoxSolid(infoRect, new Color(0.1f, 0.2f, 0.1f, 0.6f));
                 Text.Font = GameFont.Tiny;
@@ -273,7 +284,6 @@ namespace AIPortraits
             }
             else if (isPaid)
             {
-                // Paid tier info + API key field
                 Rect infoRect = listing.GetRect(28f);
                 Widgets.DrawBoxSolid(infoRect, new Color(0.2f, 0.15f, 0.05f, 0.6f));
                 Text.Font = GameFont.Tiny;
@@ -291,9 +301,29 @@ namespace AIPortraits
                 GUI.color = Color.white;
                 Text.Font = GameFont.Small;
             }
+            else if (isLocal)
+            {
+                Rect infoRect = listing.GetRect(60f);
+                Widgets.DrawBoxSolid(infoRect, new Color(0.1f, 0.15f, 0.25f, 0.6f));
+                Text.Font = GameFont.Tiny;
+                Widgets.Label(infoRect.ContractedBy(6f),
+                    "Free, runs on your own GPU. Requires a local server (AUTOMATIC1111, Forge, SD.Next,\n" +
+                    "or ComfyUI A1111-compat) on port 7860. ~2–5s per portrait on a modern card.\n" +
+                    "Start your server BEFORE generating. URL configurable in Advanced.");
+                Text.Font = GameFont.Small;
+
+                listing.Gap(8f);
+                listing.Label("Server URL");
+                apiUrl = listing.TextEntry(apiUrl);
+                listing.Gap(2f);
+                Text.Font = GameFont.Tiny;
+                GUI.color = new Color(0.6f, 0.6f, 0.6f);
+                Widgets.Label(listing.GetRect(20f), "  Default: http://127.0.0.1:7860 (A1111 / Forge default)");
+                GUI.color = Color.white;
+                Text.Font = GameFont.Small;
+            }
             else
             {
-                // HuggingFace or other — show minimal fields
                 listing.Gap(4f);
                 listing.Label("API Key");
                 apiKey = listing.TextEntry(apiKey);
