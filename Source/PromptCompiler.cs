@@ -224,6 +224,12 @@ Content: Render the character's appearance, expression, gear, and any special ef
 
             if (state.isHemogenic)
                 p.Append("pale aristocratic vampire-like appearance, faint red iris glow, sharp fangs, ");
+
+            // Pregnancy — visible bump
+            if (state.pregnancyTrimester == 2)
+                p.Append("visibly pregnant, mid-pregnancy showing, hand resting gently on belly, ");
+            else if (state.pregnancyTrimester == 3)
+                p.Append("heavily pregnant third trimester, prominent belly, glowing maternal skin, ");
         }
 
         private static string GetBodyBuildDesc(string bodyType)
@@ -427,6 +433,33 @@ Content: Render the character's appearance, expression, gear, and any special ef
                 else
                     p.Append("sleek bionic cybernetic implants with blue LED glow lines, ");
             }
+
+            // Body condition (bucketed — only shows when actually bad)
+            if (state.isExhausted)
+                p.Append("sleep-deprived, dark sunken circles under eyes, weary slack posture, ");
+            if (state.isMalnourished)
+                p.Append("malnourished, gaunt hollow cheeks, sharp collarbones, ");
+
+            // Chronic cosmetic conditions
+            foreach (string cc in state.chronicConditions)
+                p.Append(cc + ", ");
+
+            // Permanent visible scars (frostbite, burn) — separate from active injuries
+            foreach (string ps in state.permanentScars)
+                p.Append(ps + ", ");
+
+            // Drug addictions — each has distinctive visual signs
+            foreach (string addict in state.addictions)
+            {
+                string al = addict.ToLower();
+                if      (al.Contains("yayo"))      p.Append("hollow-eyed yayo addict, faint nasal redness, twitchy expression, ");
+                else if (al.Contains("flake"))     p.Append("flake addict, sunken cheeks, dilated pupils, ");
+                else if (al.Contains("go-juice"))  p.Append("go-juice user, wired tense gaze, faint veining on temples, ");
+                else if (al.Contains("wake-up"))   p.Append("wake-up addict, jittery alert stare, ");
+                else if (al.Contains("smokeleaf")) p.Append("smokeleaf user, yellowed fingertips, hazy laid-back eyes, ");
+                else if (al.Contains("alcohol"))   p.Append("alcoholic, ruddy nose with broken capillaries, bloodshot eyes, ");
+                else if (al.Contains("psychite"))  p.Append("psychite tea drinker, jittery focus, ");
+            }
         }
 
         // ──────────────────────────────────────────────────────────────────────────
@@ -466,6 +499,66 @@ Content: Render the character's appearance, expression, gear, and any special ef
             // Rim light from ideology color — applies to all styles since it's on the character, not the background
             if (!string.IsNullOrEmpty(state.favoriteColor))
                 p.Append("subtle " + state.favoriteColor + " rim light on the character, ");
+
+            // ── EXTENDED FLAVOR ────────────────────────────────────────────────────
+
+            // Royal title (Royalty DLC) — regal bearing scales with rank
+            if (!string.IsNullOrEmpty(state.royalTitle))
+            {
+                string rt = state.royalTitle.ToLower();
+                if      (rt.Contains("stellarch") || rt.Contains("consul"))
+                    p.Append("supreme imperial " + state.royalTitle + " bearing, magnificent regalia, faint divine aura, ");
+                else if (rt.Contains("duke") || rt.Contains("count"))
+                    p.Append("high noble " + state.royalTitle + " bearing, ornate imperial regalia, gilded sigil at collar, ");
+                else if (rt.Contains("baron") || rt.Contains("praetor"))
+                    p.Append("noble " + state.royalTitle + " bearing, refined imperial garb, ");
+                else if (rt.Contains("knight") || rt.Contains("freeholder") || rt.Contains("yeoman"))
+                    p.Append(state.royalTitle + " of the Empire, dignified bearing, subtle imperial sigil, ");
+                else
+                    p.Append(state.royalTitle + " of the Empire, ");
+            }
+
+            // Psylink — visible neural enhancement at high levels
+            if (state.psylinkLevel >= 4)
+                p.Append("powerful psycaster level " + state.psylinkLevel + ", glowing blue psychic energy at temples, visible neural lace, otherworldly presence, ");
+            else if (state.psylinkLevel >= 2)
+                p.Append("psycaster, faint blue glow at temples, subtle neural enhancement, ");
+            else if (state.psylinkLevel == 1)
+                p.Append("psylink novice, faint psychic shimmer, ");
+
+            // Faction of origin / pawnKind — heavy aesthetic cue
+            if (!string.IsNullOrEmpty(state.pawnKind))
+            {
+                string pk = state.pawnKind.ToLower();
+                if      (pk.Contains("pirate") || pk.Contains("raider"))
+                    p.Append("former pirate raider, hard-bitten weathered face, scars and crude tattoos, ");
+                else if (pk.Contains("imperial") || pk.Contains("trooper") || pk.Contains("janissary"))
+                    p.Append("imperial trooper bearing, disciplined military stance, ");
+                else if (pk.Contains("tribal") || pk.Contains("warrior"))
+                    p.Append("tribal warrior heritage, ritual face markings, ");
+                else if (pk.Contains("mercenary") || pk.Contains("merc"))
+                    p.Append("hardened mercenary look, professional combat-worn, ");
+                else if (pk.Contains("noble") || pk.Contains("yeoman"))
+                    p.Append("noble-born bearing, refined manners, ");
+            }
+
+            // Romance — wedding band / matching token
+            if (state.hasSpouse)
+                p.Append("wedding band visible on ring finger, softness in expression, ");
+            else if (state.hasLover)
+                p.Append("subtle love-token or matching pendant, ");
+
+            // Captivity — slave collar is a strong visual; prisoner posture
+            if (state.isSlave)
+                p.Append("metal slave collar around neck, weary downcast eyes, ");
+            else if (state.isPrisoner)
+                p.Append("prisoner bearing, dirty clothes, downcast guarded eyes, ");
+
+            // Anomaly horrors
+            if (state.isInhumanized)
+                p.Append("inhumanized — unsettlingly calm void-touched gaze, faintly black sclera, disturbing serene smile, ");
+            if (state.isGhoul)
+                p.Append("ghoul — pallid corpse-grey skin, sunken hollow eyes, claw-like hands, slack jaw, ");
         }
 
         // ──────────────────────────────────────────────────────────────────────────

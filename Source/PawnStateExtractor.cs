@@ -83,6 +83,41 @@ namespace AIPortraits
         public string childhoodTitle;           // e.g. "Tribal child"
         public string adulthoodTitle;           // e.g. "Ex-soldier"
 
+        // ── EXTENDED (added 2026) ────────────────────────────────────────────────
+        // Drugs (separated from isSick so the AI can render addict-specific signs)
+        public List<string> addictions      = new List<string>(); // "yayo", "smokeleaf", "alcohol"
+
+        // Body condition (bucketed in hash to avoid cache thrash)
+        public bool isExhausted;            // sleep-deprivation or rest < 28%
+        public bool isMalnourished;         // Malnutrition hediff or food < 25%
+
+        // Chronic + cosmetic permanent conditions
+        public List<string> chronicConditions = new List<string>(); // "cataract", "frail", "dementia", "bad back"
+        public List<string> permanentScars    = new List<string>(); // "blackened fingertips from frostbite", "burn scar on cheek"
+
+        // Pregnancy (Biotech)
+        public int pregnancyTrimester;      // 0 = none, 1/2/3
+
+        // Royalty
+        public string royalTitle;           // "Knight", "Count", null if none
+        public int    psylinkLevel;         // 0–6
+
+        // Faction context
+        public string factionName;          // "Outlander Union", "Pirate Confederacy"
+        public string pawnKind;             // "Mercenary", "Imperial trooper", "Pirate raider"
+
+        // Romance
+        public bool hasSpouse;
+        public bool hasLover;               // includes fiancé
+
+        // Captivity
+        public bool isPrisoner;
+        public bool isSlave;
+
+        // Anomaly
+        public bool isInhumanized;
+        public bool isGhoul;
+
         // ──────────────────────────────────────────────────────────────────────────
         // HASH — all fields that affect appearance should be represented
         // ──────────────────────────────────────────────────────────────────────────
@@ -116,6 +151,23 @@ namespace AIPortraits
             foreach (string m   in missingParts)  sb.Append(m).Append(",");
             foreach (string imp in implants)      sb.Append(imp).Append(",");
             foreach (string t   in traits)        sb.Append(t).Append(",");
+
+            // Extended fields — volatile ones bucketed coarsely to avoid cache thrash
+            foreach (string ad  in addictions)         sb.Append(ad).Append(",");
+            foreach (string cc  in chronicConditions)  sb.Append(cc).Append(",");
+            foreach (string ps  in permanentScars)     sb.Append(ps).Append(",");
+            sb.Append(isExhausted    ? "tired_"   : "_");
+            sb.Append(isMalnourished ? "hungry_"  : "_");
+            sb.Append("preg").Append(pregnancyTrimester).Append("_");
+            sb.Append(royalTitle ?? "").Append("_");
+            sb.Append(psylinkLevel).Append("_");
+            sb.Append(factionName ?? "").Append("_");
+            sb.Append(pawnKind ?? "").Append("_");
+            sb.Append(hasSpouse ? "spouse" : (hasLover ? "lover" : "single")).Append("_");
+            sb.Append(isPrisoner ? "prisoner_" : "_");
+            sb.Append(isSlave    ? "slave_"    : "_");
+            sb.Append(isInhumanized ? "inhuman_" : "_");
+            sb.Append(isGhoul       ? "ghoul_"   : "_");
 
             using (System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create())
             {
@@ -298,13 +350,48 @@ namespace AIPortraits
                         continue;
                     }
 
-                    // Build a color-prefixed apparel string ("dark blue button-down shirt") so the
-                    // generated portrait actually reflects what the pawn is wearing in-game.
+                    // Build a rich apparel string: "<quality> <special-material> <color> <label> <damage>"
+                    // e.g. "legendary devilstrand dark crimson duster, tattered"
                     string itemLabel = item.def.label;
                     string colorDesc = GetColorDescription(item.DrawColor);
-                    string apparelDesc = string.IsNullOrEmpty(colorDesc)
-                        ? itemLabel
-                        : colorDesc + " " + itemLabel;
+
+                    // Quality (Awful/Poor → ragged; Excellent/Masterwork/Legendary → ornate)
+                    string qualityPrefix = "";
+                    QualityCategory q;
+                    if (item.TryGetQuality(out q))
+                    {
+                        if      (q == QualityCategory.Awful)      qualityPrefix = "ragged ";
+                        else if (q == QualityCategory.Poor)       qualityPrefix = "worn ";
+                        else if (q == QualityCategory.Excellent)  qualityPrefix = "well-crafted ";
+                        else if (q == QualityCategory.Masterwork) qualityPrefix = "masterwork ornate ";
+                        else if (q == QualityCategory.Legendary)  qualityPrefix = "legendary gilt-trimmed ";
+                    }
+
+                    // Stuff (only flag visually distinctive materials)
+                    string stuffPrefix = "";
+                    if (item.Stuff != null)
+                    {
+                        string sl = item.Stuff.defName.ToLower();
+                        if      (sl.Contains("devilstrand"))  stuffPrefix = "iridescent devilstrand ";
+                        else if (sl.Contains("hyperweave"))   stuffPrefix = "sleek hyperweave ";
+                        else if (sl.Contains("thrumbofur"))   stuffPrefix = "luxurious thrumbofur ";
+                        else if (sl.Contains("humanleather")) stuffPrefix = "unsettling human-leather ";
+                        else if (sl.Contains("plasteel"))     stuffPrefix = "plasteel-reinforced ";
+                        else if (sl.Contains("uranium"))      stuffPrefix = "dense uranium ";
+                    }
+
+                    // Damage
+                    string damageSuffix = "";
+                    if (item.MaxHitPoints > 0)
+                    {
+                        float hpFrac = (float)item.HitPoints / item.MaxHitPoints;
+                        if      (hpFrac < 0.35f) damageSuffix = ", torn and bloodied";
+                        else if (hpFrac < 0.60f) damageSuffix = ", showing wear and tears";
+                    }
+
+                    string apparelDesc = (qualityPrefix + stuffPrefix +
+                                          (string.IsNullOrEmpty(colorDesc) ? "" : colorDesc + " ") +
+                                          itemLabel + damageSuffix).Trim();
 
                     s.apparel.Add(apparelDesc);
 
@@ -340,7 +427,66 @@ namespace AIPortraits
 
                     string defLc = hediff.def.defName.ToLower();
 
-                    // Sickness
+                    // ── ADDICTIONS (separated from sick — has its own visual signs) ──
+                    if (hediff is Hediff_Addiction)
+                    {
+                        if      (defLc.Contains("yayo"))      s.addictions.Add("yayo");
+                        else if (defLc.Contains("flake"))     s.addictions.Add("flake");
+                        else if (defLc.Contains("gojuice"))   s.addictions.Add("go-juice");
+                        else if (defLc.Contains("wakeup"))    s.addictions.Add("wake-up");
+                        else if (defLc.Contains("smokeleaf")) s.addictions.Add("smokeleaf");
+                        else if (defLc.Contains("alcohol"))   s.addictions.Add("alcohol");
+                        else if (defLc.Contains("psychite"))  s.addictions.Add("psychite tea");
+                        else                                   s.addictions.Add(hediff.def.label);
+                        continue; // don't double-count as sick
+                    }
+
+                    // ── BODY CONDITION ──
+                    if (defLc.Contains("sleepdeprivation") || defLc.Contains("tired"))
+                    {
+                        s.isExhausted = true;
+                        continue;
+                    }
+                    if (defLc.Contains("malnutrition") || defLc.Contains("hunger"))
+                    {
+                        s.isMalnourished = true;
+                        continue;
+                    }
+
+                    // ── PREGNANCY (Biotech) ──
+                    if (defLc.Contains("pregnant"))
+                    {
+                        // hediff.Severity ranges 0–1 across the pregnancy
+                        if      (hediff.Severity < 0.34f) s.pregnancyTrimester = 1;
+                        else if (hediff.Severity < 0.67f) s.pregnancyTrimester = 2;
+                        else                              s.pregnancyTrimester = 3;
+                        continue;
+                    }
+
+                    // ── ANOMALY: inhumanized / void-touched ──
+                    if (defLc.Contains("inhumanized") || defLc.Contains("voidtouched"))
+                    {
+                        s.isInhumanized = true;
+                        continue;
+                    }
+
+                    // ── CHRONIC COSMETIC CONDITIONS (currently lost in isSick) ──
+                    if (defLc == "cataract" || defLc.Contains("cataract"))
+                        { s.chronicConditions.Add("milky cataract over eye"); continue; }
+                    if (defLc == "badback" || defLc.Contains("badback"))
+                        { s.chronicConditions.Add("stooped from a bad back"); continue; }
+                    if (defLc == "frail" || defLc.Contains("frailty"))
+                        { s.chronicConditions.Add("frail and thin-limbed"); continue; }
+                    if (defLc == "dementia" || defLc.Contains("dementia") || defLc.Contains("alzheimer"))
+                        { s.chronicConditions.Add("vacant dementia stare"); continue; }
+                    if (defLc.Contains("hearingloss") || defLc.Contains("deaf"))
+                        { s.chronicConditions.Add("cocked head listening"); continue; }
+                    if (defLc.Contains("asthma"))
+                        { s.chronicConditions.Add("labored asthmatic breathing"); continue; }
+                    if (defLc.Contains("carcinoma") || defLc.Contains("cancer"))
+                        { s.chronicConditions.Add("hollow-cheeked, terminal pallor"); continue; }
+
+                    // Sickness (general bad/disease hediffs that don't match anything above)
                     if (hediff.def.makesSickThought || hediff.def.isBad)
                         s.isSick = true;
 
@@ -358,6 +504,18 @@ namespace AIPortraits
                     bool isHead = IsHeadPart(part);
                     bool isBody = !isHead;
                     string partLabel = part.def != null ? part.def.label : "body part";
+
+                    // Permanent frostbite/burn scars — cosmetic, distinct from active injuries
+                    if (hediff.IsPermanent() && defLc.Contains("frostbite"))
+                    {
+                        s.permanentScars.Add("blackened " + partLabel + " from old frostbite");
+                        continue;
+                    }
+                    if (hediff.IsPermanent() && (defLc.Contains("burn")))
+                    {
+                        s.permanentScars.Add("faded burn scar on " + partLabel);
+                        continue;
+                    }
 
                     if (hediff is Hediff_MissingPart)
                     {
@@ -381,6 +539,14 @@ namespace AIPortraits
                         else        s.bodyInjuries.Add(injLabel);
                     }
                 }
+
+                // Backup: sleep/food NEED-based detection if hediffs didn't catch it
+                if (!s.isExhausted && pawn.needs != null && pawn.needs.rest != null &&
+                    pawn.needs.rest.CurLevelPercentage < 0.28f)
+                    s.isExhausted = true;
+                if (!s.isMalnourished && pawn.needs != null && pawn.needs.food != null &&
+                    pawn.needs.food.CurLevelPercentage < 0.25f)
+                    s.isMalnourished = true;
             }
 
             // ── MOOD / MENTAL STATE ───────────────────────────────────────────────
@@ -462,6 +628,76 @@ namespace AIPortraits
                     Log.Warning("[Dynamic AI Portraits] Could not read ideology role: " + ex.Message);
                 }
             }
+
+            // ── ROYALTY DLC — title + psylink ────────────────────────────────────
+            if (pawn.royalty != null)
+            {
+                try
+                {
+                    RoyalTitleDef mainTitleDef = pawn.royalty.MainTitle();
+                    if (mainTitleDef != null)
+                        s.royalTitle = mainTitleDef.GetLabelFor(pawn) ?? mainTitleDef.label;
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning("[Dynamic AI Portraits] Could not read royal title: " + ex.Message);
+                }
+
+                try
+                {
+                    // GetPsylinkLevel exists as an extension; fall back to entropy if missing
+                    Hediff psylinkHediff = pawn.health.hediffSet.GetFirstHediffOfDef(HediffDefOf.PsychicAmplifier);
+                    if (psylinkHediff != null)
+                        s.psylinkLevel = (int)psylinkHediff.Severity;
+                }
+                catch (Exception)
+                {
+                    // PsychicAmplifier may not exist on this version — silently skip
+                }
+            }
+
+            // ── FACTION + PAWN KIND ──────────────────────────────────────────────
+            try
+            {
+                if (pawn.Faction != null && pawn.Faction.def != null)
+                    s.factionName = pawn.Faction.def.label;
+                if (pawn.kindDef != null)
+                    s.pawnKind = pawn.kindDef.label;
+            }
+            catch (Exception) { }
+
+            // ── ROMANCE ──────────────────────────────────────────────────────────
+            if (pawn.relations != null)
+            {
+                try
+                {
+                    foreach (DirectPawnRelation dpr in pawn.relations.DirectRelations)
+                    {
+                        if (dpr == null || dpr.def == null) continue;
+                        string r = dpr.def.defName.ToLower();
+                        if (r == "spouse")      s.hasSpouse = true;
+                        else if (r == "lover" || r == "fiance" || r == "fiancee") s.hasLover = true;
+                    }
+                }
+                catch (Exception) { }
+            }
+
+            // ── CAPTIVITY (Prisoner / Slave) ─────────────────────────────────────
+            try
+            {
+                s.isPrisoner = pawn.IsPrisoner;
+                s.isSlave    = pawn.IsSlave;
+            }
+            catch (Exception) { }
+
+            // ── ANOMALY: ghoul / mutant ──────────────────────────────────────────
+            try
+            {
+                if (pawn.kindDef != null && pawn.kindDef.defName != null &&
+                    pawn.kindDef.defName.ToLower().Contains("ghoul"))
+                    s.isGhoul = true;
+            }
+            catch (Exception) { }
 
             return s;
         }
