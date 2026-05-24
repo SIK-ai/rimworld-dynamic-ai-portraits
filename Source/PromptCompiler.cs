@@ -45,10 +45,10 @@ Content: Render the character's appearance, clean expression, and gear exactly a
 
             switch (settings.portraitStyle)
             {
-                case PortraitStyle.Realistic_Korean:  AppendKoreanRealisticHeader(p, continuityStyleToken); break;
-                case PortraitStyle.Realistic_Western: AppendWesternRealisticHeader(p, continuityStyleToken); break;
-                case PortraitStyle.DotPixel:          AppendPixelHeader(p, continuityStyleToken); break;
-                default:                              AppendKoreanRealisticHeader(p, continuityStyleToken); break;
+                case PortraitStyle.Realistic_Korean:  AppendKoreanRealisticHeader(p, continuityStyleToken, state); break;
+                case PortraitStyle.Realistic_Western: AppendWesternRealisticHeader(p, continuityStyleToken, state); break;
+                case PortraitStyle.DotPixel:          AppendPixelHeader(p, continuityStyleToken, state); break;
+                default:                              AppendKoreanRealisticHeader(p, continuityStyleToken, state); break;
             }
 
             AppendRaceClass(p, state, settings);
@@ -92,25 +92,114 @@ Content: Render the character's appearance, clean expression, and gear exactly a
         // ART STYLE HEADERS (positive prompt preamble for all backends)
         // ──────────────────────────────────────────────────────────────────────────
 
-        private static void AppendKoreanRealisticHeader(StringBuilder p, string continuityToken)
+        private static void AppendKoreanRealisticHeader(StringBuilder p, string continuityToken, PawnState state)
         {
-            p.Append("Korean webtoon manhwa character portrait, Solo Leveling art style, sharp dynamic line art with strong inking, dramatic chiaroscuro lighting with deep blacks and bright rim highlights, saturated focal colors against muted environment palette, cinematic pose, sharp expressive eyes, refined modern proportions, glossy detailed hair strands, bust-up framing, transparent PNG background, alpha channel transparency, no background elements, ");
+            string frameText = GetFramingHeaderPart(state);
+            string bgText = GetBackgroundText(state);
+            string subjectType = "character portrait";
+            if (state.framing == "bodyshot") subjectType = "character full body illustration";
+            else if (state.framing == "special") subjectType = "character dynamic scene illustration";
+
+            p.Append("Korean webtoon manhwa " + subjectType + ", Solo Leveling art style, sharp dynamic line art with strong inking, dramatic chiaroscuro lighting with deep blacks and bright rim highlights, saturated focal colors against muted environment palette, cinematic pose, sharp expressive eyes, refined modern proportions, glossy detailed hair strands, " + frameText + ", " + bgText + ", ");
             if (!string.IsNullOrEmpty(continuityToken))
                 p.Append(continuityToken + ", ");
         }
 
-        private static void AppendWesternRealisticHeader(StringBuilder p, string continuityToken)
+        private static void AppendWesternRealisticHeader(StringBuilder p, string continuityToken, PawnState state)
         {
-            p.Append("Rick and Morty Adult Swim cartoon character portrait, Justin Roiland animation style, thick consistent black outlines, flat 2D color fills with NO gradients or painterly shading, bulging round cartoon eyes with tiny black dot pupils, exaggerated wonky proportions, oversized head, hand-drawn animation cel look, bright primary color palette, bust-up framing, transparent PNG background, alpha channel transparency, no background elements, ");
+            string frameText = GetFramingHeaderPart(state);
+            string bgText = GetBackgroundText(state);
+            string subjectType = "character portrait";
+            if (state.framing == "bodyshot") subjectType = "character full body illustration";
+            else if (state.framing == "special") subjectType = "character dynamic scene illustration";
+
+            p.Append("Rick and Morty Adult Swim cartoon " + subjectType + ", Justin Roiland animation style, thick consistent black outlines, flat 2D color fills with NO gradients or painterly shading, bulging round cartoon eyes with tiny black dot pupils, exaggerated wonky proportions, oversized head, hand-drawn animation cel look, bright primary color palette, " + frameText + ", " + bgText + ", ");
             if (!string.IsNullOrEmpty(continuityToken))
                 p.Append(continuityToken + ", ");
         }
 
-        private static void AppendPixelHeader(StringBuilder p, string continuityToken)
+        private static void AppendPixelHeader(StringBuilder p, string continuityToken, PawnState state)
         {
-            p.Append("high-quality 16-bit retro JRPG character portrait, clean pixel-art grid, zero anti-aliasing, sharp deliberate pixel edges, thin consistent dark outlines, clean flat cel-shading, limited color palette, anime-style cute facial features, detailed hair, bust-up framing, transparent PNG background, alpha channel transparency, no background elements, ");
+            string frameText = GetFramingHeaderPart(state);
+            string bgText = GetBackgroundText(state);
+            string subjectType = "character portrait";
+            if (state.framing == "bodyshot") subjectType = "character full body sprite";
+            else if (state.framing == "special") subjectType = "character dynamic scene illustration";
+
+            p.Append("high-quality 16-bit retro JRPG " + subjectType + ", clean pixel-art grid, zero anti-aliasing, sharp deliberate pixel edges, thin consistent dark outlines, clean flat cel-shading, limited color palette, anime-style cute facial features, detailed hair, " + frameText + ", " + bgText + ", ");
             if (!string.IsNullOrEmpty(continuityToken))
                 p.Append(continuityToken + ", ");
+        }
+
+        private static string GetFramingHeaderPart(PawnState state)
+        {
+            string framing = state.framing;
+            if (framing == "bodyshot") return "full length full body shot framing showing the character from head to toe with complete clothing visible";
+            if (framing == "special")
+            {
+                int hash = 0;
+                if (!string.IsNullOrEmpty(state.pawnId))
+                {
+                    for (int i = 0; i < state.pawnId.Length; i++)
+                        hash = (hash * 31) + state.pawnId[i];
+                }
+                else if (!string.IsNullOrEmpty(state.name))
+                {
+                    for (int i = 0; i < state.name.Length; i++)
+                        hash = (hash * 31) + state.name[i];
+                }
+                hash = Math.Abs(hash);
+
+                string topSkill = (state.topSkill1 ?? "").ToLower();
+                bool isCombat = topSkill.Contains("shooting") || topSkill.Contains("melee");
+
+                int option = hash % 3;
+                if (topSkill.Contains("social"))
+                {
+                    option = 1; // selfie
+                }
+                else if (isCombat)
+                {
+                    option = (hash % 2 == 0) ? 0 : 2; // backshot or action pose
+                }
+
+                switch (option)
+                {
+                    case 0:
+                        return "dynamic low-angle shot from behind showing the character's back, looking back over their shoulder at the background scene";
+                    case 1:
+                        return "dynamic wide-angle selfie shot showing the character holding the camera at arm's length with a wide-eyed expressive face";
+                    case 2:
+                    default:
+                        return "dynamic action shot showing the character in a low-stance dramatic pose interacting with the environment";
+                }
+            }
+            return "bust-up framing";
+        }
+
+        private static string GetBackgroundText(PawnState state)
+        {
+            if (state.framing != "special")
+                return "transparent PNG background, alpha channel transparency, no background elements";
+
+            if (!string.IsNullOrEmpty(state.mentalState))
+                return "standing in a dramatic chaotic red-hued psychic storm background";
+
+            string topSkill = (state.topSkill1 ?? "").ToLower();
+            if (topSkill.Contains("medicine"))
+                return "standing in a sterile high-tech hospital room with medical monitors in the background";
+            if (topSkill.Contains("research") || topSkill.Contains("intellectual"))
+                return "standing in a high-tech science laboratory with glowing flasks and holographic screens in the background";
+            if (topSkill.Contains("construction") || topSkill.Contains("crafting") || topSkill.Contains("artistic"))
+                return "standing in a rustic workshop with tools and blueprints hanging on the walls in the background";
+            if (topSkill.Contains("plants") || topSkill.Contains("animals") || topSkill.Contains("cooking"))
+                return "standing in a vibrant sunlit garden with green crops and wildflowers in the background";
+            if (topSkill.Contains("mining"))
+                return "standing inside a dark cavern with glowing crystal veins on the rock walls in the background";
+            if (topSkill.Contains("shooting") || topSkill.Contains("melee"))
+                return "standing on a dramatic smoky battlefield with ruins and debris in the background";
+
+            return "standing in a scenic outdoor wilderness with distant RimWorld mountains and a twin moon sky in the background";
         }
 
         // ──────────────────────────────────────────────────────────────────────────
@@ -123,7 +212,11 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             string race = BuildRaceDescriptor(state);
             string role = BuildRoleDescriptor(state, settings);
 
-            p.Append("portrait of a " + state.bioAge + " year old " + race + " " + genderNoun);
+            string introText = "portrait of a ";
+            if (state.framing == "bodyshot") introText = "full length body shot of a ";
+            else if (state.framing == "special") introText = "dynamic selfie portrait of a ";
+
+            p.Append(introText + state.bioAge + " year old " + race + " " + genderNoun);
             if (!string.IsNullOrEmpty(role))
                 p.Append(", " + role);
             p.Append(", ");
@@ -234,7 +327,14 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             if (!string.IsNullOrEmpty(state.beardStyle) &&
                 state.beardStyle.ToLower() != "clean shaven" &&
                 state.beardStyle.ToLower() != "no beard")
-                p.Append(state.beardStyle + " beard, ");
+            {
+                string tempHelmet;
+                BuildGearLine(state, out tempHelmet);
+                if (!IsFaceCoverLabel(tempHelmet))
+                {
+                    p.Append(state.beardStyle + " beard, ");
+                }
+            }
 
             if (!string.IsNullOrEmpty(state.tattooDef))
                 p.Append("visible tattoo: " + state.tattooDef + ", ");
@@ -873,7 +973,7 @@ Content: Render the character's appearance, clean expression, and gear exactly a
                 sb.AppendLine("Apparel: " + string.Join(", ", state.apparel.ToArray()));
 
             if (!string.IsNullOrEmpty(state.adulthoodTitle))
-                sb.AppendLine("Background: " + state.adulthoodTitle);
+                sb.AppendLine("Pawn Biography: " + state.adulthoodTitle);
 
             if (settings.includeIdeology)
             {
@@ -905,6 +1005,16 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             if (state.isGhoul)           sb.AppendLine("Is a ghoul (pallid, hollow, undead)");
             if (state.isInhumanized)     sb.AppendLine("Is void-touched / inhumanized (disturbing serene void gaze)");
 
+            if (!string.IsNullOrEmpty(state.framing))
+            {
+                if (state.framing == "bodyshot")
+                    sb.AppendLine("Framing: full body shot (head to toe framing showing entire outfit and body)");
+                else if (state.framing == "special")
+                    sb.AppendLine("Framing: special (dynamic selfie shot or expressive custom illustration close-up)");
+                else
+                    sb.AppendLine("Framing: standard portrait (bust-up framing)");
+            }
+
             return sb.ToString();
         }
 
@@ -912,45 +1022,63 @@ Content: Render the character's appearance, clean expression, and gear exactly a
         /// Returns the Gemini Flash system prompt for the given art style.
         /// This tells the model exactly what kind of image-generation prompt to produce.
         /// </summary>
-        public static string GetLLMSystemPrompt(PortraitStyle style)
+        public static string GetLLMSystemPrompt(PortraitStyle style, string framing = "portrait")
         {
             string styleDesc;
             switch (style)
             {
                 case PortraitStyle.Realistic_Korean:
-                    styleDesc = "modern Korean webtoon manhwa (Solo Leveling aesthetic): " +
+                    styleDesc = "modern Korean webtoon manhwa (Solo Leveling style): " +
                                 "sharp inked line art, dramatic chiaroscuro with deep blacks and bright rim highlights, " +
-                                "saturated focal colors against muted environment, cinematic dynamic pose, " +
-                                "sharp expressive eyes, refined modern proportions, glossy detailed hair strands";
+                                "saturated focal colors, cinematic dynamic pose, sharp expressive eyes, " +
+                                "refined modern proportions, glossy detailed hair strands, masterpiece, professional digital anime illustration, highly polished";
                     break;
                 case PortraitStyle.Realistic_Western:
-                    styleDesc = "Rick and Morty Adult Swim cartoon (Justin Roiland animation style): " +
-                                "thick consistent black outlines, flat 2D color fills with no gradients or painterly shading, " +
-                                "bulging round cartoon eyes with tiny black dot pupils, exaggerated wonky proportions, " +
-                                "oversized head, hand-drawn animation cel look, bright primary color palette";
+                    styleDesc = "Rick and Morty / Adult Swim 2D cartoon animation style: " +
+                                "clean bold black outlines, flat vibrant cell-shaded colors, expressive character-focused design, " +
+                                "crisp hand-drawn vector art, no gradients or painterly shading";
                     break;
                 case PortraitStyle.DotPixel:
-                    styleDesc = "high-quality 16-bit retro JRPG pixel art (Tactics Ogre / Final Fantasy Tactics): " +
+                    styleDesc = "high-quality 16-bit retro JRPG pixel art (Tactics Ogre / Final Fantasy Tactics style): " +
                                 "sharp deliberate pixel grid, zero anti-aliasing, thin dark outlines, " +
-                                "2-3 band flat cel-shading, limited vibrant color palette, cute anime facial features";
+                                "2-3 band flat cel-shading, limited vibrant color palette, cute anime facial features, masterpiece retro game asset, clean sprite art";
                     break;
                 default:
-                    styleDesc = "semi-realistic anime RPG character portrait";
+                    styleDesc = "semi-realistic anime RPG character portrait, professional digital illustration";
                     break;
+            }
+
+            string framingTask = "write one optimized image generation prompt for a bust-up portrait.";
+            string rule5 = "Always end with: transparent PNG background, alpha channel transparency, no background elements, bust-up framing.";
+            string rule7 = "FACE COVERS & BEARDS: If a face-covering mask, respirator, veil, goggles, or visor is listed, describe it as worn on the face/eyes. If they also have a beard or facial hair, DO NOT describe the beard/facial hair (or state it is completely hidden inside the mask) to ensure the mask renders cleanly without clipping.";
+
+            if (framing == "bodyshot")
+            {
+                framingTask = "write one optimized image generation prompt for a full-length body illustration showing the character from head to toe.";
+                rule5 = "Always end with: transparent PNG background, alpha channel transparency, no background elements, full body length framing showing the character from head to toe.";
+            }
+            else if (framing == "special")
+            {
+                framingTask = "write one optimized image generation prompt for a dynamic scene capturing a key theme, environment, or interesting camera angle for the character (such as a backshot looking over the shoulder at the background, a wide-angle selfie, or a dynamic action pose in their environment).";
+                rule5 = "Always end with: a detailed thematic background reflecting their role, skill, or environment (no transparent background), dynamic camera framing and angle (like a dramatic backshot, wide-angle selfie, or low-angle action shot).";
+                rule7 = "FACE COVERS & SPECIALS: If a face-covering mask is listed, describe it worn on the face, hiding any beard. If framing is 'special', design a highly expressive and interesting shot (like a selfie, a low-angle action pose, or a backshot looking over their shoulder at the background) reflecting their mood, traits, or primary skill (e.g. medical bay for doctor, science lab for researcher, workshop for crafter, battlefield for soldier, psychic storm for active mental states) instead of a transparent background.";
             }
 
             return
                 "You are an expert AI image prompt engineer for a RimWorld character portrait generator.\n" +
-                "Given a character data sheet, write one optimized image generation prompt for a bust-up portrait.\n\n" +
+                "Given a character data sheet, " + framingTask + "\n\n" +
                 "TARGET ART STYLE: " + styleDesc + "\n\n" +
                 "RULES:\n" +
                 "1. Write a comma-separated descriptor list — NOT prose sentences.\n" +
                 "2. Include: art style keywords, physical appearance, expression, visible weapon/apparel, personality cues.\n" +
                 "3. Resolve contradictions — when traits conflict, pick the more visually striking interpretation.\n" +
                 "4. You have full creative freedom over pose, composition, camera angle, lighting, and overall styling. Aim for a premium, visually striking portrait that captures the character's identity. Use your judgment to make the most impactful artistic decisions.\n" +
-                "5. Always end with: transparent PNG background, alpha channel transparency, no background elements, bust-up framing.\n" +
-                "6. Keep total output under 220 words.\n" +
-                "7. Output ONLY the prompt — no explanations, no headers, no quotes.";
+                "5. " + rule5 + "\n" +
+                "6. HEADGEAR/HELMET MANDATE: If a helmet, hat, hood, cap, cowl, or mask is in the apparel list, you MUST include it. Describe it either worn on their head/face, held under one arm, slung on a shoulder strap, or slung around their neck.\n" +
+                "7. " + rule7 + "\n" +
+                "8. HIGH QUALITY VISUALS: Elevate the aesthetic by requesting dramatic lighting, strong shadow play, crisp linework, and clean color harmony tailored to the style. Avoid generic terms like 'hyperrealistic' or 'detailed'; use concrete modifiers instead (e.g. 'perfect anatomy', 'masterpiece digital art', 'crisp pixel alignment').\n" +
+                "9. Keep total output under 220 words.\n" +
+                "10. Output ONLY the prompt — no explanations, no headers, no quotes.";
         }
     }
 }

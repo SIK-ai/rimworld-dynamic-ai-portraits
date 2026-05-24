@@ -2,6 +2,7 @@ using UnityEngine;
 using Verse;
 using HarmonyLib;
 using RimWorld;
+using Verse.Sound;
 
 namespace AIPortraits
 {
@@ -54,7 +55,62 @@ namespace AIPortraits
                 portraitRect.yMax - BtnSize - BtnMargin,
                 BtnSize, BtnSize);
 
+            Rect specRect = new Rect(refreshRect.x - BtnSize - 4f, refreshRect.y, BtnSize, BtnSize);
+            Rect bodyRect = new Rect(specRect.x - BtnSize - 4f, refreshRect.y, BtnSize, BtnSize);
+            Rect portRect = new Rect(bodyRect.x - BtnSize - 4f, refreshRect.y, BtnSize, BtnSize);
+
+            string currentFraming = "portrait";
+            string f;
+            if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.pawnFraming != null &&
+                AIPortraitsMod.settings.pawnFraming.TryGetValue(pawn.ThingID, out f))
+            {
+                currentFraming = f;
+            }
+
+            DrawFramingButton(portRect, "P", "portrait", currentFraming, pawn, "Set framing style to standard bust-up portrait.");
+            DrawFramingButton(bodyRect, "B", "bodyshot", currentFraming, pawn, "Set framing style to full-length bodyshot.");
+            DrawFramingButton(specRect, "S", "special", currentFraming, pawn, "Set framing style to special selfie / thematic scene.");
+
             DrawRefreshButton(refreshRect, pawn);
+        }
+
+        private static void DrawFramingButton(Rect rect, string text, string framingName, string currentFraming, Pawn pawn, string tooltip)
+        {
+            bool active = (currentFraming == framingName);
+            bool hovered = Mouse.IsOver(rect);
+
+            // Highlight background if active
+            if (active)
+            {
+                GUI.color = hovered ? new Color(0.15f, 0.55f, 0.85f, 0.95f) : new Color(0.1f, 0.4f, 0.7f, 0.85f);
+            }
+            else
+            {
+                GUI.color = hovered ? new Color(0.35f, 0.35f, 0.35f, 0.95f) : new Color(0f, 0f, 0f, 0.65f);
+            }
+
+            GUI.DrawTexture(rect, BaseContent.WhiteTex);
+            GUI.color = new Color(1f, 1f, 1f, 0.35f);
+            Widgets.DrawBox(rect, 1);
+            GUI.color = Color.white;
+
+            // Text label
+            Text.Anchor = TextAnchor.MiddleCenter;
+            Text.Font = GameFont.Small;
+            Widgets.Label(rect, text);
+            Text.Anchor = TextAnchor.UpperLeft;
+
+            TooltipHandler.TipRegion(rect, tooltip);
+
+            if (Widgets.ButtonInvisible(rect))
+            {
+                if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.pawnFraming != null)
+                {
+                    AIPortraitsMod.settings.pawnFraming[pawn.ThingID] = framingName;
+                    AIPortraitsMod.Instance.WriteSettings();
+                    SoundDefOf.Click.PlayOneShotOnCamera(null);
+                }
+            }
         }
 
         private static void DrawRefreshButton(Rect rect, Pawn pawn)
@@ -76,7 +132,7 @@ namespace AIPortraits
             Text.Font = GameFont.Small;
             Text.Anchor = TextAnchor.UpperLeft;
 
-            TooltipHandler.TipRegion(rect, "Refresh portrait");
+            TooltipHandler.TipRegion(rect, "Refresh portrait using selected framing");
 
             if (Widgets.ButtonInvisible(rect))
             {

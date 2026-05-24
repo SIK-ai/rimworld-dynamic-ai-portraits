@@ -54,6 +54,7 @@ namespace AIPortraits
         private Vector2 scrollPosition = Vector2.zero;
 
         public Dictionary<string, string> activePortraits = new Dictionary<string, string>();
+        public Dictionary<string, string> pawnFraming = new Dictionary<string, string>();
 
         public override void ExposeData()
         {
@@ -74,9 +75,12 @@ namespace AIPortraits
             Scribe_Values.Look(ref useLLMPrompt,       "useLLMPrompt",     false);
             Scribe_Values.Look(ref llmApiKey,          "llmApiKey",        "");
             Scribe_Collections.Look(ref activePortraits, "activePortraits", LookMode.Value, LookMode.Value);
+            Scribe_Collections.Look(ref pawnFraming, "pawnFraming", LookMode.Value, LookMode.Value);
 
             if (activePortraits == null)
                 activePortraits = new Dictionary<string, string>();
+            if (pawnFraming == null)
+                pawnFraming = new Dictionary<string, string>();
         }
 
         // UI states (not serialized)
@@ -959,10 +963,14 @@ namespace AIPortraits
                 string compiledPrompt;
                 if (useLLMPrompt)
                 {
+                    string framing = "portrait";
+                    if (selectedPawn != null && pawnFraming != null)
+                        pawnFraming.TryGetValue(selectedPawn.ThingID, out framing);
+
                     compiledPrompt = "🤖 Gemini 3.1 Flash-Lite Prompt Generation is active.\n" +
                                      "At generation time, the pawn data sheet below is sent to the LLM to write a custom prompt.\n\n" +
                                      "--- SYSTEM INSTRUCTION (GEMINI PROMPT) ---\n" +
-                                     PromptCompiler.GetLLMSystemPrompt(portraitStyle) +
+                                     PromptCompiler.GetLLMSystemPrompt(portraitStyle, framing) +
                                      "\n\n--- PAWN DATA SHEET (LLM INPUT) ---\n" +
                                      PromptCompiler.CompilePawnStateDescription(state, this);
                 }
@@ -1154,9 +1162,13 @@ namespace AIPortraits
                 return;
             }
 
+            string framing = "portrait";
+            if (promptTabSelectedPawn != null && pawnFraming != null)
+                pawnFraming.TryGetValue(promptTabSelectedPawn.ThingID, out framing);
+
             string structuredDesc = PromptCompiler.CompilePawnStateDescription(state, this);
             string compiledPrompt = PromptCompiler.CompilePositivePrompt(state, this, null);
-            string llmSystem      = useLLMPrompt ? PromptCompiler.GetLLMSystemPrompt(portraitStyle) : null;
+            string llmSystem      = useLLMPrompt ? PromptCompiler.GetLLMSystemPrompt(portraitStyle, framing) : null;
 
             // Read the most recent .txt sibling next to this pawn's saved PNGs — that's
             // the canonical "what was actually sent to the image API last time" record.

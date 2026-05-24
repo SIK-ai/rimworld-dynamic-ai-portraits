@@ -44,32 +44,32 @@ namespace AIPortraits
             string positivePrompt = PromptCompiler.CompilePositivePrompt(state, settings, continuityToken);
             string negativePrompt = PromptCompiler.CompileNegativePrompt(settings);
             Log.Message("[Dynamic AI Portraits] Prompt: " + positivePrompt);
-            DispatchImageBackend(positivePrompt, negativePrompt, settings, callback);
+            DispatchImageBackend(positivePrompt, negativePrompt, settings, state, callback);
         }
 
         /// <summary>Routes a compiled prompt to the configured image backend.</summary>
         private static void DispatchImageBackend(string positivePrompt, string negativePrompt,
-                                                 AIPortraitsSettings settings, PortraitCallback callback)
+                                                 AIPortraitsSettings settings, PawnState state, PortraitCallback callback)
         {
             switch (settings.backendType)
             {
                 case BackendType.HuggingFace:
-                    CoroutineRunner.Instance.StartCoroutine(GenerateHuggingFace(positivePrompt, negativePrompt, settings, callback));
+                    CoroutineRunner.Instance.StartCoroutine(GenerateHuggingFace(positivePrompt, negativePrompt, settings, state, callback));
                     break;
                 case BackendType.Pollinations:
-                    CoroutineRunner.Instance.StartCoroutine(GeneratePollinations(positivePrompt, settings, callback));
+                    CoroutineRunner.Instance.StartCoroutine(GeneratePollinations(positivePrompt, settings, state, callback));
                     break;
                 case BackendType.GoogleImagen:
-                    CoroutineRunner.Instance.StartCoroutine(GenerateGoogleImagen(positivePrompt, negativePrompt, settings, callback));
+                    CoroutineRunner.Instance.StartCoroutine(GenerateGoogleImagen(positivePrompt, negativePrompt, settings, state, callback));
                     break;
                 case BackendType.LocalA1111:
-                    CoroutineRunner.Instance.StartCoroutine(GenerateLocalA1111(positivePrompt, negativePrompt, settings, callback));
+                    CoroutineRunner.Instance.StartCoroutine(GenerateLocalA1111(positivePrompt, negativePrompt, settings, state, callback));
                     break;
                 case BackendType.Cloudflare:
-                    CoroutineRunner.Instance.StartCoroutine(GenerateCloudflare(positivePrompt, negativePrompt, settings, callback));
+                    CoroutineRunner.Instance.StartCoroutine(GenerateCloudflare(positivePrompt, negativePrompt, settings, state, callback));
                     break;
                 case BackendType.DeepInfra:
-                    CoroutineRunner.Instance.StartCoroutine(GenerateDeepInfra(positivePrompt, negativePrompt, settings, callback));
+                    CoroutineRunner.Instance.StartCoroutine(GenerateDeepInfra(positivePrompt, negativePrompt, settings, state, callback));
                     break;
                 default:
                     callback(null, null, null, "Backend type " + settings.backendType + " is not implemented.");
@@ -101,7 +101,7 @@ namespace AIPortraits
         {
             string llmKey    = GetLLMApiKey(settings);
             string pawnDesc  = PromptCompiler.CompilePawnStateDescription(state, settings);
-            string sysPrompt = PromptCompiler.GetLLMSystemPrompt(settings.portraitStyle);
+            string sysPrompt = PromptCompiler.GetLLMSystemPrompt(settings.portraitStyle, state.framing);
 
             // gemini-3.1-flash-lite is free-tier and very fast (~1 s round-trip).
             string llmUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=" + llmKey;
@@ -152,7 +152,7 @@ namespace AIPortraits
             }
 
             string negativePrompt = PromptCompiler.CompileNegativePrompt(settings);
-            DispatchImageBackend(generatedPrompt, negativePrompt, settings, callback);
+            DispatchImageBackend(generatedPrompt, negativePrompt, settings, state, callback);
         }
 
         /// <summary>
@@ -206,7 +206,7 @@ namespace AIPortraits
         }
 
         // ── HuggingFace ──────────────────────────────────────────────────────────────
-        private static IEnumerator GenerateHuggingFace(string prompt, string negativePrompt, AIPortraitsSettings settings, PortraitCallback callback)
+        private static IEnumerator GenerateHuggingFace(string prompt, string negativePrompt, AIPortraitsSettings settings, PawnState state, PortraitCallback callback)
         {
             string modelId = string.IsNullOrEmpty(settings.modelName) ? "stabilityai/stable-diffusion-xl-base-1.0" : settings.modelName;
             string baseUrl = string.IsNullOrEmpty(settings.apiUrl) ? "https://api-inference.huggingface.co" : settings.apiUrl.TrimEnd('/');
@@ -247,12 +247,12 @@ namespace AIPortraits
                     yield break;
                 }
 
-                DeliverImage(imgBytes, prompt, "HuggingFace", callback);
+                DeliverImage(imgBytes, prompt, "HuggingFace", state, callback);
             }
         }
 
         // ── Pollinations ─────────────────────────────────────────────────────────────
-        private static IEnumerator GeneratePollinations(string prompt, AIPortraitsSettings settings, PortraitCallback callback)
+        private static IEnumerator GeneratePollinations(string prompt, AIPortraitsSettings settings, PawnState state, PortraitCallback callback)
         {
             string baseUrl = string.IsNullOrEmpty(settings.apiUrl) ? "https://image.pollinations.ai" : settings.apiUrl.TrimEnd('/');
             // Pollinations consolidated to "sana" — "flux" no longer exists on their endpoint.
@@ -282,12 +282,12 @@ namespace AIPortraits
                     yield break;
                 }
 
-                DeliverImage(imgBytes, prompt, "Pollinations", callback);
+                DeliverImage(imgBytes, prompt, "Pollinations", state, callback);
             }
         }
 
         // ── Google Imagen ────────────────────────────────────────────────────────────
-        private static IEnumerator GenerateGoogleImagen(string prompt, string negativePrompt, AIPortraitsSettings settings, PortraitCallback callback)
+        private static IEnumerator GenerateGoogleImagen(string prompt, string negativePrompt, AIPortraitsSettings settings, PawnState state, PortraitCallback callback)
         {
             string baseUrl = string.IsNullOrEmpty(settings.apiUrl) ? "https://generativelanguage.googleapis.com" : settings.apiUrl.TrimEnd('/');
             string model = string.IsNullOrEmpty(settings.modelName) ? "imagen-4.0-fast-generate-001" : settings.modelName;
@@ -351,7 +351,7 @@ namespace AIPortraits
                     string base64 = text.Substring(openQuote + 1, closeQuote - openQuote - 1);
                     byte[] imgBytes = Convert.FromBase64String(base64);
 
-                    DeliverImage(imgBytes, prompt, "Google Imagen", callback);
+                    DeliverImage(imgBytes, prompt, "Google Imagen", state, callback);
                 }
                 catch (Exception ex)
                 {
@@ -361,11 +361,7 @@ namespace AIPortraits
         }
 
         // ── Cloudflare Workers AI (FLUX.1 Schnell + others) ─────────────────────────
-        // Free 10k requests/day, then ~$0.0005/image. Auth is two-part: account ID
-        // goes in the URL path, API token in the Bearer header. We accept both via
-        // a single "account_id:token" string in settings.apiKey to keep the UX as
-        // "one field" — split on the first colon.
-        private static IEnumerator GenerateCloudflare(string prompt, string negativePrompt, AIPortraitsSettings settings, PortraitCallback callback)
+        private static IEnumerator GenerateCloudflare(string prompt, string negativePrompt, AIPortraitsSettings settings, PawnState state, PortraitCallback callback)
         {
             string combined = (settings.apiKey ?? "").Trim();
             int colonIdx = combined.IndexOf(':');
@@ -384,12 +380,8 @@ namespace AIPortraits
 
             StringBuilder json = new StringBuilder();
             json.Append("{");
-            json.Append("\"prompt\":\"").Append(EscapeJson(prompt)).Append("\"");
-            // FLUX Schnell is 4-step by default; non-FLUX models accept higher steps via num_steps
-            if (model.Contains("flux"))
-                json.Append(",\"steps\":4");
-            else
-                json.Append(",\"num_steps\":").Append(System.Math.Max(4, System.Math.Min(20, settings.steps)));
+            json.Append("\"prompt\":\"").Append(EscapeJson(prompt)).Append("\",");
+            json.Append("\"steps\":4");
             json.Append("}");
 
             byte[] jsonBytes = Encoding.UTF8.GetBytes(json.ToString());
@@ -402,40 +394,38 @@ namespace AIPortraits
                 request.SetRequestHeader("Authorization", "Bearer " + apiToken);
                 request.timeout = RequestTimeoutSeconds;
 
-                Log.Message("[Dynamic AI Portraits] Cloudflare URL: " + url);
                 yield return request.SendWebRequest();
 
                 if (!IsSuccess(request))
                 {
-                    callback(null, null, null, "Cloudflare API Error: " + request.error +
-                                               " | " + Truncate(request.downloadHandler.text, 400));
+                    callback(null, null, null, "Cloudflare API Error: " + request.error + " - " + Truncate(request.downloadHandler.text, 400));
                     yield break;
                 }
 
-                // Cloudflare returns one of two shapes depending on model:
-                //  (a) JSON: { "result": { "image": "<base64>" }, "success": true }
-                //  (b) Raw binary image data (some non-FLUX models)
-                string text = request.downloadHandler.text ?? "";
                 byte[] imgBytes = null;
                 string parseErr = null;
 
-                if (text.StartsWith("{"))
+                if (model.ToLower().Contains("flux"))
                 {
+                    // FLUX on Cloudflare returns JSON: { "result": { "image": "<base64>" } }
+                    string text = request.downloadHandler.text;
                     int keyIdx = text.IndexOf("\"image\"");
                     if (keyIdx == -1)
                     {
-                        parseErr = "Cloudflare response had no 'image' field: " + Truncate(text, 400);
+                        parseErr = "Cloudflare response missing image bytes.";
                     }
                     else
                     {
-                        int colon  = text.IndexOf(':', keyIdx);
-                        int open   = text.IndexOf('"', colon + 1);
-                        int close  = text.IndexOf('"', open + 1);
-                        if (open == -1 || close == -1)
-                            parseErr = "Malformed Cloudflare response.";
+                        int colonIndex = text.IndexOf(':', keyIdx);
+                        int openQuote = text.IndexOf('"', colonIndex + 1);
+                        int closeQuote = text.IndexOf('"', openQuote + 1);
+                        if (openQuote == -1 || closeQuote == -1)
+                        {
+                            parseErr = "Malformed image base64 value in Cloudflare response.";
+                        }
                         else
                         {
-                            string b64 = text.Substring(open + 1, close - open - 1);
+                            string b64 = text.Substring(openQuote + 1, closeQuote - openQuote - 1);
                             try { imgBytes = Convert.FromBase64String(b64); }
                             catch (Exception ex) { parseErr = "Cloudflare base64 decode failed: " + ex.Message; }
                         }
@@ -448,14 +438,14 @@ namespace AIPortraits
                 }
 
                 if (parseErr != null) { callback(null, null, null, parseErr); yield break; }
-                DeliverImage(imgBytes, prompt, "Cloudflare", callback);
+                DeliverImage(imgBytes, prompt, "Cloudflare", state, callback);
             }
         }
 
         // ── DeepInfra (OpenAI-compatible image inference) ───────────────────────────
         // Ultra-cheap (~$0.0005/image at 512×512), GitHub OAuth signup, single token.
         // POST /v1/inference/<model> with prompt + dimensions, response has base64 PNGs.
-        private static IEnumerator GenerateDeepInfra(string prompt, string negativePrompt, AIPortraitsSettings settings, PortraitCallback callback)
+        private static IEnumerator GenerateDeepInfra(string prompt, string negativePrompt, AIPortraitsSettings settings, PawnState state, PortraitCallback callback)
         {
             string apiToken = (settings.apiKey ?? "").Trim();
             if (string.IsNullOrEmpty(apiToken))
@@ -533,12 +523,12 @@ namespace AIPortraits
                     yield break;
                 }
 
-                DeliverImage(imgBytes, prompt, "DeepInfra", callback);
+                DeliverImage(imgBytes, prompt, "DeepInfra", state, callback);
             }
         }
 
         // ── Local A1111 (AUTOMATIC1111 / Forge / SD.Next / ComfyUI A1111-compat) ───
-        private static IEnumerator GenerateLocalA1111(string prompt, string negativePrompt, AIPortraitsSettings settings, PortraitCallback callback)
+        private static IEnumerator GenerateLocalA1111(string prompt, string negativePrompt, AIPortraitsSettings settings, PawnState state, PortraitCallback callback)
         {
             string baseUrl = string.IsNullOrEmpty(settings.apiUrl) ? "http://127.0.0.1:7860" : settings.apiUrl.TrimEnd('/');
             string url = baseUrl + "/sdapi/v1/txt2img";
@@ -622,7 +612,7 @@ namespace AIPortraits
                     yield break;
                 }
 
-                DeliverImage(imgBytes, prompt, "Local A1111", callback);
+                DeliverImage(imgBytes, prompt, "Local A1111", state, callback);
             }
         }
 
@@ -633,7 +623,7 @@ namespace AIPortraits
         // the image had an opaque background), the original decode is destroyed and
         // the new texture + re-encoded PNG bytes are returned so the cache + disk
         // save reflect the cleaned image.
-        private static void DeliverImage(byte[] imgBytes, string promptUsed, string backendName, PortraitCallback callback)
+        private static void DeliverImage(byte[] imgBytes, string promptUsed, string backendName, PawnState state, PortraitCallback callback)
         {
             if (imgBytes == null || imgBytes.Length == 0)
             {
@@ -653,18 +643,26 @@ namespace AIPortraits
             byte[] finalBytes;
             try
             {
-                processed = BackgroundRemover.Process(raw);
-                if (processed != raw)
+                if (state != null && state.framing == "special")
                 {
-                    // Background was removed — re-encode to PNG so the saved file
-                    // and cached image both have the cleaned transparent version.
-                    finalBytes = ImageConversion.EncodeToPNG(processed);
-                    UnityEngine.Object.Destroy(raw);
+                    processed = raw;
+                    finalBytes = imgBytes;
                 }
                 else
                 {
-                    // Already transparent or removal was skipped — use original.
-                    finalBytes = imgBytes;
+                    processed = BackgroundRemover.Process(raw);
+                    if (processed != raw)
+                    {
+                        // Background was removed — re-encode to PNG so the saved file
+                        // and cached image both have the cleaned transparent version.
+                        finalBytes = ImageConversion.EncodeToPNG(processed);
+                        UnityEngine.Object.Destroy(raw);
+                    }
+                    else
+                    {
+                        // Already transparent or removal was skipped — use original.
+                        finalBytes = imgBytes;
+                    }
                 }
             }
             catch (Exception ex)

@@ -19,6 +19,7 @@ namespace AIPortraits
         public int    bioAge;
         public string bodyType;         // Thin / Hulk / Fat / Female / Male / etc.
         public string headShape;        // from headTypeDef label (Narrow, Average, Wide, etc.)
+        public string framing;          // portrait / bodyshot / special
 
         // ── Appearance ──────────────────────────────────────────────────────────
         public string hairStyle;
@@ -135,6 +136,17 @@ namespace AIPortraits
 
             PawnState s = new PawnState();
             s.pawnId = pawn.ThingID;
+
+            string frameVal;
+            if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.pawnFraming != null &&
+                AIPortraitsMod.settings.pawnFraming.TryGetValue(pawn.ThingID, out frameVal))
+            {
+                s.framing = frameVal;
+            }
+            else
+            {
+                s.framing = "portrait";
+            }
 
             // ── IDENTITY ─────────────────────────────────────────────────────────
             s.name   = pawn.Name != null ? pawn.Name.ToStringShort : "Unknown";

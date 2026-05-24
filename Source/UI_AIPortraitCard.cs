@@ -37,27 +37,40 @@ namespace AIPortraits
         private static Dictionary<string, PawnPortraitData>  portraitData   = new Dictionary<string, PawnPortraitData>();
         private static Dictionary<string, CachedState>       stateCache     = new Dictionary<string, CachedState>();
 
-        // Build the per-save key used by the activePortraits dict. Prefixed with the world's
-        // persistentRandomValue so saves with overlapping ThingIDs don't bleed into each other.
-        public static string GetActiveKey(Pawn pawn)
+        public static string GetActiveFraming(Pawn pawn)
+        {
+            string f = "portrait";
+            if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.pawnFraming != null)
+                AIPortraitsMod.settings.pawnFraming.TryGetValue(pawn.ThingID, out f);
+            return f;
+        }
+
+        public static string GetActiveKeyForFraming(Pawn pawn, string framing)
         {
             string worldId = "global";
             if (Find.World != null && Find.World.info != null)
                 worldId = Find.World.info.persistentRandomValue.ToString();
-            return worldId + "_" + pawn.ThingID;
+            return worldId + "_" + pawn.ThingID + "_" + framing;
+        }
+
+        public static string GetActiveKey(Pawn pawn)
+        {
+            return GetActiveKeyForFraming(pawn, GetActiveFraming(pawn));
         }
 
         public static PawnState GetCachedPawnState(Pawn pawn)
         {
             if (pawn == null) return null;
             int now = (Find.TickManager != null) ? Find.TickManager.TicksGame : 0;
+            string framing = GetActiveFraming(pawn);
+            string cacheKey = pawn.ThingID + "_" + framing;
 
             CachedState cs;
-            if (stateCache.TryGetValue(pawn.ThingID, out cs) && (now - cs.tickComputed) < StateCacheLifetimeTicks)
+            if (stateCache.TryGetValue(cacheKey, out cs) && (now - cs.tickComputed) < StateCacheLifetimeTicks)
                 return cs.state;
 
             PawnState fresh = PawnStateExtractor.ExtractState(pawn);
-            stateCache[pawn.ThingID] = new CachedState { state = fresh, tickComputed = now };
+            stateCache[cacheKey] = new CachedState { state = fresh, tickComputed = now };
             return fresh;
         }
 
@@ -91,7 +104,7 @@ namespace AIPortraits
             {
                 if (!string.IsNullOrEmpty(lockedPath) && System.IO.File.Exists(lockedPath))
                 {
-                    string lockedCacheKey = pawn.ThingID + LockedSuffix;
+                    string lockedCacheKey = pawn.ThingID + "_" + GetActiveFraming(pawn) + LockedSuffix;
                     Texture2D lockedTex;
                     if (loadedTextures.TryGetValue(lockedCacheKey, out lockedTex))
                         return lockedTex;
@@ -116,11 +129,9 @@ namespace AIPortraits
             // Faction gate — no auto-generation for raiders, traders, animals, mechs.
             if (!ShouldGenerateFor(pawn)) return null;
 
-            // Single key per pawn (per save). Once we have a portrait, we keep it
-            // until the user manually refreshes — state changes (gear, mood, addiction)
-            // do NOT trigger regeneration any more.
-            string pawnKey = pawn.ThingID;
-            string diskKey = GetActiveKey(pawn); // "worldId_pawnId" — disk cache name
+            string framing = GetActiveFraming(pawn);
+            string pawnKey = pawn.ThingID + "_" + framing;
+            string diskKey = GetActiveKey(pawn); // "worldId_pawnId_framing"
 
             // In-memory hit
             Texture2D tex;
@@ -137,17 +148,60 @@ namespace AIPortraits
                 }
             }
 
-            // In-flight guard — don't fire concurrent requests for the same pawn
-            if (activeRequests.ContainsKey(pawnKey))
+            // Check if active request is running for the selected framing
+            bool isGenerating = activeRequests.ContainsKey(pawnKey);
+            if (isGenerating)
             {
                 GenerationStatus cs;
                 if (requestStatus.TryGetValue(pawnKey, out cs)) status = cs;
                 string ce;
                 if (requestError.TryGetValue(pawnKey, out ce)) error = ce;
-                return null;
             }
 
-            // First-time generation for this pawn
+            // Find any fallback texture if we don't have the active one yet (including during generation)
+            string[] backupFramings = (framing == "portrait") ? new[] { "bodyshot", "special" } :
+                                      (framing == "bodyshot") ? new[] { "portrait", "special" } :
+                                                                new[] { "portrait", "bodyshot" };
+            
+            Texture2D fallbackTex = null;
+            foreach (string backup in backupFramings)
+            {
+                string bKey = pawn.ThingID + "_" + backup;
+                Texture2D bTex;
+                if (loadedTextures.TryGetValue(bKey, out bTex) && bTex != null)
+                {
+                    fallbackTex = bTex;
+                    break;
+                }
+                
+                string bDiskKey = GetActiveKeyForFraming(pawn, backup);
+                if (CacheManager.IsCached(bDiskKey))
+                {
+                    Texture2D bDiskTex = CacheManager.LoadFromCache(bDiskKey);
+                    if (bDiskTex != null)
+                    {
+                        loadedTextures[bKey] = bDiskTex;
+                        fallbackTex = bDiskTex;
+                        break;
+                    }
+                }
+            }
+
+            // If we are generating, return the fallback if it exists, otherwise return null
+            if (isGenerating)
+            {
+                status = GenerationStatus.Generating;
+                return fallbackTex;
+            }
+
+            // If we have a fallback, return it and remain Idle (we won't auto-generate!)
+            if (fallbackTex != null)
+            {
+                status = GenerationStatus.Idle;
+                return fallbackTex;
+            }
+
+            // If no cache and no fallback exists, trigger first-time generation for this pawn
             PawnState state = GetCachedPawnState(pawn);
             if (state == null) return null;
 
@@ -166,7 +220,8 @@ namespace AIPortraits
             if (pawn == null || pawn.Destroyed) return;
             if (!ShouldGenerateFor(pawn)) return;
 
-            string pawnKey = pawn.ThingID;
+            string framing = GetActiveFraming(pawn);
+            string pawnKey = pawn.ThingID + "_" + framing;
             string diskKey = GetActiveKey(pawn);
             string continuityToken = PromptCompiler.GetContinuityToken(AIPortraitsMod.settings.portraitStyle);
 
@@ -188,18 +243,21 @@ namespace AIPortraits
 
             // Reset request bookkeeping + force fresh state extraction
             activeRequests.Remove(pawnKey); requestStatus.Remove(pawnKey); requestError.Remove(pawnKey);
-            stateCache.Remove(pawnKey);
+            stateCache.Remove(pawn.ThingID + "_" + framing);
 
             PawnState state = PawnStateExtractor.ExtractState(pawn);
             if (state == null) return;
             TriggerGeneration(pawn, state, diskKey, continuityToken);
         }
 
+
         public static string SaveCurrentPortrait(Pawn pawn)
         {
             if (pawn == null) return null;
             PawnPortraitData data;
-            if (!portraitData.TryGetValue(pawn.ThingID, out data)) return null;
+            string framing = GetActiveFraming(pawn);
+            string pawnKey = pawn.ThingID + "_" + framing;
+            if (!portraitData.TryGetValue(pawnKey, out data)) return null;
             if (data.rawBytes == null || data.rawBytes.Length == 0) return null;
             return CacheManager.SavePortraitToDisk(pawn.LabelShortCap, data.style, data.rawBytes);
         }
@@ -208,21 +266,26 @@ namespace AIPortraits
         {
             if (pawn == null) return GenerationStatus.Idle;
             GenerationStatus s;
-            return requestStatus.TryGetValue(pawn.ThingID, out s) ? s : GenerationStatus.Idle;
+            string framing = GetActiveFraming(pawn);
+            string pawnKey = pawn.ThingID + "_" + framing;
+            return requestStatus.TryGetValue(pawnKey, out s) ? s : GenerationStatus.Idle;
         }
 
         public static string GetError(Pawn pawn)
         {
             if (pawn == null) return null;
             string e;
-            return requestError.TryGetValue(pawn.ThingID, out e) ? e : null;
+            string framing = GetActiveFraming(pawn);
+            string pawnKey = pawn.ThingID + "_" + framing;
+            return requestError.TryGetValue(pawnKey, out e) ? e : null;
         }
 
-        // `diskCacheKey` is the stable per-pawn-per-save key (worldId_pawnId).
-        // The texture is stored in loadedTextures under pawn.ThingID, and on disk under diskCacheKey.
+        // `diskCacheKey` is the stable per-pawn-per-save key (worldId_pawnId_framing).
+        // The texture is stored in loadedTextures under pawn.ThingID + "_" + framing, and on disk under diskCacheKey.
         private static void TriggerGeneration(Pawn pawn, PawnState state, string diskCacheKey, string continuityToken)
         {
-            string pawnKey = pawn.ThingID;
+            string framing = state.framing ?? GetActiveFraming(pawn);
+            string pawnKey = pawn.ThingID + "_" + framing;
             PortraitStyle currentStyle = AIPortraitsMod.settings.portraitStyle;
 
             activeRequests[pawnKey] = diskCacheKey;
@@ -230,7 +293,7 @@ namespace AIPortraits
             requestError[pawnKey]   = null;
 
             string positivePrompt = PromptCompiler.CompilePositivePrompt(state, AIPortraitsMod.settings, continuityToken);
-            Log.Message("[Dynamic AI Portraits] PROMPT for " + pawn.LabelShortCap + ":\n" + positivePrompt);
+            Log.Message("[Dynamic AI Portraits] PROMPT for " + pawn.LabelShortCap + " (" + framing + "):\n" + positivePrompt);
 
             AsyncAIClient.QueueGeneration(state, AIPortraitsMod.settings, continuityToken, delegate(Texture2D tex, byte[] bytes, string promptUsed, string err)
             {
@@ -277,7 +340,7 @@ namespace AIPortraits
                     // Also drop the cached locked-texture so the next render reloads from disk.
                     if (!string.IsNullOrEmpty(savedPath) && AIPortraitsMod.settings != null)
                     {
-                        string activeKey = GetActiveKey(pawn);
+                        string activeKey = GetActiveKeyForFraming(pawn, framing);
                         AIPortraitsMod.settings.activePortraits[activeKey] = savedPath;
                         AIPortraitsMod.Instance.WriteSettings();
 
@@ -298,7 +361,8 @@ namespace AIPortraits
         public static void ClearPawnActiveTextureCache(Pawn pawn)
         {
             if (pawn == null) return;
-            string cacheKey = pawn.ThingID + LockedSuffix;
+            string framing = GetActiveFraming(pawn);
+            string cacheKey = pawn.ThingID + "_" + framing + LockedSuffix;
             Texture2D tex;
             if (loadedTextures.TryGetValue(cacheKey, out tex))
             {
