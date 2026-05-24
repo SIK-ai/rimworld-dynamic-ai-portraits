@@ -11,20 +11,20 @@ namespace AIPortraits
         // ──────────────────────────────────────────────────────────────────────────
 
         private const string KoreanImagenSystemPrompt =
-@"Generate a semi-realistic anime character portrait for a game UI overlay.
-Style: Korean manhwa webtoon art (Limbus Company JRPG aesthetic). Painterly brushwork with sharp clean line art. Rich warm/cool shadow contrast. Vibrant but controlled colors. Soft detailed skin shading. Hair with visible strand definition.
-Composition: Bust or half-body shot. Single character. Subject centered.
+@"Generate a Korean webtoon manhwa character portrait for a game UI overlay.
+Style: Modern Korean webtoon manhwa illustration (Solo Leveling aesthetic). Sharp dynamic line art with strong inking. Dramatic high-contrast chiaroscuro lighting — deep blacks against bright rim highlights. Saturated focal colors with muted environment palette. Cinematic three-quarter or front-facing pose. Detailed sharp facial features, intense expressive eyes, refined modern proportions. Hair rendered in clean defined strands with glossy highlights. Skin smooth with subtle cool-blue shadow ramps.
+Composition: Bust or half-body shot. Single character. Subject centered. Dramatic light source from one side.
 Background: Fully transparent PNG (alpha channel). No background elements, fills, gradients, or environment behind the character whatsoever.
 Content: Render the character's appearance, expression, gear, and any special effects exactly as described in the user prompt. Do not add, remove, or override any described details.
-Eyes: The character's eyes must be OPEN and clearly visible by default. Only render closed eyes if the prompt explicitly says the character is sleeping or dead. Do not default to closed-eye expressions even when the art style traditionally uses them (no anime-style closed-eye smile, no contemplative closed-eye pose).";
+Eyes: The character's eyes must be OPEN and clearly visible by default. Only render closed eyes if the prompt explicitly says the character is sleeping or dead. Do not default to closed-eye expressions even when the art style traditionally uses them.";
 
         private const string WesternImagenSystemPrompt =
-@"Generate a realistic dark fantasy character portrait for a game UI overlay.
-Style: Western RPG oil painting art (Path of Exile, Pillars of Eternity aesthetic). Dramatic chiaroscuro lighting. Rich deep saturated colors. Detailed intricate rendering of costume and armor. Painterly brushwork with precise edges.
+@"Generate an Adult Swim cartoon character portrait for a game UI overlay.
+Style: Rick and Morty animation style (Justin Roiland / Adult Swim aesthetic). Thick consistent black outlines around every shape. Flat 2D color fills with NO gradients, NO painterly shading — just solid colors blocked in. Simple bulging round eyes with tiny black pupils. Exaggerated cartoon facial features, oversized heads on smaller necks/shoulders, slightly off-model wonky proportions. Bright primary palette with occasional drool, sweat drop, or wonky tooth detail. Hand-drawn 2D animation cel look, NOT realistic, NOT painterly.
 Composition: Bust or half-body shot. Single character. Subject centered.
 Background: Fully transparent PNG (alpha channel). No background elements, fills, gradients, or environment behind the character whatsoever.
 Content: Render the character's appearance, expression, gear, and any special effects exactly as described in the user prompt. Do not add, remove, or override any described details.
-Eyes: The character's eyes must be OPEN and clearly visible by default. Only render closed eyes if the prompt explicitly says the character is sleeping or dead. Do not default to closed-eye expressions even when the art style traditionally uses them (no anime-style closed-eye smile, no contemplative closed-eye pose).";
+Eyes: The character's eyes must be OPEN and clearly visible by default — bulging cartoon eyes with small dot pupils. Only render closed eyes if the prompt explicitly says the character is sleeping or dead.";
 
         private const string PixelImagenSystemPrompt =
 @"Generate a high-quality 16-bit JRPG retro pixel-art character portrait for a game UI overlay.
@@ -94,14 +94,14 @@ Content: Render the character's appearance, clean expression, and gear exactly a
 
         private static void AppendKoreanRealisticHeader(StringBuilder p, string continuityToken)
         {
-            p.Append("semi-realistic anime character portrait, Korean manhwa webtoon style, Limbus Company JRPG art aesthetic, painterly brushwork, sharp clean line art, rich warm and cool shadow contrast, vibrant saturated color palette, bust-up framing, transparent PNG background, alpha channel transparency, no background elements, ");
+            p.Append("Korean webtoon manhwa character portrait, Solo Leveling art style, sharp dynamic line art with strong inking, dramatic chiaroscuro lighting with deep blacks and bright rim highlights, saturated focal colors against muted environment palette, cinematic pose, sharp expressive eyes, refined modern proportions, glossy detailed hair strands, bust-up framing, transparent PNG background, alpha channel transparency, no background elements, ");
             if (!string.IsNullOrEmpty(continuityToken))
                 p.Append(continuityToken + ", ");
         }
 
         private static void AppendWesternRealisticHeader(StringBuilder p, string continuityToken)
         {
-            p.Append("realistic dark fantasy character portrait, Western RPG oil painting style, Path of Exile character art aesthetic, dramatic chiaroscuro lighting, rich deep colors, detailed intricate armor and costume rendering, bust-up framing, transparent PNG background, alpha channel transparency, no background elements, ");
+            p.Append("Rick and Morty Adult Swim cartoon character portrait, Justin Roiland animation style, thick consistent black outlines, flat 2D color fills with NO gradients or painterly shading, bulging round cartoon eyes with tiny black dot pupils, exaggerated wonky proportions, oversized head, hand-drawn animation cel look, bright primary color palette, bust-up framing, transparent PNG background, alpha channel transparency, no background elements, ");
             if (!string.IsNullOrEmpty(continuityToken))
                 p.Append(continuityToken + ", ");
         }
@@ -806,9 +806,9 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             switch (style)
             {
                 case PortraitStyle.Realistic_Korean:
-                    return "consistent semi-realistic anime style, same painterly brushwork, same warm and cool color contrast, same sharp line art, same facial proportions";
+                    return "consistent Solo Leveling webtoon manhwa style, same sharp inked line art, same dramatic chiaroscuro lighting, same saturated focal colors, same refined facial proportions";
                 case PortraitStyle.Realistic_Western:
-                    return "consistent dark fantasy oil painting style, same chiaroscuro lighting, same rich color depth, same level of armor detail and rendering quality";
+                    return "consistent Rick and Morty Adult Swim cartoon style, same thick black outlines, same flat 2D color fills, same bulging cartoon eyes with dot pupils, same wonky proportions";
                 case PortraitStyle.DotPixel:
                     return "consistent 16-bit pixel-art style, same pixel grid density, same thin dark outlines, same cel-shading band style, same limited color palette";
                 default:
@@ -918,14 +918,16 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             switch (style)
             {
                 case PortraitStyle.Realistic_Korean:
-                    styleDesc = "semi-realistic Korean manhwa / anime (Limbus Company JRPG): " +
-                                "painterly brushwork, vibrant warm/cool shadow contrast, sharp clean line art, " +
-                                "detailed hair shading, soft but expressive facial features";
+                    styleDesc = "modern Korean webtoon manhwa (Solo Leveling aesthetic): " +
+                                "sharp inked line art, dramatic chiaroscuro with deep blacks and bright rim highlights, " +
+                                "saturated focal colors against muted environment, cinematic dynamic pose, " +
+                                "sharp expressive eyes, refined modern proportions, glossy detailed hair strands";
                     break;
                 case PortraitStyle.Realistic_Western:
-                    styleDesc = "realistic Western dark fantasy oil painting (Path of Exile aesthetic): " +
-                                "dramatic chiaroscuro lighting, rich deep saturated colors, " +
-                                "detailed armor and costume rendering, painterly brushwork";
+                    styleDesc = "Rick and Morty Adult Swim cartoon (Justin Roiland animation style): " +
+                                "thick consistent black outlines, flat 2D color fills with no gradients or painterly shading, " +
+                                "bulging round cartoon eyes with tiny black dot pupils, exaggerated wonky proportions, " +
+                                "oversized head, hand-drawn animation cel look, bright primary color palette";
                     break;
                 case PortraitStyle.DotPixel:
                     styleDesc = "high-quality 16-bit retro JRPG pixel art (Tactics Ogre / Final Fantasy Tactics): " +

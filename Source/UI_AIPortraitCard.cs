@@ -420,8 +420,8 @@ namespace AIPortraits
             Rect btnWestern = new Rect(rect.x + btnW, rect.y, btnW, btnH);
             Rect btnPixel = new Rect(rect.x + btnW * 2f, rect.y, btnW, btnH);
 
-            DrawStyleButton(btnKorean, "🎨 Korean", PortraitStyle.Realistic_Korean, "Semi-realistic Korean RPG / manhwa style");
-            DrawStyleButton(btnWestern, "⚔ Western", PortraitStyle.Realistic_Western, "Western dark fantasy oil painting");
+            DrawStyleButton(btnKorean, "🎨 Webtoon", PortraitStyle.Realistic_Korean, "Korean webtoon manhwa (Solo Leveling style)");
+            DrawStyleButton(btnWestern, "📺 Cartoon", PortraitStyle.Realistic_Western, "Rick and Morty / Adult Swim cartoon style");
             DrawStyleButton(btnPixel, "🟦 Pixel", PortraitStyle.DotPixel, "Retro pixel art / dot style");
         }
 

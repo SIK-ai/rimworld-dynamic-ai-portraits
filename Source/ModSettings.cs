@@ -19,9 +19,9 @@ namespace AIPortraits
 
     public enum PortraitStyle
     {
-        Realistic_Korean,   // Semi-realistic, Korean RPG fan-art style (dramatic, warm/cool contrast)
-        Realistic_Western,  // Western fantasy (Path of Exile / Pillars of Eternity)
-        DotPixel            // Pixel art / dot-style retro RPG
+        Realistic_Korean,   // Korean webtoon manhwa (Solo Leveling style)
+        Realistic_Western,  // Rick and Morty Adult Swim cartoon style
+        DotPixel            // 16-bit pixel art / retro JRPG sprite
     }
 
     public class AIPortraitsSettings : ModSettings
@@ -224,11 +224,11 @@ namespace AIPortraits
             Rect btnPixel   = new Rect(styleRow.x + styleW*2f, styleRow.y, styleW - 4f, 28f);
 
             if (portraitStyle == PortraitStyle.Realistic_Korean)  GUI.color = new Color(0.5f, 0.9f, 1f);
-            if (Widgets.ButtonText(btnKorean,  "🎨 Realistic (Korean)"))  portraitStyle = PortraitStyle.Realistic_Korean;
+            if (Widgets.ButtonText(btnKorean,  "🎨 Korean Webtoon"))  portraitStyle = PortraitStyle.Realistic_Korean;
             GUI.color = Color.white;
 
             if (portraitStyle == PortraitStyle.Realistic_Western) GUI.color = new Color(0.5f, 0.9f, 1f);
-            if (Widgets.ButtonText(btnWestern, "⚔ Realistic (Western)")) portraitStyle = PortraitStyle.Realistic_Western;
+            if (Widgets.ButtonText(btnWestern, "📺 Rick & Morty Cartoon")) portraitStyle = PortraitStyle.Realistic_Western;
             GUI.color = Color.white;
 
             if (portraitStyle == PortraitStyle.DotPixel)          GUI.color = new Color(0.5f, 0.9f, 1f);
@@ -237,8 +237,8 @@ namespace AIPortraits
 
             listing.Gap(6f);
             string styleDesc =
-                portraitStyle == PortraitStyle.Realistic_Korean  ? "Semi-realistic Korean manhwa / JRPG anime style — painterly brushwork, warm/cool contrast." :
-                portraitStyle == PortraitStyle.Realistic_Western ? "Western dark fantasy oil painting — Path of Exile / Pillars of Eternity aesthetic." :
+                portraitStyle == PortraitStyle.Realistic_Korean  ? "Korean webtoon manhwa (Solo Leveling) — sharp inked line art, dramatic chiaroscuro, saturated focal colors." :
+                portraitStyle == PortraitStyle.Realistic_Western ? "Adult Swim cartoon (Rick and Morty) — thick black outlines, flat 2D fills, bulging eyes, wonky proportions." :
                 portraitStyle == PortraitStyle.DotPixel          ? "16-bit pixel art — classic JRPG sprite style, strict pixel grid, cel-shading bands." : "";
             Text.Font = GameFont.Tiny;
             Widgets.Label(listing.GetRect(28f), styleDesc);
