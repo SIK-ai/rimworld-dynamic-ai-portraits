@@ -286,8 +286,16 @@ namespace AIPortraits
                 apiKey = listing.TextEntry(apiKey);
                 listing.Gap(2f);
                 Text.Font = GameFont.Tiny;
-                GUI.color = new Color(0.6f, 0.6f, 0.6f);
-                Widgets.Label(listing.GetRect(20f), "  Get a free key at: aistudio.google.com/app/apikey");
+                if (string.IsNullOrEmpty(apiKey))
+                {
+                    GUI.color = new Color(0.9f, 0.3f, 0.3f);
+                    Widgets.Label(listing.GetRect(20f), "  ⚠ API key is required for Google Imagen");
+                }
+                else
+                {
+                    GUI.color = new Color(0.6f, 0.6f, 0.6f);
+                    Widgets.Label(listing.GetRect(20f), "  Get a free key at: aistudio.google.com/app/apikey");
+                }
                 GUI.color = Color.white;
                 Text.Font = GameFont.Small;
             }
@@ -297,6 +305,14 @@ namespace AIPortraits
                 listing.Gap(4f);
                 listing.Label("API Key");
                 apiKey = listing.TextEntry(apiKey);
+                if (string.IsNullOrEmpty(apiKey))
+                {
+                    Text.Font = GameFont.Tiny;
+                    GUI.color = new Color(0.9f, 0.3f, 0.3f);
+                    Widgets.Label(listing.GetRect(20f), "  ⚠ API key is required for this backend");
+                    GUI.color = Color.white;
+                    Text.Font = GameFont.Small;
+                }
             }
 
             listing.Gap(12f);
@@ -491,6 +507,12 @@ namespace AIPortraits
                 btnLabel = "Painting (Generating)...";
                 GUI.enabled = false;
             }
+
+            if (status == GenerationStatus.Generating)
+            {
+                TooltipHandler.TipRegion(createBtnRect, "A portrait is currently being generated. Please wait.");
+            }
+
             if (Widgets.ButtonText(createBtnRect, btnLabel))
             {
                 AIPortraitsManager.TriggerNewPortraitWithContinuity(selectedPawn);
@@ -505,6 +527,9 @@ namespace AIPortraits
             {
                 GUI.color = new Color(0.5f, 0.9f, 1f);
             }
+
+            TooltipHandler.TipRegion(dynamicBtnRect, "Unpin the saved portrait and let the mod dynamically generate new portraits when the pawn's state changes.");
+
             if (Widgets.ButtonText(dynamicBtnRect, "Use Dynamic Portrait"))
             {
                 if (activePortraits.ContainsKey(activeKey))

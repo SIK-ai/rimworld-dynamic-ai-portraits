@@ -444,10 +444,18 @@ namespace AIPortraits
             Rect btnFolder = new Rect(rect.x + btnW * 2f, rect.y, btnW, btnH);
 
             // Button 1: New
-            DrawButton(btnNew, "♻ New", new Color(0.2f, 0.55f, 0.35f), "Generate a new portrait using current traits and character vibe.");
-            if (Widgets.ButtonInvisible(btnNew))
+            GenerationStatus status = AIPortraitsManager.GetStatus(pawn);
+            if (status == GenerationStatus.Generating)
             {
-                AIPortraitsManager.TriggerNewPortraitWithContinuity(pawn);
+                DrawButton(btnNew, "⏳ Wait...", new Color(0.3f, 0.3f, 0.3f), "A portrait is currently generating.");
+            }
+            else
+            {
+                DrawButton(btnNew, "♻ New", new Color(0.2f, 0.55f, 0.35f), "Generate a new portrait using current traits and character vibe.");
+                if (Widgets.ButtonInvisible(btnNew))
+                {
+                    AIPortraitsManager.TriggerNewPortraitWithContinuity(pawn);
+                }
             }
 
             // Button 2: Save
