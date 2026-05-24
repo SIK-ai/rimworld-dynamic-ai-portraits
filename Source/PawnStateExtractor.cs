@@ -421,6 +421,28 @@ namespace AIPortraits
                 s.painLevel  = pawn.health.hediffSet.PainTotal;
                 s.isInPain   = s.painLevel > 0.25f;
 
+                // ── PASS 1 — find replaced body parts so we can suppress redundant
+                //              "missing femur/tibia/foot/toe×N" entries that are just
+                //              the internal accounting under a replaced leg/arm.
+                HashSet<BodyPartRecord> replacedParts = new HashSet<BodyPartRecord>();
+                foreach (Hediff h in pawn.health.hediffSet.hediffs)
+                {
+                    if (h.def == null || h.Part == null) continue;
+                    if (h is Hediff_AddedPart || h is Hediff_Implant ||
+                        h.def.defName.ToLower().Contains("peg"))
+                    {
+                        replacedParts.Add(h.Part);
+                    }
+                }
+
+                // ── PASS 2 — process. Group by type with counts so we don't list the
+                //              same thing 10 times in the UI / prompt.
+                Dictionary<string, int> implantCounts     = new Dictionary<string, int>();
+                Dictionary<string, int> missingCounts     = new Dictionary<string, int>();
+                Dictionary<string, int> headInjuryCounts  = new Dictionary<string, int>();
+                Dictionary<string, int> bodyInjuryCounts  = new Dictionary<string, int>();
+                Dictionary<string, int> scarCounts        = new Dictionary<string, int>();
+
                 foreach (Hediff hediff in pawn.health.hediffSet.hediffs)
                 {
                     if (hediff.def == null) continue;
@@ -502,32 +524,38 @@ namespace AIPortraits
                     if (part == null) continue;
 
                     bool isHead = IsHeadPart(part);
-                    bool isBody = !isHead;
                     string partLabel = part.def != null ? part.def.label : "body part";
 
                     // Permanent frostbite/burn scars — cosmetic, distinct from active injuries
                     if (hediff.IsPermanent() && defLc.Contains("frostbite"))
                     {
-                        s.permanentScars.Add("blackened " + partLabel + " from old frostbite");
+                        Bump(scarCounts, "blackened " + partLabel + " from old frostbite");
                         continue;
                     }
-                    if (hediff.IsPermanent() && (defLc.Contains("burn")))
+                    if (hediff.IsPermanent() && defLc.Contains("burn"))
                     {
-                        s.permanentScars.Add("faded burn scar on " + partLabel);
+                        Bump(scarCounts, "faded burn scar on " + partLabel);
                         continue;
                     }
 
                     if (hediff is Hediff_MissingPart)
                     {
-                        s.missingParts.Add("missing " + partLabel);
+                        // Skip if any ancestor part was replaced (peg leg, bionic arm, etc.)
+                        // — that explains why this child part is "missing" and listing it
+                        // is just noise.
+                        if (IsDescendantOfAny(part, replacedParts)) continue;
+                        Bump(missingCounts, "missing " + partLabel);
                     }
                     else if (hediff is Hediff_AddedPart || hediff is Hediff_Implant ||
                              defLc.Contains("bionic") || defLc.Contains("archotech") ||
-                             defLc.Contains("mechtech") || defLc.Contains("prosthetic"))
+                             defLc.Contains("mechtech") || defLc.Contains("prosthetic") ||
+                             defLc.Contains("peg") || defLc.Contains("wooden"))
                     {
-                        string implantLabel = "cybernetic " + partLabel;
-                        if (defLc.Contains("archotech")) implantLabel = "archotech " + partLabel;
-                        s.implants.Add(implantLabel);
+                        // Use the hediff's actual label, NOT a generic "cybernetic <part>".
+                        // PegLeg.label = "peg leg", BionicArm.label = "bionic arm", etc.
+                        string implantLabel = hediff.def.label;
+                        if (string.IsNullOrEmpty(implantLabel)) implantLabel = "prosthetic " + partLabel;
+                        Bump(implantCounts, implantLabel);
                     }
                     else if (hediff is Hediff_Injury)
                     {
@@ -535,10 +563,23 @@ namespace AIPortraits
                             ? "scar on " + partLabel
                             : "wounded " + partLabel;
 
-                        if (isHead) s.headInjuries.Add(injLabel);
-                        else        s.bodyInjuries.Add(injLabel);
+                        if (isHead) Bump(headInjuryCounts, injLabel);
+                        else        Bump(bodyInjuryCounts, injLabel);
                     }
                 }
+
+                // Materialise count-dictionaries into the public lists, with
+                // pluralization so "peg leg" + "peg leg" becomes "two peg legs".
+                foreach (KeyValuePair<string, int> kv in implantCounts)
+                    s.implants.Add(FormatCount(kv.Key, kv.Value));
+                foreach (KeyValuePair<string, int> kv in missingCounts)
+                    s.missingParts.Add(FormatCount(kv.Key, kv.Value));
+                foreach (KeyValuePair<string, int> kv in headInjuryCounts)
+                    s.headInjuries.Add(FormatCount(kv.Key, kv.Value));
+                foreach (KeyValuePair<string, int> kv in bodyInjuryCounts)
+                    s.bodyInjuries.Add(FormatCount(kv.Key, kv.Value));
+                foreach (KeyValuePair<string, int> kv in scarCounts)
+                    s.permanentScars.Add(FormatCount(kv.Key, kv.Value));
 
                 // Backup: sleep/food NEED-based detection if hediffs didn't catch it
                 if (!s.isExhausted && pawn.needs != null && pawn.needs.rest != null &&
@@ -736,6 +777,56 @@ namespace AIPortraits
             return name.Contains("head") || name.Contains("eye")  || name.Contains("ear") ||
                    name.Contains("nose") || name.Contains("jaw")  || name.Contains("cheek") ||
                    name.Contains("skull") || name.Contains("brain") || name.Contains("neck");
+        }
+
+        // Walk parent chain — true if any ancestor body part is in the replaced set.
+        // Used to skip redundant "missing femur/tibia/foot/toe" entries that are children
+        // of a replaced leg (etc.).
+        private static bool IsDescendantOfAny(BodyPartRecord part, HashSet<BodyPartRecord> replaced)
+        {
+            if (replaced == null || replaced.Count == 0) return false;
+            BodyPartRecord cur = part.parent;
+            while (cur != null)
+            {
+                if (replaced.Contains(cur)) return true;
+                cur = cur.parent;
+            }
+            return false;
+        }
+
+        // ── COUNT/AGGREGATION HELPERS ───────────────────────────────────────────
+
+        private static void Bump(Dictionary<string, int> counts, string key)
+        {
+            if (string.IsNullOrEmpty(key)) return;
+            int n;
+            counts.TryGetValue(key, out n);
+            counts[key] = n + 1;
+        }
+
+        // Turn a (label, count) pair into a readable phrase:
+        //   ("peg leg", 1) → "peg leg"
+        //   ("peg leg", 2) → "two peg legs"
+        //   ("missing toe", 5) → "several missing toes"
+        private static string FormatCount(string label, int count)
+        {
+            if (count <= 1) return label;
+            string plural = Pluralize(label);
+            if (count == 2) return "two "     + plural;
+            if (count <= 4) return count + " " + plural;
+            return "several " + plural;
+        }
+
+        // Crude English pluralization — good enough for body parts and prosthetics.
+        private static string Pluralize(string label)
+        {
+            if (string.IsNullOrEmpty(label)) return label;
+            string l = label.ToLower();
+            if (l.EndsWith("foot"))   return label.Substring(0, label.Length - 4) + "feet";
+            if (l.EndsWith("tooth"))  return label.Substring(0, label.Length - 5) + "teeth";
+            if (l.EndsWith("s") || l.EndsWith("x") || l.EndsWith("ch")) return label + "es";
+            if (l.EndsWith("y") && label.Length > 1 && !"aeiou".Contains(label[label.Length - 2].ToString())) return label.Substring(0, label.Length - 1) + "ies";
+            return label + "s";
         }
 
         // ── COLOR HELPERS ─────────────────────────────────────────────────────────

@@ -425,14 +425,34 @@ Content: Render the character's appearance, expression, gear, and any special ef
 
             if (state.implants.Count > 0)
             {
-                bool hasArcho = false;
+                // Classify the implant set: peg/wooden, bionic, archotech, simple-prosthetic.
+                // Each has a very different visual signature and the AI needs the right cue.
+                bool hasPeg = false, hasWooden = false, hasBionic = false,
+                     hasArcho = false, hasSimple = false;
                 foreach (string imp in state.implants)
-                    if (imp.ToLower().Contains("archotech")) { hasArcho = true; break; }
+                {
+                    string il = imp.ToLower();
+                    if (il.Contains("peg"))                       hasPeg = true;
+                    if (il.Contains("wooden") || il.Contains("denture")) hasWooden = true;
+                    if (il.Contains("bionic"))                    hasBionic = true;
+                    if (il.Contains("archotech"))                 hasArcho = true;
+                    if (il.Contains("simple prosthetic") || il.Contains("prosthetic")) hasSimple = true;
+                }
 
+                // List the actual implants by name so the AI renders the right thing
+                // (e.g. "two peg legs" instead of generic "cybernetic implants").
+                p.Append("with " + string.Join(" and ", state.implants.ToArray()));
+
+                // Append a visual descriptor matching the most striking implant type
                 if (hasArcho)
-                    p.Append("gleaming gold-white archotech implants with faint energy glow, ");
-                else
-                    p.Append("sleek bionic cybernetic implants with blue LED glow lines, ");
+                    p.Append(", gleaming gold-white archotech glow at the joints");
+                else if (hasBionic)
+                    p.Append(", sleek metallic cybernetic finish, blue LED accent lines");
+                else if (hasPeg || hasWooden)
+                    p.Append(", worn wooden prosthetic with leather straps and brass buckles");
+                else if (hasSimple)
+                    p.Append(", simple metal prosthetic, riveted plates");
+                p.Append(", ");
             }
 
             // Body condition (bucketed — only shows when actually bad)
