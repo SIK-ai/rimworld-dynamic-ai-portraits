@@ -367,21 +367,47 @@ namespace AIPortraits
             listing.GapLine();
             listing.Gap(6f);
 
-            // ── AI PROMPT GENERATION ──────────────────────────────────────────────
-            listing.Label("AI Prompt Generation");
-            listing.Gap(4f);
-            listing.CheckboxLabeled(
-                "Use Gemini Flash for prompt generation",
-                ref useLLMPrompt,
-                "Sends pawn metadata to Google Gemini Flash, which writes a richer, " +
-                "more coherent image prompt instead of the built-in template compiler. " +
-                "Resolves contradictions (e.g. addiction props vs. degraded-face descriptors) automatically. " +
-                "Requires a Google AI Studio API key (free). Falls back to the template if the call fails.");
+            // ── PROMPT GENERATION ─────────────────────────────────────────────────
+            listing.Label("Prompt Generation");
+            listing.Gap(6f);
+
+            // Two-button toggle: No (compiled template) vs Gemini Flash Lite
+            Rect promptModeRow  = listing.GetRect(36f);
+            float promptHalfW   = promptModeRow.width / 2f;
+            Rect btnNoLLM       = new Rect(promptModeRow.x,                promptModeRow.y, promptHalfW - 4f, 36f);
+            Rect btnGeminiFlash = new Rect(promptModeRow.x + promptHalfW,  promptModeRow.y, promptHalfW - 4f, 36f);
+
+            if (!useLLMPrompt) GUI.color = new Color(0.5f, 0.85f, 0.5f);
+            if (Widgets.ButtonText(btnNoLLM, "No — Compiled Template"))
+                useLLMPrompt = false;
+            GUI.color = Color.white;
+
+            if (useLLMPrompt) GUI.color = new Color(0.5f, 0.75f, 1f);
+            if (Widgets.ButtonText(btnGeminiFlash, "Gemini Flash Lite"))
+                useLLMPrompt = true;
+            GUI.color = Color.white;
+
+            listing.Gap(8f);
+
+            Rect promptInfoRect = listing.GetRect(48f);
+            Widgets.DrawBoxSolid(promptInfoRect,
+                useLLMPrompt
+                    ? new Color(0.08f, 0.14f, 0.22f, 0.7f)
+                    : new Color(0.10f, 0.16f, 0.10f, 0.7f));
+            Text.Font = GameFont.Tiny;
+            Widgets.Label(promptInfoRect.ContractedBy(6f),
+                useLLMPrompt
+                    ? "Gemini Flash Lite rewrites the structured pawn data into an optimized,\n" +
+                      "creative image prompt. Requires a Google AI Studio API key (free).\n" +
+                      "Falls back to the compiled template if the call fails."
+                    : "Built-in template compiler builds the prompt deterministically from\n" +
+                      "pawn state. Fast, free, no extra API key. Less creative than Gemini\n" +
+                      "but reliable and predictable.");
+            Text.Font = GameFont.Small;
+            listing.Gap(6f);
 
             if (useLLMPrompt)
             {
-                listing.Gap(6f);
-
                 // If using Imagen the same key works for Gemini Flash — show a green note.
                 bool canReuseImagenKey = (backendType == BackendType.GoogleImagen && !string.IsNullOrEmpty(apiKey));
                 if (canReuseImagenKey)
@@ -972,11 +998,34 @@ namespace AIPortraits
             string compiledPrompt = PromptCompiler.CompilePositivePrompt(state, this, null);
             string llmSystem      = useLLMPrompt ? PromptCompiler.GetLLMSystemPrompt(portraitStyle) : null;
 
+            // Read the most recent .txt sibling next to this pawn's saved PNGs — that's
+            // the canonical "what was actually sent to the image API last time" record.
+            string lastActualPrompt = null;
+            string lastActualFile   = null;
+            try
+            {
+                string dir = CacheManager.GetPortraitSaveDirectory(promptTabSelectedPawn.LabelShortCap);
+                if (Directory.Exists(dir))
+                {
+                    string[] txts = Directory.GetFiles(dir, "*.txt");
+                    DateTime latestT = DateTime.MinValue;
+                    for (int i = 0; i < txts.Length; i++)
+                    {
+                        DateTime t = File.GetLastWriteTime(txts[i]);
+                        if (t > latestT) { latestT = t; lastActualFile = txts[i]; }
+                    }
+                    if (lastActualFile != null)
+                        lastActualPrompt = File.ReadAllText(lastActualFile);
+                }
+            }
+            catch (Exception) { /* ignore — just show "none recorded" */ }
+
             float viewW = content.width - 18f;
             float descH    = Text.CalcHeight(structuredDesc, viewW - 12f);
             float promptH  = Text.CalcHeight(compiledPrompt, viewW - 12f);
             float llmH     = llmSystem != null ? Text.CalcHeight(llmSystem, viewW - 12f) : 0f;
-            float totalH   = descH + promptH + llmH + 280f;
+            float lastH    = !string.IsNullOrEmpty(lastActualPrompt) ? Text.CalcHeight(lastActualPrompt, viewW - 12f) : 0f;
+            float totalH   = descH + promptH + llmH + lastH + 360f;
 
             Rect view = new Rect(0f, 0f, viewW, totalH);
             Widgets.BeginScrollView(content, ref promptScrollPosition, view);
@@ -1000,6 +1049,43 @@ namespace AIPortraits
             GUI.color = Color.white;
             Text.Font = GameFont.Small;
             y += 22f;
+
+            // ── 0. Last actual prompt sent (read from disk, no API call) ─────────
+            // This is the canonical record of what was sent to the image API on the
+            // most recent generation for this pawn. If you used Gemini Flash mode,
+            // THIS is the Gemini-rewritten prompt. If template mode, this is the
+            // compiled string. Sourced from the .txt sibling next to the saved PNG.
+            if (!string.IsNullOrEmpty(lastActualPrompt))
+            {
+                string fileBaseName = Path.GetFileName(lastActualFile);
+                Widgets.Label(new Rect(0f, y, viewW, 22f),
+                              "<b>Last actual prompt sent</b>  (from " + fileBaseName + "):");
+                y += 24f;
+                Rect copyLastBtn = new Rect(0f, y, 150f, 22f);
+                if (Widgets.ButtonText(copyLastBtn, "Copy last sent prompt"))
+                {
+                    GUIUtility.systemCopyBuffer = lastActualPrompt;
+                    Messages.Message("Last sent prompt copied to clipboard.", MessageTypeDefOf.TaskCompletion, false);
+                }
+                y += 26f;
+                Rect lastBox = new Rect(0f, y, viewW, lastH + 10f);
+                Widgets.DrawBoxSolid(lastBox, new Color(0.08f, 0.05f, 0.12f, 1f));
+                GUI.color = new Color(0.6f, 0.45f, 0.85f, 0.7f);
+                Widgets.DrawBox(lastBox, 1);
+                GUI.color = Color.white;
+                Widgets.Label(lastBox.ContractedBy(6f), lastActualPrompt);
+                y += lastBox.height + 18f;
+            }
+            else
+            {
+                Text.Font = GameFont.Tiny;
+                GUI.color = new Color(0.55f, 0.55f, 0.55f);
+                Widgets.Label(new Rect(0f, y, viewW, 22f),
+                              "No prompts yet recorded for this pawn — generate a portrait first.");
+                GUI.color = Color.white;
+                Text.Font = GameFont.Small;
+                y += 26f;
+            }
 
             // ── 1. Structured pawn description (what the LLM receives, also human-readable)
             Widgets.Label(new Rect(0f, y, viewW, 22f), "<b>Pawn data sheet (what's extracted):</b>");

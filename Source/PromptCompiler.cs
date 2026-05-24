@@ -944,8 +944,8 @@ Content: Render the character's appearance, clean expression, and gear exactly a
                 "RULES:\n" +
                 "1. Write a comma-separated descriptor list — NOT prose sentences.\n" +
                 "2. Include: art style keywords, physical appearance, expression, visible weapon/apparel, personality cues.\n" +
-                "3. Resolve contradictions — if the pawn has an addiction, pick EITHER a cute prop OR degraded-addict visual, not both.\n" +
-                "4. Let your creativity guide the pose, composition, and camera angle to create a premium, visually stunning portrait. You can decide how they style their headgear/helmet (e.g. worn on head, slung around neck, held under arm, or hanging off a shoulder/weapon) or whether they wear face coverings. You may also include creative themed props or items that match their traits/skills, or choose to focus on a clean, powerful close-up character shot.\n" +
+                "3. Resolve contradictions — when traits conflict, pick the more visually striking interpretation.\n" +
+                "4. You have full creative freedom over pose, composition, camera angle, lighting, and overall styling. Aim for a premium, visually striking portrait that captures the character's identity. Use your judgment to make the most impactful artistic decisions.\n" +
                 "5. Always end with: transparent PNG background, alpha channel transparency, no background elements, bust-up framing.\n" +
                 "6. Keep total output under 220 words.\n" +
                 "7. Output ONLY the prompt — no explanations, no headers, no quotes.";
