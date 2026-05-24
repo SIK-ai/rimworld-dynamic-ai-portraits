@@ -30,6 +30,13 @@ namespace AIPortraits
         // pale skin / light hair tones adjacent to a light background.
         private const int ToleranceLoose = 48;
 
+        // Maximum depth (in pixels) the halo cleanup pass is allowed to walk past the strict
+        // pass-1 boundary. Without this cap the BFS can erode arbitrarily deep into the
+        // subject — e.g. walking down an arm because the skin tone is within loose tolerance
+        // of the background. 3 pixels is enough to clean anti-aliased edges and gradient
+        // halos without eating limbs.
+        private const int HaloMaxDepth = 3;
+
         // Sanity floor: if the flood fill grabbed more than this fraction of the image, the
         // edge sample is probably wrong (subject filled the frame) and we should abort to
         // avoid producing a mostly-transparent portrait.
@@ -92,24 +99,36 @@ namespace AIPortraits
                 if (y < h - 1) TrySeed(pixels, visited, queue, x, y + 1, w, bgR, bgG, bgB, ToleranceStrict);
             }
 
-            // ── PASS 2: halo cleanup with looser tolerance ───────────────────────
-            // Seed from any visited pixel — only expand outward into pixels that are
-            // still within the LOOSE tolerance. This catches anti-aliased edges and
-            // gradient halos without bleeding into unrelated subject pixels.
-            Queue<int> halo = new Queue<int>();
+            // ── PASS 2: halo cleanup with looser tolerance, DEPTH-LIMITED ────────
+            // Seed from any pass-1 pixel at depth 0. Each BFS step increments depth.
+            // Stop expanding at HaloMaxDepth — this prevents the loose-tolerance flood
+            // from walking deep into the subject (e.g. down an arm whose skin tone is
+            // within 48 RGB of a warm background).
+            Queue<int>   halo      = new Queue<int>();
+            Queue<byte>  haloDepth = new Queue<byte>();
             for (int i = 0; i < visited.Length; i++)
-                if (visited[i]) halo.Enqueue(i);
+            {
+                if (visited[i])
+                {
+                    halo.Enqueue(i);
+                    haloDepth.Enqueue(0);
+                }
+            }
 
             while (halo.Count > 0)
             {
-                int idx = halo.Dequeue();
+                int idx   = halo.Dequeue();
+                byte d    = haloDepth.Dequeue();
+                if (d >= HaloMaxDepth) continue;
+
                 int x = idx % w;
                 int y = idx / w;
+                byte nextD = (byte)(d + 1);
 
-                if (x > 0)     TrySeedHalo(pixels, visited, halo, x - 1, y, w, bgR, bgG, bgB);
-                if (x < w - 1) TrySeedHalo(pixels, visited, halo, x + 1, y, w, bgR, bgG, bgB);
-                if (y > 0)     TrySeedHalo(pixels, visited, halo, x, y - 1, w, bgR, bgG, bgB);
-                if (y < h - 1) TrySeedHalo(pixels, visited, halo, x, y + 1, w, bgR, bgG, bgB);
+                if (x > 0)     TrySeedHaloDepth(pixels, visited, halo, haloDepth, x - 1, y, w, bgR, bgG, bgB, nextD);
+                if (x < w - 1) TrySeedHaloDepth(pixels, visited, halo, haloDepth, x + 1, y, w, bgR, bgG, bgB, nextD);
+                if (y > 0)     TrySeedHaloDepth(pixels, visited, halo, haloDepth, x, y - 1, w, bgR, bgG, bgB, nextD);
+                if (y < h - 1) TrySeedHaloDepth(pixels, visited, halo, haloDepth, x, y + 1, w, bgR, bgG, bgB, nextD);
             }
 
             // Apply alpha = 0 to every flagged pixel
@@ -240,9 +259,68 @@ namespace AIPortraits
                 System.Math.Abs(p.g - bgG) <= ToleranceLoose &&
                 System.Math.Abs(p.b - bgB) <= ToleranceLoose)
             {
+                // ── Bright-pixel guard ────────────────────────────────────────────────
+                // When the sampled background is near-white (avg > 200), pale skin tones
+                // (e.g. albino: ~240,230,225) fall within 48-unit tolerance and get erased.
+                // Apply a tighter threshold (22) for very bright candidate pixels so that
+                // true edge halos (≤22 from white) are still removed but pale skin (25-30
+                // per-channel delta) is preserved.
+                int bgBrightness = (bgR + bgG + bgB) / 3;
+                if (bgBrightness > 200)
+                {
+                    int pBrightness = (p.r + p.g + p.b) / 3;
+                    if (pBrightness > 210)
+                    {
+                        const int StrictHaloTol = 22;
+                        if (System.Math.Abs(p.r - bgR) > StrictHaloTol ||
+                            System.Math.Abs(p.g - bgG) > StrictHaloTol ||
+                            System.Math.Abs(p.b - bgB) > StrictHaloTol)
+                            return; // Protect — likely pale skin, not a background halo
+                    }
+                }
+                // ─────────────────────────────────────────────────────────────────────
+
                 visited[idx] = true;
                 queue.Enqueue(idx);
             }
         }
+
+        // Depth-tracking variant — used by the bounded pass-2 halo cleanup.
+        // Mirrors TrySeedHalo's loose-tolerance + bright-pixel guard logic but also
+        // enqueues a depth byte in parallel so the BFS can stop at HaloMaxDepth.
+        private static void TrySeedHaloDepth(Color32[] pixels, bool[] visited,
+                                             Queue<int> queue, Queue<byte> depthQ,
+                                             int x, int y, int w,
+                                             int bgR, int bgG, int bgB, byte nextDepth)
+        {
+            int idx = y * w + x;
+            if (visited[idx]) return;
+
+            Color32 p = pixels[idx];
+            if (System.Math.Abs(p.r - bgR) <= ToleranceLoose &&
+                System.Math.Abs(p.g - bgG) <= ToleranceLoose &&
+                System.Math.Abs(p.b - bgB) <= ToleranceLoose)
+            {
+                // Bright-pixel guard — same logic as TrySeedHalo, protects pale skin.
+                int bgBrightness = (bgR + bgG + bgB) / 3;
+                if (bgBrightness > 200)
+                {
+                    int pBrightness = (p.r + p.g + p.b) / 3;
+                    if (pBrightness > 210)
+                    {
+                        const int StrictHaloTol = 22;
+                        if (System.Math.Abs(p.r - bgR) > StrictHaloTol ||
+                            System.Math.Abs(p.g - bgG) > StrictHaloTol ||
+                            System.Math.Abs(p.b - bgB) > StrictHaloTol)
+                            return;
+                    }
+                }
+
+                visited[idx] = true;
+                queue.Enqueue(idx);
+                depthQ.Enqueue(nextDepth);
+            }
+        }
+
     }
 }

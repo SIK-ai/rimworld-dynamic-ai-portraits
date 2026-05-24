@@ -232,7 +232,7 @@ namespace AIPortraits
             string positivePrompt = PromptCompiler.CompilePositivePrompt(state, AIPortraitsMod.settings, continuityToken);
             Log.Message("[Dynamic AI Portraits] PROMPT for " + pawn.LabelShortCap + ":\n" + positivePrompt);
 
-            AsyncAIClient.QueueGeneration(state, AIPortraitsMod.settings, continuityToken, delegate(Texture2D tex, byte[] bytes, string err)
+            AsyncAIClient.QueueGeneration(state, AIPortraitsMod.settings, continuityToken, delegate(Texture2D tex, byte[] bytes, string promptUsed, string err)
             {
                 if (err != null)
                 {
@@ -252,7 +252,7 @@ namespace AIPortraits
                         try
                         {
                             string promptFile = System.IO.Path.ChangeExtension(savedPath, ".txt");
-                            System.IO.File.WriteAllText(promptFile, positivePrompt);
+                            System.IO.File.WriteAllText(promptFile, promptUsed ?? positivePrompt);
                         }
                         catch (Exception ex)
                         {

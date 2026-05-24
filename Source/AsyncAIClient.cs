@@ -27,17 +27,30 @@ namespace AIPortraits
 
     public static class AsyncAIClient
     {
-        public delegate void PortraitCallback(Texture2D texture, byte[] rawBytes, string error);
+        public delegate void PortraitCallback(Texture2D texture, byte[] rawBytes, string promptUsed, string error);
 
         private const int RequestTimeoutSeconds = 120;
 
         public static void QueueGeneration(PawnState state, AIPortraitsSettings settings, string continuityToken, PortraitCallback callback)
         {
+            // If Gemini Flash prompt generation is enabled and a key is available, run that path.
+            if (settings.useLLMPrompt && !string.IsNullOrEmpty(GetLLMApiKey(settings)))
+            {
+                CoroutineRunner.Instance.StartCoroutine(GenerateLLMThenDispatch(state, settings, continuityToken, callback));
+                return;
+            }
+
+            // Standard compiled-template path
             string positivePrompt = PromptCompiler.CompilePositivePrompt(state, settings, continuityToken);
             string negativePrompt = PromptCompiler.CompileNegativePrompt(settings);
-
             Log.Message("[Dynamic AI Portraits] Prompt: " + positivePrompt);
+            DispatchImageBackend(positivePrompt, negativePrompt, settings, callback);
+        }
 
+        /// <summary>Routes a compiled prompt to the configured image backend.</summary>
+        private static void DispatchImageBackend(string positivePrompt, string negativePrompt,
+                                                 AIPortraitsSettings settings, PortraitCallback callback)
+        {
             switch (settings.backendType)
             {
                 case BackendType.HuggingFace:
@@ -53,9 +66,137 @@ namespace AIPortraits
                     CoroutineRunner.Instance.StartCoroutine(GenerateLocalA1111(positivePrompt, negativePrompt, settings, callback));
                     break;
                 default:
-                    callback(null, null, "Backend type " + settings.backendType + " is not implemented.");
+                    callback(null, null, null, "Backend type " + settings.backendType + " is not implemented.");
                     break;
             }
+        }
+
+        /// <summary>
+        /// Resolves which API key to use for Gemini Flash.
+        /// Prefers the dedicated llmApiKey; falls back to apiKey when using GoogleImagen
+        /// (same Google AI Studio key works for both Imagen and Gemini Flash).
+        /// </summary>
+        private static string GetLLMApiKey(AIPortraitsSettings settings)
+        {
+            if (!string.IsNullOrEmpty(settings.llmApiKey)) return settings.llmApiKey;
+            if (settings.backendType == BackendType.GoogleImagen && !string.IsNullOrEmpty(settings.apiKey))
+                return settings.apiKey;
+            return null;
+        }
+
+        /// <summary>
+        /// Calls Gemini Flash to generate the image prompt from pawn metadata, then
+        /// dispatches to the configured image backend with the result.
+        /// Falls back to the compiled template on any failure so portrait generation
+        /// always succeeds even without a valid LLM key.
+        /// </summary>
+        private static IEnumerator GenerateLLMThenDispatch(PawnState state, AIPortraitsSettings settings,
+                                                            string continuityToken, PortraitCallback callback)
+        {
+            string llmKey    = GetLLMApiKey(settings);
+            string pawnDesc  = PromptCompiler.CompilePawnStateDescription(state, settings);
+            string sysPrompt = PromptCompiler.GetLLMSystemPrompt(settings.portraitStyle);
+
+            // gemini-3.1-flash-lite is free-tier and very fast (~1 s round-trip).
+            string llmUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=" + llmKey;
+
+            StringBuilder json = new StringBuilder();
+            json.Append("{");
+            json.Append("\"system_instruction\":{\"parts\":[{\"text\":\"")
+                .Append(EscapeJson(sysPrompt)).Append("\"}]},");
+            json.Append("\"contents\":[{\"parts\":[{\"text\":\"")
+                .Append(EscapeJson(pawnDesc)).Append("\"}]}],");
+            json.Append("\"generationConfig\":{\"maxOutputTokens\":400,\"temperature\":0.75}");
+            json.Append("}");
+
+            byte[] jsonBytes = Encoding.UTF8.GetBytes(json.ToString());
+            string generatedPrompt = null;
+
+            using (UnityWebRequest request = new UnityWebRequest(llmUrl, "POST"))
+            {
+                request.uploadHandler   = new UploadHandlerRaw(jsonBytes);
+                request.downloadHandler = new DownloadHandlerBuffer();
+                request.SetRequestHeader("Content-Type", "application/json");
+                request.timeout = 30;
+
+                Log.Message("[Dynamic AI Portraits] Calling Gemini Flash for " + (state.name ?? "pawn") + "...");
+                yield return request.SendWebRequest();
+
+                if (IsSuccess(request))
+                {
+                    generatedPrompt = ExtractGeminiText(request.downloadHandler.text);
+                    if (!string.IsNullOrEmpty(generatedPrompt))
+                        Log.Message("[Dynamic AI Portraits] LLM prompt: " + generatedPrompt);
+                    else
+                        Log.Warning("[Dynamic AI Portraits] Gemini returned empty text. Raw: " +
+                                    Truncate(request.downloadHandler.text, 400));
+                }
+                else
+                {
+                    Log.Warning("[Dynamic AI Portraits] Gemini Flash error: " + request.error +
+                                " | " + Truncate(request.downloadHandler.text, 200));
+                }
+            }
+
+            // Fall back to compiled template if LLM failed
+            if (string.IsNullOrEmpty(generatedPrompt))
+            {
+                Log.Warning("[Dynamic AI Portraits] Falling back to compiled template.");
+                generatedPrompt = PromptCompiler.CompilePositivePrompt(state, settings, continuityToken);
+            }
+
+            string negativePrompt = PromptCompiler.CompileNegativePrompt(settings);
+            DispatchImageBackend(generatedPrompt, negativePrompt, settings, callback);
+        }
+
+        /// <summary>
+        /// Parses the text value from a Gemini API JSON response, correctly handling
+        /// all standard JSON escape sequences. Returns null on any parse failure.
+        /// </summary>
+        private static string ExtractGeminiText(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return null;
+            try
+            {
+                // Navigate: candidates[0] -> content -> parts[0] -> text
+                int idx = json.IndexOf("\"candidates\"");
+                if (idx < 0) return null;
+                idx = json.IndexOf("\"parts\"", idx);
+                if (idx < 0) return null;
+                idx = json.IndexOf("\"text\"", idx);
+                if (idx < 0) return null;
+                idx = json.IndexOf(':', idx) + 1;
+                // Skip whitespace
+                while (idx < json.Length && json[idx] != '"') idx++;
+                if (idx >= json.Length) return null;
+                idx++; // skip opening quote
+
+                var sb = new StringBuilder();
+                while (idx < json.Length)
+                {
+                    char c = json[idx];
+                    if (c == '\\' && idx + 1 < json.Length)
+                    {
+                        char next = json[idx + 1];
+                        idx += 2;
+                        switch (next)
+                        {
+                            case '"':  sb.Append('"');  break;
+                            case '\\': sb.Append('\\'); break;
+                            case 'n':  sb.Append(' ');  break; // newlines → spaces
+                            case 'r':                   break;
+                            case 't':  sb.Append(' ');  break;
+                            default:   sb.Append(next);  break;
+                        }
+                    }
+                    else if (c == '"') { break; }
+                    else { sb.Append(c); idx++; }
+                }
+
+                string result = sb.ToString().Trim();
+                return result.Length > 0 ? result : null;
+            }
+            catch (Exception) { return null; }
         }
 
         // ── HuggingFace ──────────────────────────────────────────────────────────────
@@ -89,18 +230,18 @@ namespace AIPortraits
 
                 if (!IsSuccess(request))
                 {
-                    callback(null, null, "HuggingFace API Error: " + request.error + " - " + Truncate(request.downloadHandler.text, 400));
+                    callback(null, null, null, "HuggingFace API Error: " + request.error + " - " + Truncate(request.downloadHandler.text, 400));
                     yield break;
                 }
 
                 byte[] imgBytes = request.downloadHandler.data;
                 if (imgBytes == null || imgBytes.Length == 0)
                 {
-                    callback(null, null, "Empty response body from HuggingFace.");
+                    callback(null, null, null, "Empty response body from HuggingFace.");
                     yield break;
                 }
 
-                DeliverImage(imgBytes, "HuggingFace", callback);
+                DeliverImage(imgBytes, prompt, "HuggingFace", callback);
             }
         }
 
@@ -124,18 +265,18 @@ namespace AIPortraits
 
                 if (!IsSuccess(request))
                 {
-                    callback(null, null, "Pollinations API Error: " + request.error);
+                    callback(null, null, null, "Pollinations API Error: " + request.error);
                     yield break;
                 }
 
                 byte[] imgBytes = request.downloadHandler.data;
                 if (imgBytes == null || imgBytes.Length == 0)
                 {
-                    callback(null, null, "Empty response body from Pollinations.");
+                    callback(null, null, null, "Empty response body from Pollinations.");
                     yield break;
                 }
 
-                DeliverImage(imgBytes, "Pollinations", callback);
+                DeliverImage(imgBytes, prompt, "Pollinations", callback);
             }
         }
 
@@ -175,7 +316,7 @@ namespace AIPortraits
 
                 if (!IsSuccess(request))
                 {
-                    callback(null, null, "Google Imagen API Error: " + request.error + " | " + Truncate(request.downloadHandler.text, 400));
+                    callback(null, null, null, "Google Imagen API Error: " + request.error + " | " + Truncate(request.downloadHandler.text, 400));
                     yield break;
                 }
 
@@ -188,7 +329,7 @@ namespace AIPortraits
                     int keyIdx = text.IndexOf("\"bytesBase64Encoded\"");
                     if (keyIdx == -1)
                     {
-                        callback(null, null, "Could not find 'bytesBase64Encoded' in response. Full response: " + Truncate(text, 400));
+                        callback(null, null, null, "Could not find 'bytesBase64Encoded' in response. Full response: " + Truncate(text, 400));
                         yield break;
                     }
 
@@ -197,18 +338,18 @@ namespace AIPortraits
                     int closeQuote = text.IndexOf('"', openQuote + 1);
                     if (openQuote == -1 || closeQuote == -1)
                     {
-                        callback(null, null, "Malformed bytesBase64Encoded value.");
+                        callback(null, null, null, "Malformed bytesBase64Encoded value.");
                         yield break;
                     }
 
                     string base64 = text.Substring(openQuote + 1, closeQuote - openQuote - 1);
                     byte[] imgBytes = Convert.FromBase64String(base64);
 
-                    DeliverImage(imgBytes, "Google Imagen", callback);
+                    DeliverImage(imgBytes, prompt, "Google Imagen", callback);
                 }
                 catch (Exception ex)
                 {
-                    callback(null, null, "Google Imagen parse exception: " + ex.Message);
+                    callback(null, null, null, "Google Imagen parse exception: " + ex.Message);
                 }
             }
         }
@@ -254,7 +395,7 @@ namespace AIPortraits
                 {
                     string hint = " | Is your local server running at " + baseUrl + "? " +
                                   "Start AUTOMATIC1111/Forge with --api flag before generating.";
-                    callback(null, null, "Local A1111 API Error: " + request.error + hint +
+                    callback(null, null, null, "Local A1111 API Error: " + request.error + hint +
                                          " | " + Truncate(request.downloadHandler.text, 200));
                     yield break;
                 }
@@ -286,7 +427,7 @@ namespace AIPortraits
 
                 if (parseErr != null)
                 {
-                    callback(null, null, parseErr);
+                    callback(null, null, null, parseErr);
                     yield break;
                 }
 
@@ -294,11 +435,11 @@ namespace AIPortraits
                 try { imgBytes = Convert.FromBase64String(base64); }
                 catch (Exception ex)
                 {
-                    callback(null, null, "Local A1111 base64 decode failed: " + ex.Message);
+                    callback(null, null, null, "Local A1111 base64 decode failed: " + ex.Message);
                     yield break;
                 }
 
-                DeliverImage(imgBytes, "Local A1111", callback);
+                DeliverImage(imgBytes, prompt, "Local A1111", callback);
             }
         }
 
@@ -309,11 +450,11 @@ namespace AIPortraits
         // the image had an opaque background), the original decode is destroyed and
         // the new texture + re-encoded PNG bytes are returned so the cache + disk
         // save reflect the cleaned image.
-        private static void DeliverImage(byte[] imgBytes, string backendName, PortraitCallback callback)
+        private static void DeliverImage(byte[] imgBytes, string promptUsed, string backendName, PortraitCallback callback)
         {
             if (imgBytes == null || imgBytes.Length == 0)
             {
-                callback(null, null, backendName + ": empty image bytes.");
+                callback(null, null, null, backendName + ": empty image bytes.");
                 return;
             }
 
@@ -321,7 +462,7 @@ namespace AIPortraits
             if (!ImageConversion.LoadImage(raw, imgBytes))
             {
                 UnityEngine.Object.Destroy(raw);
-                callback(null, null, backendName + ": failed to decode image bytes.");
+                callback(null, null, null, backendName + ": failed to decode image bytes.");
                 return;
             }
 
@@ -351,7 +492,7 @@ namespace AIPortraits
                 finalBytes = imgBytes;
             }
 
-            callback(processed, finalBytes, null);
+            callback(processed, finalBytes, promptUsed, null);
         }
 
         private static bool IsSuccess(UnityWebRequest request)

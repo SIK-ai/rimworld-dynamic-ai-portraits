@@ -27,12 +27,11 @@ Content: Render the character's appearance, expression, gear, and any special ef
 Eyes: The character's eyes must be OPEN and clearly visible by default. Only render closed eyes if the prompt explicitly says the character is sleeping or dead. Do not default to closed-eye expressions even when the art style traditionally uses them (no anime-style closed-eye smile, no contemplative closed-eye pose).";
 
         private const string PixelImagenSystemPrompt =
-@"Generate a pixel-art character portrait for a game UI overlay.
-Style: 16-bit tactical JRPG sprite (Tactics Ogre, Final Fantasy Tactics aesthetic). Strict pixel grid — every pixel sharp and deliberate. No anti-aliasing, smooth gradients, or naturalistic textures. Thin dark pixel outlines on all boundaries. Cel-shading in 2-3 flat color bands per surface. Limited palette (32-48 colors), muted but rich.
-Composition: Bust or half-body shot. Single character. Subject centered.
-Background: Fully transparent PNG (alpha channel). No background elements, fills, gradients, or environment behind the character whatsoever.
-Content: Render the character's appearance, expression, gear, and any special effects exactly as described in the user prompt. Do not add, remove, or override any described details.
-Eyes: The character's eyes must be OPEN and clearly visible by default. Only render closed eyes if the prompt explicitly says the character is sleeping or dead. Do not default to closed-eye expressions even when the art style traditionally uses them (no anime-style closed-eye smile, no contemplative closed-eye pose).";
+@"Generate a high-quality 16-bit JRPG retro pixel-art character portrait for a game UI overlay.
+Style: Retro JRPG character sprite (Tactics Ogre, Final Fantasy Tactics, or modern premium pixel art like Stardew Valley). Clean, precise pixel art grid foundation. Every single pixel must be sharp and deliberate. Zero anti-aliasing, no smooth gradients, no vector-like edges, and no naturalistic textures. Use thin consistent dark pixelated outlines (espresso brown or charcoal grey) to define the silhouette of the hair, facial features, and clothing seams. Cel-shading in 2-3 flat color bands per surface. Limited color palette (32-48 colors), vibrant and cohesive colors.
+Composition: Bust or half-body shot. Single character centered.
+Background: Fully transparent background (alpha channel transparency). No solid background, no gradient background, no textured background behind the character.
+Content: Render the character's appearance, clean expression, and gear exactly as described in the user prompt. Keep the portrait looking clean, professional, and aesthetically pleasing. Never render closed eyes, screaming faces, or distorted facial features unless explicitly requested.";
 
         // ──────────────────────────────────────────────────────────────────────────
         // MAIN ENTRY
@@ -52,14 +51,23 @@ Eyes: The character's eyes must be OPEN and clearly visible by default. Only ren
                 default:                              AppendKoreanRealisticHeader(p, continuityStyleToken); break;
             }
 
-            AppendRaceClass(p, state);
+            AppendRaceClass(p, state, settings);
             AppendPhysical(p, state);
             AppendGear(p, state);
-            p.Append(GetExpression(state) + ", ");
-            AppendHealthModifiers(p, state);
+            p.Append(GetExpression(state, settings) + ", ");
+            bool addictionPropShown = false;
+            if (settings.allowCuteProps)
+            {
+                bool holdingProp = AppendCuteProps(p, state, out addictionPropShown);
+                AppendSkillProps(p, state, holdingProp);
+            }
+            // Pass addictionPropShown so health modifiers skip the visual description
+            // for addictions already represented by a cute prop (avoids contradictions
+            // like "holding a beer mug" + "bloodshot eyes from alcoholism" in same prompt).
+            AppendHealthModifiers(p, state, addictionPropShown);
             // (Transparency is already declared once at the top of the prompt by the style
             // header — no need to repeat it via GetBackground() and create a duplicate clause.)
-            AppendLoreFlavor(p, state);
+            AppendLoreFlavor(p, state, settings);
 
             if (!string.IsNullOrEmpty(settings.baseStylePrompt))
                 p.Append(settings.baseStylePrompt);
@@ -100,7 +108,7 @@ Eyes: The character's eyes must be OPEN and clearly visible by default. Only ren
 
         private static void AppendPixelHeader(StringBuilder p, string continuityToken)
         {
-            p.Append("detailed 16-bit pixel-art character portrait, classic JRPG sprite style, strict pixel grid, thin dark pixel outlines, flat cel-shading color bands, limited color palette 32-48 colors, bust-up framing, transparent PNG background, alpha channel transparency, no background elements, ");
+            p.Append("high-quality 16-bit retro JRPG character portrait, clean pixel-art grid, zero anti-aliasing, sharp deliberate pixel edges, thin consistent dark outlines, clean flat cel-shading, limited color palette, anime-style cute facial features, detailed hair, bust-up framing, transparent PNG background, alpha channel transparency, no background elements, ");
             if (!string.IsNullOrEmpty(continuityToken))
                 p.Append(continuityToken + ", ");
         }
@@ -109,11 +117,11 @@ Eyes: The character's eyes must be OPEN and clearly visible by default. Only ren
         // RACE / CLASS  — the core identity sentence
         // ──────────────────────────────────────────────────────────────────────────
 
-        private static void AppendRaceClass(StringBuilder p, PawnState state)
+        private static void AppendRaceClass(StringBuilder p, PawnState state, AIPortraitsSettings settings)
         {
             string genderNoun = state.gender == "female" ? "woman" : "man";
             string race = BuildRaceDescriptor(state);
-            string role = BuildRoleDescriptor(state);
+            string role = BuildRoleDescriptor(state, settings);
 
             p.Append("portrait of a " + state.bioAge + " year old " + race + " " + genderNoun);
             if (!string.IsNullOrEmpty(role))
@@ -149,19 +157,21 @@ Eyes: The character's eyes must be OPEN and clearly visible by default. Only ren
             return "human";
         }
 
-        private static string BuildRoleDescriptor(PawnState state)
+        private static string BuildRoleDescriptor(PawnState state, AIPortraitsSettings settings)
         {
+            // Priority: skill role (drives prop visuals) > adulthood title > ideology role.
+            // Ideology is last because it is separately described in AppendLoreFlavor.
             List<string> roleParts = new List<string>();
-
-            if (!string.IsNullOrEmpty(state.ideologyRole))
-                roleParts.Add(state.ideologyRole);
-
-            if (!string.IsNullOrEmpty(state.adulthoodTitle))
-                roleParts.Add(state.adulthoodTitle.ToLower());
 
             string skillRole = GetSkillRole(state.topSkill1, state.topSkill2);
             if (!string.IsNullOrEmpty(skillRole))
                 roleParts.Add(skillRole);
+
+            if (!string.IsNullOrEmpty(state.adulthoodTitle))
+                roleParts.Add(state.adulthoodTitle.ToLower());
+
+            if (settings.includeIdeology && !string.IsNullOrEmpty(state.ideologyRole))
+                roleParts.Add(state.ideologyRole);
 
             if (roleParts.Count == 0) return "";
 
@@ -285,145 +295,340 @@ Eyes: The character's eyes must be OPEN and clearly visible by default. Only ren
         // GEAR — armor material + weapon
         // ──────────────────────────────────────────────────────────────────────────
 
+        private static int GetPawnSeed(PawnState state)
+        {
+            if (string.IsNullOrEmpty(state.pawnId)) return 0;
+            int hash = 0;
+            foreach (char c in state.pawnId)
+            {
+                hash = (hash * 31) + c;
+            }
+            return Math.Abs(hash);
+        }
+
+        private static bool IsFaceCoverLabel(string label)
+        {
+            if (string.IsNullOrEmpty(label)) return false;
+            string l = label.ToLower();
+            return l.Contains("mask") || l.Contains("veil") || l.Contains("goggles") || l.Contains("visor");
+        }
+
         private static void AppendGear(StringBuilder p, PawnState state)
         {
-            if (!string.IsNullOrEmpty(state.primaryWeapon))
+            string helmet;
+            string apparelLine = BuildGearLine(state, out helmet);
+
+            if (!string.IsNullOrEmpty(helmet))
             {
-                // primaryWeapon already carries quality + stuff + colour + label + damage
-                // (built in PawnStateExtractor), so no name-based material-guessing needed.
-                string weapStyle = state.weaponType == "melee"
-                    ? "holding " + Article(state.primaryWeapon) + " " + state.primaryWeapon + " in hand, "
-                    : "armed with " + Article(state.primaryWeapon) + " " + state.primaryWeapon + " slung on back, ";
-                p.Append(weapStyle);
+                if (IsFaceCoverLabel(helmet))
+                {
+                    // Face covers are always worn on the face/eyes to avoid weird rendering on the neck
+                    if (helmet.ToLower().Contains("goggles") || helmet.ToLower().Contains("visor"))
+                    {
+                        p.Append("wearing their " + helmet + " over their eyes, ");
+                    }
+                    else
+                    {
+                        p.Append("wearing their " + helmet + " on their face, ");
+                    }
+
+                    // Standard weapon carriage when wearing face cover
+                    if (!string.IsNullOrEmpty(state.primaryWeapon))
+                    {
+                        string weapStyle = state.weaponType == "melee"
+                            ? "holding " + Article(state.primaryWeapon) + " " + state.primaryWeapon + " in hand, "
+                            : "armed with " + Article(state.primaryWeapon) + " " + state.primaryWeapon + " slung on back, ";
+                        p.Append(weapStyle);
+                    }
+                    else if (state.isViolentIncapable)
+                    {
+                        p.Append("unarmed, peaceful stance, ");
+                    }
+                }
+                else
+                {
+                    // For helmets/hats, choose pose deterministically based on pawn ID
+                    int seed = GetPawnSeed(state);
+                    bool hasRanged = !string.IsNullOrEmpty(state.primaryWeapon) && state.weaponType == "ranged";
+                    int maxPoses = hasRanged ? 5 : 4;
+                    int poseChoice = seed % maxPoses;
+
+                    if (poseChoice == 0)
+                    {
+                        p.Append("wearing their " + helmet + " on their head, ");
+                        if (!string.IsNullOrEmpty(state.primaryWeapon))
+                        {
+                            string weapStyle = state.weaponType == "melee"
+                                ? "holding " + Article(state.primaryWeapon) + " " + state.primaryWeapon + " in hand, "
+                                : "armed with " + Article(state.primaryWeapon) + " " + state.primaryWeapon + " slung on back, ";
+                            p.Append(weapStyle);
+                        }
+                        else if (state.isViolentIncapable)
+                        {
+                            p.Append("unarmed, peaceful stance, ");
+                        }
+                    }
+                    else if (poseChoice == 1)
+                    {
+                        p.Append("holding their " + helmet + " under one arm, ");
+                        if (!string.IsNullOrEmpty(state.primaryWeapon))
+                        {
+                            p.Append("with their " + state.primaryWeapon + " slung on their back, ");
+                        }
+                    }
+                    else if (poseChoice == 2)
+                    {
+                        p.Append("with their " + helmet + " hanging from their shoulder strap, ");
+                        if (!string.IsNullOrEmpty(state.primaryWeapon))
+                        {
+                            string weapStyle = state.weaponType == "melee"
+                                ? "holding " + Article(state.primaryWeapon) + " " + state.primaryWeapon + " in hand, "
+                                : "armed with " + Article(state.primaryWeapon) + " " + state.primaryWeapon + " slung on back, ";
+                            p.Append(weapStyle);
+                        }
+                        else if (state.isViolentIncapable)
+                        {
+                            p.Append("unarmed, peaceful stance, ");
+                        }
+                    }
+                    else if (poseChoice == 3)
+                    {
+                        p.Append("with their " + helmet + " slung around their neck by its strap, ");
+                        if (!string.IsNullOrEmpty(state.primaryWeapon))
+                        {
+                            string weapStyle = state.weaponType == "melee"
+                                ? "holding " + Article(state.primaryWeapon) + " " + state.primaryWeapon + " in hand, "
+                                : "armed with " + Article(state.primaryWeapon) + " " + state.primaryWeapon + " slung on back, ";
+                            p.Append(weapStyle);
+                        }
+                        else if (state.isViolentIncapable)
+                        {
+                            p.Append("unarmed, peaceful stance, ");
+                        }
+                    }
+                    else if (poseChoice == 4 && hasRanged)
+                    {
+                        p.Append("resting one hand on their " + state.primaryWeapon + " with their " + helmet + " hanging off the weapon barrel, ");
+                    }
+                }
             }
-            else if (state.isViolentIncapable)
+            else
             {
-                p.Append("unarmed, peaceful stance, ");
+                // No helmet/hat
+                if (!string.IsNullOrEmpty(state.primaryWeapon))
+                {
+                    string weapStyle = state.weaponType == "melee"
+                        ? "holding " + Article(state.primaryWeapon) + " " + state.primaryWeapon + " in hand, "
+                        : "armed with " + Article(state.primaryWeapon) + " " + state.primaryWeapon + " slung on back, ";
+                    p.Append(weapStyle);
+                }
+                else if (state.isViolentIncapable)
+                {
+                    p.Append("unarmed, peaceful stance, ");
+                }
             }
 
-            if (state.apparel.Count > 0)
+            if (!string.IsNullOrEmpty(apparelLine))
             {
-                string gearLine = BuildGearLine(state);
-                if (!string.IsNullOrEmpty(gearLine))
-                    p.Append(gearLine + ", ");
+                p.Append(apparelLine + ", ");
             }
         }
 
-        private static string BuildGearLine(PawnState state)
+        private static string BuildGearLine(PawnState state, out string helmet)
         {
-            // Apparel strings already include quality + stuff + colour + label + damage
-            // (built in PawnStateExtractor) — no name-based material-guessing needed.
+            helmet = null;
+            if (state.apparel == null || state.apparel.Count == 0) return "";
+
+            List<string> remainingApparel = new List<string>();
+            foreach (var app in state.apparel)
+            {
+                if (IsHeadgearLabel(app))
+                {
+                    helmet = app;
+                }
+                else
+                {
+                    remainingApparel.Add(app);
+                }
+            }
+
+            string apparelDesc = string.Join(", ", remainingApparel.ToArray());
+            if (string.IsNullOrEmpty(apparelDesc)) return "";
+
             if (state.apparelStyle == "heavily armored")
             {
-                int max = Math.Min(state.apparel.Count, 3);
-                string[] pieces = new string[max];
-                for (int i = 0; i < max; i++) pieces[i] = state.apparel[i];
-                return "wearing heavy armor: " + string.Join(", ", pieces);
+                return "wearing heavy armor: " + apparelDesc;
             }
             if (state.apparelStyle == "noble robes")
             {
-                int max = Math.Min(state.apparel.Count, 3);
-                string[] pieces = new string[max];
-                for (int i = 0; i < max; i++) pieces[i] = state.apparel[i];
-                return "wearing ornate noble regalia: " + string.Join(", ", pieces);
+                return "wearing ornate noble regalia: " + apparelDesc;
             }
             if (state.apparelStyle == "tribal")
             {
-                int max = Math.Min(state.apparel.Count, 3);
-                string[] pieces = new string[max];
-                for (int i = 0; i < max; i++) pieces[i] = state.apparel[i];
-                return "wearing tribal garb: " + string.Join(", ", pieces);
+                return "wearing tribal garb: " + apparelDesc;
             }
-            if (state.apparel.Count > 0)
+            return "wearing " + apparelDesc;
+        }
+
+        private static bool IsHeadgearLabel(string label)
+        {
+            if (string.IsNullOrEmpty(label)) return false;
+            string l = label.ToLower();
+            return l.Contains("helmet") || l.Contains("hat") || l.Contains("hood") || 
+                   l.Contains("cap") || l.Contains("cowl") || l.Contains("mask") || 
+                   l.Contains("tuque") || l.Contains("crown") || l.Contains("visor") || 
+                   l.Contains("goggles") || l.Contains("veil");
+        }
+
+        // isAddictionProp is set true when the prop is driven by an addiction (vs. a trait).
+        // The caller passes this into AppendHealthModifiers to suppress the redundant
+        // addiction-visual descriptor (e.g. skip "bloodshot eyes" when we already show a beer mug).
+        private static bool AppendCuteProps(StringBuilder p, PawnState state, out bool isAddictionProp)
+        {
+            isAddictionProp = false;
+
+            bool hasAlcohol   = false;
+            bool hasSmokeleaf = false;
+
+            if (state.addictions != null)
             {
-                int max = Math.Min(state.apparel.Count, 3);
-                string[] pieces = new string[max];
-                for (int i = 0; i < max; i++) pieces[i] = state.apparel[i];
-                return "wearing " + string.Join(", ", pieces);
+                foreach (string addict in state.addictions)
+                {
+                    string al = addict.ToLower();
+                    if (al.Contains("alcohol"))   hasAlcohol   = true;
+                    if (al.Contains("smokeleaf")) hasSmokeleaf = true;
+                }
             }
-            return "";
+
+            bool isKind = false;
+            foreach (string trait in state.traits)
+                if (trait.ToLower().Contains("kind")) { isKind = true; break; }
+
+            if (hasSmokeleaf)
+            {
+                p.Append("holding and smoking a stylized joint with a gentle wisp of pixelated smoke, ");
+                isAddictionProp = true;
+                return true;
+            }
+            if (hasAlcohol)
+            {
+                p.Append("holding a frosty foaming glass mug of beer, ");
+                isAddictionProp = true;
+                return true;
+            }
+            if (isKind)
+            {
+                p.Append("holding a cute colorful round lollipop, ");
+                return true;  // trait-based, isAddictionProp stays false
+            }
+            return false;
+        }
+
+        private static void AppendSkillProps(StringBuilder p, PawnState state, bool alreadyHoldingProp)
+        {
+            if (alreadyHoldingProp) return;
+
+            string skill = (state.topSkill1 ?? "").ToLower();
+            if (string.IsNullOrEmpty(skill)) return;
+
+            if (skill.Contains("plant"))
+            {
+                p.Append("holding a cute green potted seedling, ");
+            }
+            else if (skill.Contains("medicine"))
+            {
+                p.Append("holding a retro red medical kit with a white cross, ");
+            }
+            else if (skill.Contains("shooting"))
+            {
+                p.Append("looking alert in a cool tactical marksman ready-stance, ");
+            }
+            else if (skill.Contains("melee"))
+            {
+                p.Append("standing in a cool combat-ready swordfighter stance, ");
+            }
+            else if (skill.Contains("mining"))
+            {
+                p.Append("resting a heavy steel pickaxe over one shoulder, ");
+            }
+            else if (skill.Contains("cooking"))
+            {
+                p.Append("holding a wooden ladle and a bowl of hot soup, ");
+            }
+            else if (skill.Contains("animal"))
+            {
+                p.Append("with a tiny cute brown squirrel sitting on their shoulder, ");
+            }
+            else if (skill.Contains("art"))
+            {
+                p.Append("holding a wooden paintbrush and a paint palette, ");
+            }
+            else if (skill.Contains("research") || skill.Contains("intellect"))
+            {
+                p.Append("holding a thick open leather-bound book, ");
+            }
+            else if (skill.Contains("construct"))
+            {
+                p.Append("holding a metal hammer and a blueprint roll, ");
+            }
+            else if (skill.Contains("crafting"))
+            {
+                p.Append("holding a heavy blacksmith hammer, ");
+            }
+            else if (skill.Contains("social"))
+            {
+                p.Append("holding a rolled-up treaty document with a wax seal, ");
+            }
         }
 
         // ──────────────────────────────────────────────────────────────────────────
         // EXPRESSION / MOOD
         // ──────────────────────────────────────────────────────────────────────────
 
-        private static string GetExpression(PawnState state)
+        private static string GetExpression(PawnState state, AIPortraitsSettings settings)
         {
-            if (state.isSleeping)
-                return "eyes peacefully closed, serene sleeping expression";
+            bool forceOpen = settings == null || settings.forceOpenEyes;
+            string prefix = forceOpen ? "eyes open, " : "";
 
-            // Fleeing — overrides mood; covers ranged-flee jobs without a full mental break
-            if (state.isFleeing)
-                return "panicked fleeing expression, wide terrified eyes, mouth open in fear, glancing back over shoulder";
-
-            if (!string.IsNullOrEmpty(state.mentalState))
-            {
-                string s = state.mentalState.ToLower();
-                if (s.Contains("berserk") || s.Contains("rage") || s.Contains("kill"))
-                    return "screaming with berserker rage, bloodshot eyes wide, murderous expression, teeth bared, veins on temples";
-                if (s.Contains("wander") || s.Contains("break") || s.Contains("sob"))
-                    return "weeping openly, tears streaming, shattered hollow expression";
-                if (s.Contains("pyro") || s.Contains("fire"))
-                    return "manic gleeful grin, wild wide eyes reflecting flames, unhinged pyromaniac expression";
-                if (s.Contains("flee") || s.Contains("panic"))
-                    return "terrified wide eyes, mouth open in silent scream, panicked flight expression";
-                if (s.Contains("binge") || s.Contains("food"))
-                    return "glazed satisfied eyes, crumbs on lips, content overeating expression";
-                return "hollow haunted eyes, thousand-yard stare, vacant manic expression";
-            }
-
+            // Focus on clean, composed, JRPG/anime-style expressions with open/desired eyes.
             foreach (string trait in state.traits)
             {
                 string tl = trait.ToLower();
-                if (tl.Contains("psychopath"))                          return "eyes open with cold flat emotionless gaze, slight disturbing smile";
-                if (tl.Contains("abrasive"))                            return "eyes open with sneering aggressive expression, challenging stare";
-                if (tl.Contains("kind"))                                return "warm open eyes, soft empathetic smile";
-                if (tl.Contains("iron-willed") || tl.Contains("tough")) return "eyes open with resolute stoic expression, iron-set jaw, determined unflinching gaze";
-                if (tl.Contains("neurotic"))                            return "eyes open with anxious tense expression, nervous darting gaze";
-                if (tl.Contains("brawler"))                             return "eyes open with cocky confident smirk, battle-ready stance";
-                if (tl.Contains("nimble") || tl.Contains("quick"))     return "eyes wide open, alert focused sharp-eyed expression";
+                if (tl.Contains("psychopath"))                          return prefix + "calm neutral expression, cool emotionless gaze";
+                if (tl.Contains("abrasive"))                            return prefix + "steady confident expression, sharp intense stare";
+                if (tl.Contains("kind"))                                return forceOpen ? "eyes open, soft gentle smile, warm kind eyes" : "smiling with eyes closed in a warm gentle expression";
+                if (tl.Contains("iron-willed") || tl.Contains("tough")) return prefix + "resolute composed expression, determined unflinching gaze";
+                if (tl.Contains("neurotic"))                            return prefix + "alert focused expression, steady gaze";
+                if (tl.Contains("brawler"))                             return prefix + "confident smirk, battle-ready composed look";
+                if (tl.Contains("nimble") || tl.Contains("quick"))     return prefix + "focused alert expression, sharp clear eyes";
             }
 
-            if (state.moodLevel > 0.85f) return "eyes wide open and bright with pride, warm confident smile, relaxed victorious expression";
-            if (state.moodLevel > 0.65f) return "eyes open, steady and determined gaze, calm composed expression";
-            if (state.moodLevel < 0.20f) return "eyes open but sunken and hollow, deep frown, utterly defeated exhausted expression";
-            if (state.moodLevel < 0.40f) return "eyes open, heavy-lidded and world-weary, furrowed brow";
-            return "eyes open and alert, focused forward gaze, stoic neutral expression";
+            if (state.moodLevel > 0.65f) return prefix + "calm gentle smile, warm confident eyes";
+            if (state.moodLevel < 0.35f) return prefix + "serious stoic expression, calm focused gaze";
+            return prefix + "composed neutral expression, calm steady gaze";
         }
 
         // ──────────────────────────────────────────────────────────────────────────
         // HEALTH MODIFIERS
         // ──────────────────────────────────────────────────────────────────────────
 
-        private static void AppendHealthModifiers(StringBuilder p, PawnState state)
+        // skipAddictionVisuals: when true, skip rendering addiction-specific face signs
+        // because a cute prop for that addiction was already appended (avoids contradiction).
+        private static void AppendHealthModifiers(StringBuilder p, PawnState state, bool skipAddictionVisuals = false)
         {
-            if (state.isBloodloss)
-                p.Append("pallid bloodless complexion, blood stains on clothing, blood trickling from wounds, ");
-            else if (state.isSick)
-                p.Append("pale sickly complexion, dark under-eyes, feverish sheen on skin, ");
-
-            if (state.isInPain && !state.isSleeping)
-            {
-                if (state.painLevel > 0.7f)
-                    p.Append("grimacing in severe agony, clutching wounds, desperate pained expression, ");
-                else
-                    p.Append("grimacing in pain, tense jaw, ");
-            }
-
-            if (state.isBurning || state.isOnFire)
-                p.Append("embers and smoke rising from singed clothing, scorched skin, ");
+            // Optimize for a beautiful, clean, non-distorted portrait drawing.
+            // Exclude bloodloss, sickness, severe grimacing, starvation, and fire/burning to keep the portrait looking clean and high-quality.
 
             if (state.headInjuries.Count > 0)
             {
                 if (state.headInjuries.Count > 1)
-                    p.Append("multiple facial scars and head wounds, dried blood on face, ");
+                    p.Append("clean stylized battle scars on face, ");
                 else
-                    p.Append(state.headInjuries[0] + ", ");
+                    p.Append("stylized face scar, ");
             }
 
             if (state.bodyInjuries.Count > 0)
-                p.Append("visible body wounds and battle scars on torso, ");
+                p.Append("clean stylized battle scars on torso, ");
 
             if (state.missingParts.Count > 0)
                 p.Append(string.Join(", ", state.missingParts.GetRange(0, Math.Min(state.missingParts.Count, 2)).ToArray()) + ", ");
@@ -431,7 +636,6 @@ Eyes: The character's eyes must be OPEN and clearly visible by default. Only ren
             if (state.implants.Count > 0)
             {
                 // Classify the implant set: peg/wooden, bionic, archotech, simple-prosthetic.
-                // Each has a very different visual signature and the AI needs the right cue.
                 bool hasPeg = false, hasWooden = false, hasBionic = false,
                      hasArcho = false, hasSimple = false;
                 foreach (string imp in state.implants)
@@ -445,7 +649,6 @@ Eyes: The character's eyes must be OPEN and clearly visible by default. Only ren
                 }
 
                 // List the actual implants by name so the AI renders the right thing
-                // (e.g. "two peg legs" instead of generic "cybernetic implants").
                 p.Append("with " + string.Join(" and ", state.implants.ToArray()));
 
                 // Append a visual descriptor matching the most striking implant type
@@ -460,12 +663,6 @@ Eyes: The character's eyes must be OPEN and clearly visible by default. Only ren
                 p.Append(", ");
             }
 
-            // Body condition (bucketed — only shows when actually bad)
-            if (state.isExhausted)
-                p.Append("sleep-deprived, dark sunken circles under eyes, weary slack posture, ");
-            if (state.isMalnourished)
-                p.Append("malnourished, gaunt hollow cheeks, sharp collarbones, ");
-
             // Chronic cosmetic conditions
             foreach (string cc in state.chronicConditions)
                 p.Append(cc + ", ");
@@ -474,7 +671,9 @@ Eyes: The character's eyes must be OPEN and clearly visible by default. Only ren
             foreach (string ps in state.permanentScars)
                 p.Append(ps + ", ");
 
-            // Drug addictions — each has distinctive visual signs
+            // Drug addictions — each has distinctive visual signs.
+            // Skip alcohol/smokeleaf if AppendCuteProps already rendered a prop for them
+            // (avoids contradictory "holding a beer mug" + "bloodshot eyes" in same prompt).
             foreach (string addict in state.addictions)
             {
                 string al = addict.ToLower();
@@ -482,8 +681,8 @@ Eyes: The character's eyes must be OPEN and clearly visible by default. Only ren
                 else if (al.Contains("flake"))     p.Append("flake addict, sunken cheeks, dilated pupils, ");
                 else if (al.Contains("go-juice"))  p.Append("go-juice user, wired tense gaze, faint veining on temples, ");
                 else if (al.Contains("wake-up"))   p.Append("wake-up addict, jittery alert stare, ");
-                else if (al.Contains("smokeleaf")) p.Append("smokeleaf user, yellowed fingertips, hazy laid-back eyes, ");
-                else if (al.Contains("alcohol"))   p.Append("alcoholic, ruddy nose with broken capillaries, bloodshot eyes, ");
+                else if (al.Contains("smokeleaf") && !skipAddictionVisuals) p.Append("smokeleaf user, yellowed fingertips, hazy laid-back eyes, ");
+                else if (al.Contains("alcohol")   && !skipAddictionVisuals) p.Append("alcoholic, ruddy nose with broken capillaries, bloodshot eyes, ");
                 else if (al.Contains("psychite"))  p.Append("psychite tea drinker, jittery focus, ");
             }
         }
@@ -492,7 +691,7 @@ Eyes: The character's eyes must be OPEN and clearly visible by default. Only ren
         // LORE FLAVOR (traits, ideology accent, skill aura)
         // ──────────────────────────────────────────────────────────────────────────
 
-        private static void AppendLoreFlavor(StringBuilder p, PawnState state)
+        private static void AppendLoreFlavor(StringBuilder p, PawnState state, AIPortraitsSettings settings)
         {
             if (state.isPsychicSensitive)
                 p.Append("faint psychic energy aura radiating from the character, subtle shimmering halo, ");
@@ -500,7 +699,7 @@ Eyes: The character's eyes must be OPEN and clearly visible by default. Only ren
             if (state.isViolentIncapable)
                 p.Append("gentle peaceful aura, soft warm light around the figure, ");
 
-            if (!string.IsNullOrEmpty(state.ideologyRole))
+            if (settings.includeIdeology && !string.IsNullOrEmpty(state.ideologyRole))
             {
                 string role = state.ideologyRole.ToLower();
                 if (role.Contains("archon") || role.Contains("high"))
@@ -514,7 +713,8 @@ Eyes: The character's eyes must be OPEN and clearly visible by default. Only ren
             }
 
             // Ideology name — subtle faith descriptor, only if it's a player-named ideo (not generic)
-            if (!string.IsNullOrEmpty(state.ideologyName) &&
+            if (settings.includeIdeology &&
+                !string.IsNullOrEmpty(state.ideologyName) &&
                 !state.ideologyName.ToLower().StartsWith("ideo_") &&  // skip default-generated names
                 state.ideologyName.Length < 60)
             {
@@ -522,7 +722,7 @@ Eyes: The character's eyes must be OPEN and clearly visible by default. Only ren
             }
 
             // Rim light from ideology color — applies to all styles since it's on the character, not the background
-            if (!string.IsNullOrEmpty(state.favoriteColor))
+            if (settings.includeRimLighting && !string.IsNullOrEmpty(state.favoriteColor))
                 p.Append("subtle " + state.favoriteColor + " rim light on the character, ");
 
             // ── EXTENDED FLAVOR ────────────────────────────────────────────────────
@@ -593,7 +793,8 @@ Eyes: The character's eyes must be OPEN and clearly visible by default. Only ren
         public static string CompileNegativePrompt(AIPortraitsSettings settings)
         {
             string baseNeg = settings.baseNegativePrompt;
-            return baseNeg + ", photorealistic photograph, blurry, 3d render, anti-aliasing, multiple characters in one frame, solid background, gradient background, textured background, complex background, any non-transparent background behind the character, deformed anatomy, bad anatomy, extra limbs, watermark, text, signature";
+            string suffix  = "photorealistic photograph, blurry, 3d render, anti-aliasing, multiple characters in one frame, solid background, gradient background, textured background, complex background, any non-transparent background behind the character, deformed anatomy, bad anatomy, extra limbs, watermark, text, signature";
+            return string.IsNullOrEmpty(baseNeg) ? suffix : baseNeg + ", " + suffix;
         }
 
         // ──────────────────────────────────────────────────────────────────────────
@@ -622,6 +823,132 @@ Eyes: The character's eyes must be OPEN and clearly visible by default. Only ren
             if (string.IsNullOrEmpty(word)) return "a";
             char c = char.ToLower(word[0]);
             return (c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u') ? "an" : "a";
+        }
+
+        // ──────────────────────────────────────────────────────────────────────────
+        // LLM PROMPT GENERATION — helpers used by AsyncAIClient when useLLMPrompt=true
+        // ──────────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Serialises a PawnState into a concise plain-English data sheet that is
+        /// sent to Gemini Flash as the user message. The LLM then writes the final
+        /// image-generation prompt from this structured description.
+        /// </summary>
+        public static string CompilePawnStateDescription(PawnState state, AIPortraitsSettings settings)
+        {
+            if (state == null) return "";
+            var sb = new StringBuilder();
+
+            sb.AppendLine("Name: " + state.name);
+            sb.AppendLine("Age: " + state.bioAge + ", Gender: " + state.gender);
+
+            string race = state.xenotype ?? "human";
+            if (!string.IsNullOrEmpty(state.xenotypeName)) race += " (" + state.xenotypeName + ")";
+            sb.AppendLine("Race: " + race);
+
+            if (!string.IsNullOrEmpty(state.skinColor))  sb.AppendLine("Skin: " + state.skinColor);
+            if (!string.IsNullOrEmpty(state.hairStyle) && state.hairStyle != "bald")
+                sb.AppendLine("Hair: " + state.hairColor + " " + state.hairStyle);
+            else if (state.hairStyle == "bald")
+                sb.AppendLine("Hair: bald/shaved head");
+            if (!string.IsNullOrEmpty(state.beardStyle)) sb.AppendLine("Beard: " + state.beardStyle);
+            if (!string.IsNullOrEmpty(state.bodyType))   sb.AppendLine("Build: " + state.bodyType);
+
+            if (state.traits.Count > 0)
+                sb.AppendLine("Traits: " + string.Join(", ", state.traits.ToArray()));
+
+            float moodPct = state.moodLevel * 100f;
+            string moodWord = state.moodLevel > 0.65f ? "happy" : state.moodLevel < 0.35f ? "unhappy" : "neutral";
+            sb.AppendLine("Mood: " + moodPct.ToString("F0") + "% (" + moodWord + ")");
+            if (!string.IsNullOrEmpty(state.mentalState))
+                sb.AppendLine("Mental state: " + state.mentalState);
+
+            if (!string.IsNullOrEmpty(state.topSkill1))  sb.AppendLine("Top skill: " + state.topSkill1);
+            if (!string.IsNullOrEmpty(state.topSkill2))  sb.AppendLine("Second skill: " + state.topSkill2);
+            if (state.isViolentIncapable)                sb.AppendLine("Is incapable of violence (pacifist)");
+
+            if (!string.IsNullOrEmpty(state.primaryWeapon))
+                sb.AppendLine("Weapon: " + state.primaryWeapon + " (" + state.weaponType + ")");
+            if (state.apparel.Count > 0)
+                sb.AppendLine("Apparel: " + string.Join(", ", state.apparel.ToArray()));
+
+            if (!string.IsNullOrEmpty(state.adulthoodTitle))
+                sb.AppendLine("Background: " + state.adulthoodTitle);
+
+            if (settings.includeIdeology)
+            {
+                if (!string.IsNullOrEmpty(state.ideologyName))  sb.AppendLine("Ideology: " + state.ideologyName);
+                if (!string.IsNullOrEmpty(state.ideologyRole))  sb.AppendLine("Ideology role: " + state.ideologyRole);
+                if (!string.IsNullOrEmpty(state.favoriteColor)) sb.AppendLine("Ideology color: " + state.favoriteColor);
+            }
+
+            if (state.implants.Count > 0)
+                sb.AppendLine("Implants / prosthetics: " + string.Join(", ", state.implants.ToArray()));
+            if (state.headInjuries.Count > 0)
+                sb.AppendLine("Head injuries / scars: " + string.Join(", ", state.headInjuries.ToArray()));
+            if (state.bodyInjuries.Count > 0)
+                sb.AppendLine("Body injuries / scars: " + string.Join(", ", state.bodyInjuries.ToArray()));
+            if (state.addictions.Count > 0)
+                sb.AppendLine("Addictions: " + string.Join(", ", state.addictions.ToArray()));
+            if (state.chronicConditions.Count > 0)
+                sb.AppendLine("Chronic conditions: " + string.Join(", ", state.chronicConditions.ToArray()));
+            if (state.cosmeticGenes.Count > 0)
+                sb.AppendLine("Special appearance genes: " + string.Join(", ", state.cosmeticGenes.ToArray()));
+
+            if (state.isHemogenic)       sb.AppendLine("Special: sanguophage vampire (blood-red eyes, pale fangs)");
+            if (!string.IsNullOrEmpty(state.royalTitle)) sb.AppendLine("Royal title: " + state.royalTitle);
+            if (state.psylinkLevel > 0)  sb.AppendLine("Psylink level: " + state.psylinkLevel + "/6");
+            if (state.pregnancyTrimester > 0) sb.AppendLine("Pregnant (trimester " + state.pregnancyTrimester + ")");
+            if (state.hasSpouse)         sb.AppendLine("Has a spouse");
+            if (state.isSlave)           sb.AppendLine("Is a slave (slave collar visible)");
+            if (state.isPrisoner)        sb.AppendLine("Is a prisoner");
+            if (state.isGhoul)           sb.AppendLine("Is a ghoul (pallid, hollow, undead)");
+            if (state.isInhumanized)     sb.AppendLine("Is void-touched / inhumanized (disturbing serene void gaze)");
+
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Returns the Gemini Flash system prompt for the given art style.
+        /// This tells the model exactly what kind of image-generation prompt to produce.
+        /// </summary>
+        public static string GetLLMSystemPrompt(PortraitStyle style)
+        {
+            string styleDesc;
+            switch (style)
+            {
+                case PortraitStyle.Realistic_Korean:
+                    styleDesc = "semi-realistic Korean manhwa / anime (Limbus Company JRPG): " +
+                                "painterly brushwork, vibrant warm/cool shadow contrast, sharp clean line art, " +
+                                "detailed hair shading, soft but expressive facial features";
+                    break;
+                case PortraitStyle.Realistic_Western:
+                    styleDesc = "realistic Western dark fantasy oil painting (Path of Exile aesthetic): " +
+                                "dramatic chiaroscuro lighting, rich deep saturated colors, " +
+                                "detailed armor and costume rendering, painterly brushwork";
+                    break;
+                case PortraitStyle.DotPixel:
+                    styleDesc = "high-quality 16-bit retro JRPG pixel art (Tactics Ogre / Final Fantasy Tactics): " +
+                                "sharp deliberate pixel grid, zero anti-aliasing, thin dark outlines, " +
+                                "2-3 band flat cel-shading, limited vibrant color palette, cute anime facial features";
+                    break;
+                default:
+                    styleDesc = "semi-realistic anime RPG character portrait";
+                    break;
+            }
+
+            return
+                "You are an expert AI image prompt engineer for a RimWorld character portrait generator.\n" +
+                "Given a character data sheet, write one optimized image generation prompt for a bust-up portrait.\n\n" +
+                "TARGET ART STYLE: " + styleDesc + "\n\n" +
+                "RULES:\n" +
+                "1. Write a comma-separated descriptor list — NOT prose sentences.\n" +
+                "2. Include: art style keywords, physical appearance, expression, visible weapon/apparel, personality cues.\n" +
+                "3. Resolve contradictions — if the pawn has an addiction, pick EITHER a cute prop OR degraded-addict visual, not both.\n" +
+                "4. Let your creativity guide the pose, composition, and camera angle to create a premium, visually stunning portrait. You can decide how they style their headgear/helmet (e.g. worn on head, slung around neck, held under arm, or hanging off a shoulder/weapon) or whether they wear face coverings. You may also include creative themed props or items that match their traits/skills, or choose to focus on a clean, powerful close-up character shot.\n" +
+                "5. Always end with: transparent PNG background, alpha channel transparency, no background elements, bust-up framing.\n" +
+                "6. Keep total output under 220 words.\n" +
+                "7. Output ONLY the prompt — no explanations, no headers, no quotes.";
         }
     }
 }

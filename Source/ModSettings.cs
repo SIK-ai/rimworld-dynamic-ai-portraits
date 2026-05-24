@@ -40,6 +40,17 @@ namespace AIPortraits
         public float cfgScale = 7f;
         public int steps = 20;
 
+        public bool forceOpenEyes = true;
+        public bool allowCuteProps = true;
+        public bool includeIdeology = true;
+        public bool includeRimLighting = true;
+
+        // LLM-assisted prompt generation (Gemini Flash)
+        public bool   useLLMPrompt = false;
+        public string llmApiKey    = "";
+
+        private Vector2 scrollPosition = Vector2.zero;
+
         public Dictionary<string, string> activePortraits = new Dictionary<string, string>();
 
         public override void ExposeData()
@@ -48,12 +59,18 @@ namespace AIPortraits
             Scribe_Values.Look(ref backendType, "backendType", BackendType.Pollinations);
             Scribe_Values.Look(ref apiKey, "apiKey", "");
             Scribe_Values.Look(ref apiUrl, "apiUrl", "https://image.pollinations.ai");
-            Scribe_Values.Look(ref modelName, "modelName", "flux");
+            Scribe_Values.Look(ref modelName, "modelName", "sana");
             Scribe_Values.Look(ref portraitStyle, "portraitStyle", PortraitStyle.Realistic_Korean);
             Scribe_Values.Look(ref baseStylePrompt, "baseStylePrompt", "");
             Scribe_Values.Look(ref baseNegativePrompt, "baseNegativePrompt", "");
             Scribe_Values.Look(ref cfgScale, "cfgScale", 7f);
             Scribe_Values.Look(ref steps, "steps", 20);
+            Scribe_Values.Look(ref forceOpenEyes,     "forceOpenEyes",    true);
+            Scribe_Values.Look(ref allowCuteProps,     "allowCuteProps",   true);
+            Scribe_Values.Look(ref includeIdeology,    "includeIdeology",  true);
+            Scribe_Values.Look(ref includeRimLighting, "includeRimLighting", true);
+            Scribe_Values.Look(ref useLLMPrompt,       "useLLMPrompt",     false);
+            Scribe_Values.Look(ref llmApiKey,          "llmApiKey",        "");
             Scribe_Collections.Look(ref activePortraits, "activePortraits", LookMode.Value, LookMode.Value);
 
             if (activePortraits == null)
@@ -61,12 +78,14 @@ namespace AIPortraits
         }
 
         // UI states (not serialized)
-        private int activeTab = 0; // 0 = API Settings, 1 = Pawn Gallery
+        private int activeTab = 0; // 0 = API Settings, 1 = Pawn Gallery, 2 = Prompt Preview
         private bool showAdvanced = false;
         private Vector2 leftScrollPosition = Vector2.zero;
         private Vector2 rightScrollPosition = Vector2.zero;
         private Vector2 vibeScrollPosition = Vector2.zero;
+        private Vector2 promptScrollPosition = Vector2.zero;
         private Pawn selectedPawn = null;
+        private Pawn promptTabSelectedPawn = null;
 
         public class SavedPortrait
         {
@@ -165,8 +184,9 @@ namespace AIPortraits
 
             Rect tabRect = new Rect(inRect.x, inRect.y + TitleBarPadding, inRect.width, 35f);
             List<TabRecord> tabs = new List<TabRecord>();
-            tabs.Add(new TabRecord("API Settings", () => { activeTab = 0; }, activeTab == 0));
-            tabs.Add(new TabRecord("Pawn Gallery", () => { activeTab = 1; }, activeTab == 1));
+            tabs.Add(new TabRecord("API Settings",   () => { activeTab = 0; }, activeTab == 0));
+            tabs.Add(new TabRecord("Pawn Gallery",   () => { activeTab = 1; }, activeTab == 1));
+            tabs.Add(new TabRecord("Prompt Preview", () => { activeTab = 2; }, activeTab == 2));
 
             TabDrawer.DrawTabs(tabRect, tabs);
 
@@ -175,20 +195,22 @@ namespace AIPortraits
             float mainHeight = inRect.height - TitleBarPadding - 40f;
             Rect mainRect = new Rect(inRect.x, mainTop, inRect.width, mainHeight);
 
-            if (activeTab == 0)
-            {
-                DrawApiSettings(mainRect);
-            }
-            else if (activeTab == 1)
-            {
-                DrawPawnGallery(mainRect);
-            }
+            if      (activeTab == 0) DrawApiSettings(mainRect);
+            else if (activeTab == 1) DrawPawnGallery(mainRect);
+            else if (activeTab == 2) DrawPromptPreview(mainRect);
         }
 
         private void DrawApiSettings(Rect inRect)
         {
+            float viewHeight = 550f;
+            if (useLLMPrompt) viewHeight += 60f;
+            if (showAdvanced) viewHeight += 320f;
+
+            Rect viewRect = new Rect(0f, 0f, inRect.width - 18f, viewHeight);
+            Widgets.BeginScrollView(inRect, ref scrollPosition, viewRect);
+
             Listing_Standard listing = new Listing_Standard();
-            listing.Begin(inRect);
+            listing.Begin(viewRect);
 
             // ── PORTRAIT STYLE ────────────────────────────────────────────────────
             listing.Label("Portrait Art Style");
@@ -333,6 +355,67 @@ namespace AIPortraits
             listing.GapLine();
             listing.Gap(6f);
 
+            // ── PORTRAIT DETAILS SETTINGS ─────────────────────────────────────────
+            listing.Label("Portrait Details Settings");
+            listing.Gap(4f);
+            listing.CheckboxLabeled("Force Open Eyes", ref forceOpenEyes, "Always command the AI to keep the pawn's eyes open (prevents sleeping/contemplative closed-eye generation by default).");
+            listing.CheckboxLabeled("Allow Cute & Skill Props", ref allowCuteProps, "Incorporate trait-based cute items (lollipops, joint, beer) and skill-based items (potted plants, book, medical kits) in hands.");
+            listing.CheckboxLabeled("Include Ideology details", ref includeIdeology, "Include pawn's ideology role (e.g. Moral Guide) and follower description/iconography.");
+            listing.CheckboxLabeled("Include Ideology Rim Lighting", ref includeRimLighting, "Separate the character silhouette from the background using a rim light styled with their favorite/ideoligion color.");
+            listing.Gap(8f);
+
+            listing.GapLine();
+            listing.Gap(6f);
+
+            // ── AI PROMPT GENERATION ──────────────────────────────────────────────
+            listing.Label("AI Prompt Generation");
+            listing.Gap(4f);
+            listing.CheckboxLabeled(
+                "Use Gemini Flash for prompt generation",
+                ref useLLMPrompt,
+                "Sends pawn metadata to Google Gemini Flash, which writes a richer, " +
+                "more coherent image prompt instead of the built-in template compiler. " +
+                "Resolves contradictions (e.g. addiction props vs. degraded-face descriptors) automatically. " +
+                "Requires a Google AI Studio API key (free). Falls back to the template if the call fails.");
+
+            if (useLLMPrompt)
+            {
+                listing.Gap(6f);
+
+                // If using Imagen the same key works for Gemini Flash — show a green note.
+                bool canReuseImagenKey = (backendType == BackendType.GoogleImagen && !string.IsNullOrEmpty(apiKey));
+                if (canReuseImagenKey)
+                {
+                    Rect reuseBox = listing.GetRect(30f);
+                    Widgets.DrawBoxSolid(reuseBox, new Color(0.05f, 0.18f, 0.05f, 0.8f));
+                    GUI.color = new Color(1f, 1f, 1f, 0.15f);
+                    Widgets.DrawBox(reuseBox, 1);
+                    GUI.color = Color.white;
+                    Text.Font   = GameFont.Tiny;
+                    GUI.color   = new Color(0.5f, 0.95f, 0.5f);
+                    Widgets.Label(reuseBox.ContractedBy(5f), "\u2713  Using your Imagen API key for Gemini Flash \u2014 no extra key needed.");
+                    GUI.color   = Color.white;
+                    Text.Font   = GameFont.Small;
+                }
+                else
+                {
+                    listing.Label("Gemini Flash API Key  (Google AI Studio):");
+                    llmApiKey = listing.TextEntry(llmApiKey);
+                    listing.Gap(2f);
+                    Rect hintRect = listing.GetRect(20f);
+                    Text.Font = GameFont.Tiny;
+                    GUI.color = new Color(0.55f, 0.55f, 0.55f);
+                    Widgets.Label(hintRect, "  Free key at aistudio.google.com/app/apikey  \u2022  Your Imagen key also works here.");
+                    GUI.color = Color.white;
+                    Text.Font = GameFont.Small;
+                }
+                listing.Gap(4f);
+            }
+
+            listing.Gap(8f);
+            listing.GapLine();
+            listing.Gap(6f);
+
             // ── ADVANCED ──────────────────────────────────────────────────────────
             Rect advHeaderRect = listing.GetRect(26f);
             string advLabel = (showAdvanced ? "▼" : "▶") + "  Advanced Settings";
@@ -366,6 +449,7 @@ namespace AIPortraits
             }
 
             listing.End();
+            Widgets.EndScrollView();
         }
 
         private bool IsInjuredOrSick(Pawn p)
@@ -686,7 +770,20 @@ namespace AIPortraits
             if (state != null)
             {
                 float viewWidth = vibeScrollArea.width - 16f;
-                string compiledPrompt = PromptCompiler.CompilePositivePrompt(state, this);
+                string compiledPrompt;
+                if (useLLMPrompt)
+                {
+                    compiledPrompt = "🤖 Gemini 3.1 Flash-Lite Prompt Generation is active.\n" +
+                                     "At generation time, the pawn data sheet below is sent to the LLM to write a custom prompt.\n\n" +
+                                     "--- SYSTEM INSTRUCTION (GEMINI PROMPT) ---\n" +
+                                     PromptCompiler.GetLLMSystemPrompt(portraitStyle) +
+                                     "\n\n--- PAWN DATA SHEET (LLM INPUT) ---\n" +
+                                     PromptCompiler.CompilePawnStateDescription(state, this);
+                }
+                else
+                {
+                    compiledPrompt = PromptCompiler.CompilePositivePrompt(state, this);
+                }
                 float promptHeight = Text.CalcHeight(compiledPrompt, viewWidth - 8f);
 
                 string identityText = "• Gender: " + state.gender + "\n• Age: " + state.bioAge + "\n• Body Type: " + state.bodyType + "\n• Xenotype: " + state.xenotype;
@@ -803,12 +900,8 @@ namespace AIPortraits
                 }
                 curY += 28f;
 
-                Rect promptBoxRect = new Rect(0f, curY, viewWidth, promptHeight + 10f);
-                Widgets.DrawBoxSolid(promptBoxRect, new Color(0.08f, 0.08f, 0.08f, 1f));
-                Widgets.DrawBox(promptBoxRect, 1);
-
-                Rect labelInBox = promptBoxRect.ContractedBy(4f);
-                Widgets.Label(labelInBox, compiledPrompt);
+                Rect promptBoxRect = new Rect(0f, curY, viewWidth, promptHeight + 20f);
+                Widgets.TextArea(promptBoxRect, compiledPrompt, true);
 
                 curY += promptBoxRect.height + 20f;
 
@@ -818,6 +911,146 @@ namespace AIPortraits
             {
                 Widgets.Label(vibeScrollArea, "No pawn selected or unable to retrieve state.");
             }
+        }
+
+        // ── PROMPT PREVIEW TAB ────────────────────────────────────────────────────
+        // Shows the user EXACTLY what's being sent to the image API for any colonist,
+        // so they can verify equipment, helmets, traits etc. are flowing through to
+        // the prompt. Useful for debugging "why isn't the helmet showing up?" cases.
+        private void DrawPromptPreview(Rect inRect)
+        {
+            if (Current.ProgramState != ProgramState.Playing)
+            {
+                Widgets.Label(inRect, "Please load a save game to preview prompts.");
+                return;
+            }
+
+            List<Pawn> colonists = Find.ColonistBar != null
+                ? Find.ColonistBar.GetColonistsInOrder()
+                : null;
+            if (colonists == null || colonists.Count == 0)
+            {
+                Widgets.Label(inRect, "No colonists found.");
+                return;
+            }
+
+            if (promptTabSelectedPawn == null || !colonists.Contains(promptTabSelectedPawn))
+                promptTabSelectedPawn = colonists[0];
+
+            // ── LEFT: colonist list ──────────────────────────────────────────────
+            const float SidebarW = 180f;
+            Rect sidebarRect = new Rect(inRect.x, inRect.y, SidebarW, inRect.height);
+            Widgets.DrawMenuSection(sidebarRect);
+            Rect sidebarInner = sidebarRect.ContractedBy(4f);
+            Rect leftView     = new Rect(0f, 0f, sidebarInner.width - 16f, colonists.Count * 32f);
+            Widgets.BeginScrollView(sidebarInner, ref leftScrollPosition, leftView);
+            for (int i = 0; i < colonists.Count; i++)
+            {
+                Pawn p = colonists[i];
+                Rect row = new Rect(0f, i * 32f, leftView.width, 28f);
+                if (p == promptTabSelectedPawn) GUI.color = new Color(0.5f, 0.9f, 1f);
+                if (Widgets.ButtonText(row, p.LabelShortCap))
+                    promptTabSelectedPawn = p;
+                GUI.color = Color.white;
+            }
+            Widgets.EndScrollView();
+
+            // ── RIGHT: prompt content ────────────────────────────────────────────
+            Rect rightArea = new Rect(sidebarRect.xMax + 10f, inRect.y,
+                                       inRect.width - SidebarW - 10f, inRect.height);
+            Widgets.DrawMenuSection(rightArea);
+            Rect content = rightArea.ContractedBy(10f);
+
+            PawnState state = PawnStateExtractor.ExtractState(promptTabSelectedPawn);
+            if (state == null)
+            {
+                Widgets.Label(content, "Could not extract state for " + promptTabSelectedPawn.LabelShortCap);
+                return;
+            }
+
+            string structuredDesc = PromptCompiler.CompilePawnStateDescription(state, this);
+            string compiledPrompt = PromptCompiler.CompilePositivePrompt(state, this, null);
+            string llmSystem      = useLLMPrompt ? PromptCompiler.GetLLMSystemPrompt(portraitStyle) : null;
+
+            float viewW = content.width - 18f;
+            float descH    = Text.CalcHeight(structuredDesc, viewW - 12f);
+            float promptH  = Text.CalcHeight(compiledPrompt, viewW - 12f);
+            float llmH     = llmSystem != null ? Text.CalcHeight(llmSystem, viewW - 12f) : 0f;
+            float totalH   = descH + promptH + llmH + 280f;
+
+            Rect view = new Rect(0f, 0f, viewW, totalH);
+            Widgets.BeginScrollView(content, ref promptScrollPosition, view);
+
+            float y = 0f;
+
+            // Heading
+            Text.Font = GameFont.Medium;
+            Widgets.Label(new Rect(0f, y, viewW, 28f),
+                          "Prompt preview for " + promptTabSelectedPawn.LabelShortCap);
+            y += 32f;
+            Text.Font = GameFont.Small;
+
+            // Mode indicator
+            Text.Font = GameFont.Tiny;
+            GUI.color = useLLMPrompt ? new Color(0.4f, 0.85f, 1f) : new Color(0.7f, 0.7f, 0.7f);
+            Widgets.Label(new Rect(0f, y, viewW, 18f),
+                          useLLMPrompt
+                            ? "Mode: Gemini Flash will rewrite the structured data below into a custom image prompt."
+                            : "Mode: Compiled template (LLM mode off — toggle in API Settings to enable).");
+            GUI.color = Color.white;
+            Text.Font = GameFont.Small;
+            y += 22f;
+
+            // ── 1. Structured pawn description (what the LLM receives, also human-readable)
+            Widgets.Label(new Rect(0f, y, viewW, 22f), "<b>Pawn data sheet (what's extracted):</b>");
+            y += 24f;
+            Rect copyDescBtn = new Rect(0f, y, 130f, 22f);
+            if (Widgets.ButtonText(copyDescBtn, "Copy data sheet"))
+            {
+                GUIUtility.systemCopyBuffer = structuredDesc;
+                Messages.Message("Data sheet copied to clipboard.", MessageTypeDefOf.TaskCompletion, false);
+            }
+            y += 26f;
+            Rect descBox = new Rect(0f, y, viewW, descH + 10f);
+            Widgets.DrawBoxSolid(descBox, new Color(0.05f, 0.08f, 0.12f, 1f));
+            Widgets.DrawBox(descBox, 1);
+            Widgets.Label(descBox.ContractedBy(6f), structuredDesc);
+            y += descBox.height + 16f;
+
+            // ── 2. Compiled prompt (always shown — this is what the image API receives
+            //       directly when LLM mode is OFF, or as a fallback when LLM fails)
+            Widgets.Label(new Rect(0f, y, viewW, 22f),
+                useLLMPrompt
+                    ? "<b>Compiled prompt (fallback if Gemini fails):</b>"
+                    : "<b>Compiled prompt (sent to image API):</b>");
+            y += 24f;
+            Rect copyPromptBtn = new Rect(0f, y, 130f, 22f);
+            if (Widgets.ButtonText(copyPromptBtn, "Copy prompt"))
+            {
+                GUIUtility.systemCopyBuffer = compiledPrompt;
+                Messages.Message("Compiled prompt copied to clipboard.", MessageTypeDefOf.TaskCompletion, false);
+            }
+            y += 26f;
+            Rect promptBox = new Rect(0f, y, viewW, promptH + 10f);
+            Widgets.DrawBoxSolid(promptBox, new Color(0.05f, 0.08f, 0.12f, 1f));
+            Widgets.DrawBox(promptBox, 1);
+            Widgets.Label(promptBox.ContractedBy(6f), compiledPrompt);
+            y += promptBox.height + 16f;
+
+            // ── 3. LLM system prompt (only when LLM mode is on)
+            if (llmSystem != null)
+            {
+                Widgets.Label(new Rect(0f, y, viewW, 22f),
+                              "<b>LLM system instruction (sent to Gemini Flash):</b>");
+                y += 24f;
+                Rect llmBox = new Rect(0f, y, viewW, llmH + 10f);
+                Widgets.DrawBoxSolid(llmBox, new Color(0.05f, 0.10f, 0.08f, 1f));
+                Widgets.DrawBox(llmBox, 1);
+                Widgets.Label(llmBox.ContractedBy(6f), llmSystem);
+                y += llmBox.height + 16f;
+            }
+
+            Widgets.EndScrollView();
         }
     }
 }
