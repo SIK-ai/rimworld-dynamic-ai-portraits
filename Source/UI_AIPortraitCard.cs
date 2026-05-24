@@ -148,16 +148,6 @@ namespace AIPortraits
                 }
             }
 
-            // Check if active request is running for the selected framing
-            bool isGenerating = activeRequests.ContainsKey(pawnKey);
-            if (isGenerating)
-            {
-                GenerationStatus cs;
-                if (requestStatus.TryGetValue(pawnKey, out cs)) status = cs;
-                string ce;
-                if (requestError.TryGetValue(pawnKey, out ce)) error = ce;
-            }
-
             // Find any fallback texture if we don't have the active one yet (including during generation)
             string[] backupFramings = (framing == "portrait") ? new[] { "bodyshot", "special" } :
                                       (framing == "bodyshot") ? new[] { "portrait", "special" } :
@@ -174,6 +164,38 @@ namespace AIPortraits
                     break;
                 }
                 
+                string bLockedKey = pawn.ThingID + "_" + backup + LockedSuffix;
+                if (loadedTextures.TryGetValue(bLockedKey, out bTex) && bTex != null)
+                {
+                    fallbackTex = bTex;
+                    break;
+                }
+
+                // Check activePortraits (gallery pinned path) for the backup framing
+                string bActiveKey = GetActiveKeyForFraming(pawn, backup);
+                string bLockedPath;
+                if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.activePortraits.TryGetValue(bActiveKey, out bLockedPath))
+                {
+                    if (!string.IsNullOrEmpty(bLockedPath) && System.IO.File.Exists(bLockedPath))
+                    {
+                        try
+                        {
+                            byte[] bytes = System.IO.File.ReadAllBytes(bLockedPath);
+                            Texture2D newTex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                            if (ImageConversion.LoadImage(newTex, bytes))
+                            {
+                                loadedTextures[bLockedKey] = newTex;
+                                fallbackTex = newTex;
+                                break;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.Error("[Dynamic AI Portraits] Failed to load backup locked portrait from " + bLockedPath + ": " + ex.Message);
+                        }
+                    }
+                }
+
                 string bDiskKey = GetActiveKeyForFraming(pawn, backup);
                 if (CacheManager.IsCached(bDiskKey))
                 {
@@ -187,10 +209,20 @@ namespace AIPortraits
                 }
             }
 
-            // If we are generating, return the fallback if it exists, otherwise return null
-            if (isGenerating)
+            // Check if active request is running or failed for the selected framing
+            GenerationStatus currentStatus = GenerationStatus.Idle;
+            requestStatus.TryGetValue(pawnKey, out currentStatus);
+
+            if (currentStatus == GenerationStatus.Generating)
             {
                 status = GenerationStatus.Generating;
+                requestError.TryGetValue(pawnKey, out error);
+                return fallbackTex;
+            }
+            else if (currentStatus == GenerationStatus.Error)
+            {
+                status = GenerationStatus.Error;
+                requestError.TryGetValue(pawnKey, out error);
                 return fallbackTex;
             }
 
@@ -337,7 +369,7 @@ namespace AIPortraits
                     // Auto-pin the freshly generated portrait as the active one for this pawn.
                     // Without this, a previously-locked portrait would keep taking priority in
                     // GetPortraitTexture() and the refresh would appear to do nothing visually.
-                    // Also drop the cached locked-texture so the next render reloads from disk.
+                    // Also cache the locked texture so the next render does not do a redundant disk read.
                     if (!string.IsNullOrEmpty(savedPath) && AIPortraitsMod.settings != null)
                     {
                         string activeKey = GetActiveKeyForFraming(pawn, framing);
@@ -349,8 +381,8 @@ namespace AIPortraits
                         if (loadedTextures.TryGetValue(lockedCacheKey, out oldLocked))
                         {
                             if (oldLocked != null && oldLocked != tex) UnityEngine.Object.Destroy(oldLocked);
-                            loadedTextures.Remove(lockedCacheKey);
                         }
+                        loadedTextures[lockedCacheKey] = tex;
                     }
 
                     PortraitsCache.SetDirty(pawn);
