@@ -13,7 +13,9 @@ namespace AIPortraits
         HuggingFace,
         Pollinations,
         GoogleImagen,
-        LocalA1111,   // AUTOMATIC1111 / Forge / SD.Next / ComfyUI (A1111-compat) on localhost
+        LocalA1111,    // AUTOMATIC1111 / Forge / SD.Next / ComfyUI (A1111-compat) on localhost
+        Cloudflare,    // Cloudflare Workers AI — FLUX.1 Schnell, SDXL, etc. Free 10k req/day.
+        DeepInfra,     // DeepInfra — FLUX/SDXL, OpenAI-style API, ~$0.0005/img
         Custom
     }
 
@@ -200,6 +202,181 @@ namespace AIPortraits
             else if (activeTab == 2) DrawPromptPreview(mainRect);
         }
 
+        // ──────────────────────────────────────────────────────────────────────────
+        // PROVIDER REGISTRY — single source of truth for label, models, defaults,
+        // API key requirements, and info text. Adding a new provider means adding
+        // a new switch case in each of these helpers + a coroutine in AsyncAIClient.
+        // ──────────────────────────────────────────────────────────────────────────
+
+        private static string ProviderLabel(BackendType bt)
+        {
+            switch (bt)
+            {
+                case BackendType.Pollinations: return "🆓 Pollinations (free, no key)";
+                case BackendType.Cloudflare:   return "☁ Cloudflare Workers AI (free 10k/day, then ~$0.0005)";
+                case BackendType.GoogleImagen: return "💎 Google Imagen 4 ($0.02 each)";
+                case BackendType.DeepInfra:    return "⚡ DeepInfra (~$0.0005 each)";
+                case BackendType.HuggingFace:  return "🤗 HuggingFace Inference (limited free tier)";
+                case BackendType.LocalA1111:   return "🖥 Local GPU (your machine, free)";
+                default:                       return bt.ToString();
+            }
+        }
+
+        // Default model/URL/key wipe when switching providers
+        private void ApplyProviderDefaults(BackendType bt)
+        {
+            backendType = bt;
+            switch (bt)
+            {
+                case BackendType.Pollinations:
+                    apiUrl    = "https://image.pollinations.ai";
+                    modelName = "sana";
+                    apiKey    = "";
+                    break;
+                case BackendType.Cloudflare:
+                    apiUrl    = "https://api.cloudflare.com";
+                    modelName = "@cf/black-forest-labs/flux-1-schnell";
+                    // Don't clear apiKey — user may already have it set
+                    break;
+                case BackendType.GoogleImagen:
+                    apiUrl    = "https://generativelanguage.googleapis.com";
+                    modelName = "imagen-4.0-fast-generate-001";
+                    break;
+                case BackendType.DeepInfra:
+                    apiUrl    = "https://api.deepinfra.com";
+                    modelName = "black-forest-labs/FLUX-1-schnell";
+                    break;
+                case BackendType.HuggingFace:
+                    apiUrl    = "https://api-inference.huggingface.co";
+                    modelName = "black-forest-labs/FLUX.1-schnell";
+                    break;
+                case BackendType.LocalA1111:
+                    apiUrl    = "http://127.0.0.1:7860";
+                    modelName = "";
+                    apiKey    = "";
+                    break;
+            }
+        }
+
+        private static string[] ModelsForProvider(BackendType bt)
+        {
+            switch (bt)
+            {
+                case BackendType.Pollinations:
+                    return new[] { "sana" };
+                case BackendType.Cloudflare:
+                    return new[] {
+                        "@cf/black-forest-labs/flux-1-schnell",
+                        "@cf/stabilityai/stable-diffusion-xl-base-1.0",
+                        "@cf/lykon/dreamshaper-8-lcm",
+                        "@cf/bytedance/stable-diffusion-xl-lightning"
+                    };
+                case BackendType.GoogleImagen:
+                    return new[] {
+                        "imagen-4.0-fast-generate-001",
+                        "imagen-4.0-generate-001",
+                        "imagen-4.0-ultra-generate-001",
+                        "imagen-3.0-fast-generate-001"
+                    };
+                case BackendType.DeepInfra:
+                    return new[] {
+                        "black-forest-labs/FLUX-1-schnell",
+                        "black-forest-labs/FLUX-1-dev",
+                        "stabilityai/sdxl-turbo"
+                    };
+                case BackendType.HuggingFace:
+                    return new[] {
+                        "black-forest-labs/FLUX.1-schnell",
+                        "black-forest-labs/FLUX.1-dev",
+                        "stabilityai/stable-diffusion-xl-base-1.0"
+                    };
+                case BackendType.LocalA1111:
+                    return null; // uses whatever the server has loaded
+                default:
+                    return null;
+            }
+        }
+
+        private static bool ProviderNeedsApiKey(BackendType bt)
+        {
+            return bt == BackendType.Cloudflare
+                || bt == BackendType.GoogleImagen
+                || bt == BackendType.DeepInfra
+                || bt == BackendType.HuggingFace;
+        }
+
+        private static string ApiKeyLabel(BackendType bt)
+        {
+            switch (bt)
+            {
+                case BackendType.Cloudflare:   return "API Key  (format: account_id:token)";
+                case BackendType.GoogleImagen: return "Google AI Studio API Key";
+                case BackendType.DeepInfra:    return "DeepInfra API Token";
+                case BackendType.HuggingFace:  return "HuggingFace API Token";
+                default:                       return "API Key";
+            }
+        }
+
+        private static string ApiKeyHint(BackendType bt)
+        {
+            switch (bt)
+            {
+                case BackendType.Cloudflare:
+                    return "Get account ID + token at dash.cloudflare.com → AI → Workers AI → API tokens";
+                case BackendType.GoogleImagen:
+                    return "Free key at aistudio.google.com/app/apikey";
+                case BackendType.DeepInfra:
+                    return "Free signup at deepinfra.com (GitHub OAuth, ~2 min)";
+                case BackendType.HuggingFace:
+                    return "Token at huggingface.co/settings/tokens (free, read-access enough)";
+                default:
+                    return "";
+            }
+        }
+
+        private static string ProviderInfo(BackendType bt)
+        {
+            switch (bt)
+            {
+                case BackendType.Pollinations:
+                    return "Truly free, no signup. Model: Sana via Pollinations. ~50s per generation. " +
+                           "Outputs JPEG (opaque background — background remover post-processes).";
+                case BackendType.Cloudflare:
+                    return "Cheapest option overall: 10,000 free requests/day, then ~$0.0005 each. " +
+                           "FLUX.1 Schnell quality (better than Sana). ~2-4s. Needs free Cloudflare " +
+                           "account + API token. Auth field uses format account_id:token.";
+                case BackendType.GoogleImagen:
+                    return "$0.02 / image (Fast tier). ~3s generation. True transparent PNG output. " +
+                           "Best overall quality + style adherence. Free Google AI Studio key.";
+                case BackendType.DeepInfra:
+                    return "~$0.0005 per image, no free credits but ultra-cheap. Single Bearer token. " +
+                           "FLUX.1 Schnell quality. ~2-5s. Quick GitHub OAuth signup.";
+                case BackendType.HuggingFace:
+                    return "Free tier exists (rate-limited, models go cold). 30s-2min on first call. " +
+                           "Best for very occasional generation. Requires a HF token.";
+                case BackendType.LocalA1111:
+                    return "Free forever, runs on your own GPU. Requires AUTOMATIC1111 / Forge / SD.Next " +
+                           "or ComfyUI A1111-compat server on port 7860 with --api flag enabled. " +
+                           "Start the server BEFORE clicking refresh.";
+                default:
+                    return "";
+            }
+        }
+
+        private static Color ProviderInfoColor(BackendType bt)
+        {
+            switch (bt)
+            {
+                case BackendType.Pollinations: return new Color(0.10f, 0.20f, 0.10f, 0.6f);
+                case BackendType.Cloudflare:   return new Color(0.20f, 0.15f, 0.05f, 0.6f);
+                case BackendType.GoogleImagen: return new Color(0.20f, 0.15f, 0.05f, 0.6f);
+                case BackendType.DeepInfra:    return new Color(0.10f, 0.20f, 0.20f, 0.6f);
+                case BackendType.HuggingFace:  return new Color(0.18f, 0.12f, 0.05f, 0.6f);
+                case BackendType.LocalA1111:   return new Color(0.10f, 0.15f, 0.25f, 0.6f);
+                default:                       return new Color(0.12f, 0.12f, 0.14f, 0.6f);
+            }
+        }
+
         private void DrawApiSettings(Rect inRect)
         {
             float viewHeight = 550f;
@@ -252,89 +429,78 @@ namespace AIPortraits
             listing.Label("AI Backend");
             listing.Gap(6f);
 
-            bool isFree  = (backendType == BackendType.Pollinations);
-            bool isPaid  = (backendType == BackendType.GoogleImagen);
-            bool isLocal = (backendType == BackendType.LocalA1111);
-
-            // Three-button row
-            Rect modeRow  = listing.GetRect(36f);
-            float thirdW  = modeRow.width / 3f;
-            Rect btnFree  = new Rect(modeRow.x,               modeRow.y, thirdW - 4f, 36f);
-            Rect btnPaid  = new Rect(modeRow.x + thirdW,      modeRow.y, thirdW - 4f, 36f);
-            Rect btnLocal = new Rect(modeRow.x + thirdW * 2f, modeRow.y, thirdW - 4f, 36f);
-
-            if (isFree) GUI.color = new Color(0.3f, 0.85f, 0.4f);
-            if (Widgets.ButtonText(btnFree, "🆓  Free — Pollinations"))
+            // ─── PROVIDER DROPDOWN ───────────────────────────────────────────────
+            Rect providerRow = listing.GetRect(34f);
+            Widgets.Label(new Rect(providerRow.x, providerRow.y + 8f, 90f, 24f), "Provider:");
+            Rect providerBtn = new Rect(providerRow.x + 90f, providerRow.y, providerRow.width - 90f, 34f);
+            if (Widgets.ButtonText(providerBtn, ProviderLabel(backendType)))
             {
-                backendType = BackendType.Pollinations;
-                apiUrl      = "https://image.pollinations.ai";
-                modelName   = "sana";
-                apiKey      = "";
+                var opts = new List<FloatMenuOption>();
+                BackendType[] order = new[] {
+                    BackendType.Pollinations,
+                    BackendType.Cloudflare,
+                    BackendType.GoogleImagen,
+                    BackendType.DeepInfra,
+                    BackendType.HuggingFace,
+                    BackendType.LocalA1111
+                };
+                foreach (BackendType bt in order)
+                {
+                    BackendType captured = bt;
+                    opts.Add(new FloatMenuOption(ProviderLabel(bt), delegate () { ApplyProviderDefaults(captured); }));
+                }
+                Find.WindowStack.Add(new FloatMenu(opts));
             }
-            GUI.color = Color.white;
+            listing.Gap(6f);
 
-            if (isPaid) GUI.color = new Color(0.9f, 0.7f, 0.2f);
-            if (Widgets.ButtonText(btnPaid, "💎  Paid — Imagen 4"))
+            // ─── MODEL DROPDOWN (provider-filtered) ──────────────────────────────
+            string[] availableModels = ModelsForProvider(backendType);
+            if (availableModels != null && availableModels.Length > 0)
             {
-                backendType = BackendType.GoogleImagen;
-                apiUrl      = "https://generativelanguage.googleapis.com";
-                modelName   = "imagen-4.0-fast-generate-001";
+                Rect modelRow = listing.GetRect(34f);
+                Widgets.Label(new Rect(modelRow.x, modelRow.y + 8f, 90f, 24f), "Model:");
+                Rect modelBtn = new Rect(modelRow.x + 90f, modelRow.y, modelRow.width - 90f, 34f);
+                string currentModel = string.IsNullOrEmpty(modelName) ? availableModels[0] : modelName;
+                if (Widgets.ButtonText(modelBtn, currentModel))
+                {
+                    var opts = new List<FloatMenuOption>();
+                    foreach (string m in availableModels)
+                    {
+                        string captured = m;
+                        opts.Add(new FloatMenuOption(m, delegate () { modelName = captured; }));
+                    }
+                    Find.WindowStack.Add(new FloatMenu(opts));
+                }
+                listing.Gap(6f);
             }
-            GUI.color = Color.white;
 
-            if (isLocal) GUI.color = new Color(0.5f, 0.7f, 1f);
-            if (Widgets.ButtonText(btnLocal, "🖥  Local GPU"))
+            // ─── PROVIDER INFO BOX ───────────────────────────────────────────────
+            string infoText = ProviderInfo(backendType);
+            float infoHeight = Text.CalcHeight(infoText, listing.ColumnWidth - 12f) + 12f;
+            Rect infoBoxRect = listing.GetRect(infoHeight);
+            Widgets.DrawBoxSolid(infoBoxRect, ProviderInfoColor(backendType));
+            Text.Font = GameFont.Tiny;
+            Widgets.Label(infoBoxRect.ContractedBy(6f), infoText);
+            Text.Font = GameFont.Small;
+            listing.Gap(6f);
+
+            // ─── API KEY FIELD (single field; format varies per provider) ─────────
+            if (ProviderNeedsApiKey(backendType))
             {
-                backendType = BackendType.LocalA1111;
-                apiUrl      = "http://127.0.0.1:7860";
-                modelName   = ""; // empty = use whatever model the local server has loaded
-                apiKey      = "";
-            }
-            GUI.color = Color.white;
-
-            listing.Gap(10f);
-
-            if (isFree)
-            {
-                Rect infoRect = listing.GetRect(44f);
-                Widgets.DrawBoxSolid(infoRect, new Color(0.1f, 0.2f, 0.1f, 0.6f));
-                Text.Font = GameFont.Tiny;
-                Widgets.Label(infoRect.ContractedBy(6f),
-                    "No API key needed. Model: Sana (via Pollinations). ~50s per generation.\n" +
-                    "Outputs JPEG — portraits have an opaque background, not true transparency.");
-                Text.Font = GameFont.Small;
-            }
-            else if (isPaid)
-            {
-                Rect infoRect = listing.GetRect(28f);
-                Widgets.DrawBoxSolid(infoRect, new Color(0.2f, 0.15f, 0.05f, 0.6f));
-                Text.Font = GameFont.Tiny;
-                Widgets.Label(infoRect.ContractedBy(6f),
-                    "$0.02 / image (Fast). ~3s generation. True transparent PNG output. Best quality.");
-                Text.Font = GameFont.Small;
-
-                listing.Gap(8f);
-                listing.Label("Google AI Studio API Key");
+                listing.Label(ApiKeyLabel(backendType));
                 apiKey = listing.TextEntry(apiKey);
                 listing.Gap(2f);
                 Text.Font = GameFont.Tiny;
                 GUI.color = new Color(0.6f, 0.6f, 0.6f);
-                Widgets.Label(listing.GetRect(20f), "  Get a free key at: aistudio.google.com/app/apikey");
+                Widgets.Label(listing.GetRect(20f), "  " + ApiKeyHint(backendType));
                 GUI.color = Color.white;
                 Text.Font = GameFont.Small;
             }
-            else if (isLocal)
-            {
-                Rect infoRect = listing.GetRect(60f);
-                Widgets.DrawBoxSolid(infoRect, new Color(0.1f, 0.15f, 0.25f, 0.6f));
-                Text.Font = GameFont.Tiny;
-                Widgets.Label(infoRect.ContractedBy(6f),
-                    "Free, runs on your own GPU. Requires a local server (AUTOMATIC1111, Forge, SD.Next,\n" +
-                    "or ComfyUI A1111-compat) on port 7860. ~2–5s per portrait on a modern card.\n" +
-                    "Start your server BEFORE generating. URL configurable in Advanced.");
-                Text.Font = GameFont.Small;
 
-                listing.Gap(8f);
+            // ─── LOCAL SERVER URL (only when LocalA1111 selected) ─────────────────
+            if (backendType == BackendType.LocalA1111)
+            {
+                listing.Gap(4f);
                 listing.Label("Server URL");
                 apiUrl = listing.TextEntry(apiUrl);
                 listing.Gap(2f);
@@ -343,12 +509,6 @@ namespace AIPortraits
                 Widgets.Label(listing.GetRect(20f), "  Default: http://127.0.0.1:7860 (A1111 / Forge default)");
                 GUI.color = Color.white;
                 Text.Font = GameFont.Small;
-            }
-            else
-            {
-                listing.Gap(4f);
-                listing.Label("API Key");
-                apiKey = listing.TextEntry(apiKey);
             }
 
             listing.Gap(12f);

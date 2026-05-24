@@ -65,6 +65,12 @@ namespace AIPortraits
                 case BackendType.LocalA1111:
                     CoroutineRunner.Instance.StartCoroutine(GenerateLocalA1111(positivePrompt, negativePrompt, settings, callback));
                     break;
+                case BackendType.Cloudflare:
+                    CoroutineRunner.Instance.StartCoroutine(GenerateCloudflare(positivePrompt, negativePrompt, settings, callback));
+                    break;
+                case BackendType.DeepInfra:
+                    CoroutineRunner.Instance.StartCoroutine(GenerateDeepInfra(positivePrompt, negativePrompt, settings, callback));
+                    break;
                 default:
                     callback(null, null, null, "Backend type " + settings.backendType + " is not implemented.");
                     break;
@@ -351,6 +357,183 @@ namespace AIPortraits
                 {
                     callback(null, null, null, "Google Imagen parse exception: " + ex.Message);
                 }
+            }
+        }
+
+        // ── Cloudflare Workers AI (FLUX.1 Schnell + others) ─────────────────────────
+        // Free 10k requests/day, then ~$0.0005/image. Auth is two-part: account ID
+        // goes in the URL path, API token in the Bearer header. We accept both via
+        // a single "account_id:token" string in settings.apiKey to keep the UX as
+        // "one field" — split on the first colon.
+        private static IEnumerator GenerateCloudflare(string prompt, string negativePrompt, AIPortraitsSettings settings, PortraitCallback callback)
+        {
+            string combined = (settings.apiKey ?? "").Trim();
+            int colonIdx = combined.IndexOf(':');
+            if (colonIdx <= 0 || colonIdx >= combined.Length - 1)
+            {
+                callback(null, null, null, "Cloudflare needs API Key in format 'account_id:token'. Get both at dash.cloudflare.com → AI → Workers AI.");
+                yield break;
+            }
+            string accountId = combined.Substring(0, colonIdx).Trim();
+            string apiToken  = combined.Substring(colonIdx + 1).Trim();
+
+            string model = string.IsNullOrEmpty(settings.modelName)
+                ? "@cf/black-forest-labs/flux-1-schnell"
+                : settings.modelName;
+            string url = "https://api.cloudflare.com/client/v4/accounts/" + accountId + "/ai/run/" + model;
+
+            StringBuilder json = new StringBuilder();
+            json.Append("{");
+            json.Append("\"prompt\":\"").Append(EscapeJson(prompt)).Append("\"");
+            // FLUX Schnell is 4-step by default; non-FLUX models accept higher steps via num_steps
+            if (model.Contains("flux"))
+                json.Append(",\"steps\":4");
+            else
+                json.Append(",\"num_steps\":").Append(System.Math.Max(4, System.Math.Min(20, settings.steps)));
+            json.Append("}");
+
+            byte[] jsonBytes = Encoding.UTF8.GetBytes(json.ToString());
+
+            using (UnityWebRequest request = new UnityWebRequest(url, "POST"))
+            {
+                request.uploadHandler   = new UploadHandlerRaw(jsonBytes);
+                request.downloadHandler = new DownloadHandlerBuffer();
+                request.SetRequestHeader("Content-Type", "application/json");
+                request.SetRequestHeader("Authorization", "Bearer " + apiToken);
+                request.timeout = RequestTimeoutSeconds;
+
+                Log.Message("[Dynamic AI Portraits] Cloudflare URL: " + url);
+                yield return request.SendWebRequest();
+
+                if (!IsSuccess(request))
+                {
+                    callback(null, null, null, "Cloudflare API Error: " + request.error +
+                                               " | " + Truncate(request.downloadHandler.text, 400));
+                    yield break;
+                }
+
+                // Cloudflare returns one of two shapes depending on model:
+                //  (a) JSON: { "result": { "image": "<base64>" }, "success": true }
+                //  (b) Raw binary image data (some non-FLUX models)
+                string text = request.downloadHandler.text ?? "";
+                byte[] imgBytes = null;
+                string parseErr = null;
+
+                if (text.StartsWith("{"))
+                {
+                    int keyIdx = text.IndexOf("\"image\"");
+                    if (keyIdx == -1)
+                    {
+                        parseErr = "Cloudflare response had no 'image' field: " + Truncate(text, 400);
+                    }
+                    else
+                    {
+                        int colon  = text.IndexOf(':', keyIdx);
+                        int open   = text.IndexOf('"', colon + 1);
+                        int close  = text.IndexOf('"', open + 1);
+                        if (open == -1 || close == -1)
+                            parseErr = "Malformed Cloudflare response.";
+                        else
+                        {
+                            string b64 = text.Substring(open + 1, close - open - 1);
+                            try { imgBytes = Convert.FromBase64String(b64); }
+                            catch (Exception ex) { parseErr = "Cloudflare base64 decode failed: " + ex.Message; }
+                        }
+                    }
+                }
+                else
+                {
+                    // Raw binary (some non-FLUX Cloudflare models)
+                    imgBytes = request.downloadHandler.data;
+                }
+
+                if (parseErr != null) { callback(null, null, null, parseErr); yield break; }
+                DeliverImage(imgBytes, prompt, "Cloudflare", callback);
+            }
+        }
+
+        // ── DeepInfra (OpenAI-compatible image inference) ───────────────────────────
+        // Ultra-cheap (~$0.0005/image at 512×512), GitHub OAuth signup, single token.
+        // POST /v1/inference/<model> with prompt + dimensions, response has base64 PNGs.
+        private static IEnumerator GenerateDeepInfra(string prompt, string negativePrompt, AIPortraitsSettings settings, PortraitCallback callback)
+        {
+            string apiToken = (settings.apiKey ?? "").Trim();
+            if (string.IsNullOrEmpty(apiToken))
+            {
+                callback(null, null, null, "DeepInfra requires an API token. Sign up free at deepinfra.com.");
+                yield break;
+            }
+
+            string model = string.IsNullOrEmpty(settings.modelName)
+                ? "black-forest-labs/FLUX-1-schnell"
+                : settings.modelName;
+            string baseUrl = string.IsNullOrEmpty(settings.apiUrl)
+                ? "https://api.deepinfra.com"
+                : settings.apiUrl.TrimEnd('/');
+            string url = baseUrl + "/v1/inference/" + model;
+
+            // FLUX Schnell wants num_inference_steps=4; SDXL wants ~20-30
+            int steps = model.ToLower().Contains("schnell")
+                ? 4
+                : System.Math.Max(20, System.Math.Min(30, settings.steps));
+
+            StringBuilder json = new StringBuilder();
+            json.Append("{");
+            json.Append("\"prompt\":\"").Append(EscapeJson(prompt)).Append("\",");
+            json.Append("\"width\":512,");
+            json.Append("\"height\":512,");
+            json.Append("\"num_inference_steps\":").Append(steps);
+            json.Append("}");
+
+            byte[] jsonBytes = Encoding.UTF8.GetBytes(json.ToString());
+
+            using (UnityWebRequest request = new UnityWebRequest(url, "POST"))
+            {
+                request.uploadHandler   = new UploadHandlerRaw(jsonBytes);
+                request.downloadHandler = new DownloadHandlerBuffer();
+                request.SetRequestHeader("Content-Type", "application/json");
+                request.SetRequestHeader("Authorization", "Bearer " + apiToken);
+                request.timeout = RequestTimeoutSeconds;
+
+                Log.Message("[Dynamic AI Portraits] DeepInfra URL: " + url);
+                yield return request.SendWebRequest();
+
+                if (!IsSuccess(request))
+                {
+                    callback(null, null, null, "DeepInfra API Error: " + request.error +
+                                               " | " + Truncate(request.downloadHandler.text, 400));
+                    yield break;
+                }
+
+                // Response: {"images":["data:image/png;base64,..."], ...}
+                // OR:       {"image_url":"data:image/png;base64,..."}
+                string text = request.downloadHandler.text ?? "";
+                string b64 = null;
+                string parseErr = null;
+
+                int marker = text.IndexOf("base64,");
+                if (marker >= 0)
+                {
+                    int closeQuote = text.IndexOf('"', marker + 7);
+                    if (closeQuote == -1) parseErr = "Malformed DeepInfra base64 payload.";
+                    else b64 = text.Substring(marker + 7, closeQuote - (marker + 7));
+                }
+                else
+                {
+                    parseErr = "DeepInfra response had no 'base64,' marker: " + Truncate(text, 400);
+                }
+
+                if (parseErr != null) { callback(null, null, null, parseErr); yield break; }
+
+                byte[] imgBytes;
+                try { imgBytes = Convert.FromBase64String(b64); }
+                catch (Exception ex)
+                {
+                    callback(null, null, null, "DeepInfra base64 decode failed: " + ex.Message);
+                    yield break;
+                }
+
+                DeliverImage(imgBytes, prompt, "DeepInfra", callback);
             }
         }
 
