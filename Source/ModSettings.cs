@@ -283,7 +283,9 @@ namespace AIPortraits
 
                 listing.Gap(8f);
                 listing.Label("Google AI Studio API Key");
-                apiKey = listing.TextEntry(apiKey);
+                Rect apiKeyRect1 = listing.GetRect(24f);
+                apiKey = UnityEngine.GUI.PasswordField(apiKeyRect1, apiKey, '*');
+                listing.Gap(listing.verticalSpacing);
                 listing.Gap(2f);
                 Text.Font = GameFont.Tiny;
                 GUI.color = new Color(0.6f, 0.6f, 0.6f);
@@ -296,7 +298,9 @@ namespace AIPortraits
                 // HuggingFace or other — show minimal fields
                 listing.Gap(4f);
                 listing.Label("API Key");
-                apiKey = listing.TextEntry(apiKey);
+                Rect apiKeyRect2 = listing.GetRect(24f);
+                apiKey = UnityEngine.GUI.PasswordField(apiKeyRect2, apiKey, '*');
+                listing.Gap(listing.verticalSpacing);
             }
 
             listing.Gap(12f);
