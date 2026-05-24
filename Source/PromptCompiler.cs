@@ -168,7 +168,19 @@ Content: Render the character's appearance, expression, gear, and any special ef
 
         private static string GetSkillRole(string skill1, string skill2)
         {
-            string s = (skill1 ?? "").ToLower();
+            string primary   = SkillToRole(skill1);
+            string secondary = SkillToRole(skill2);
+
+            if (string.IsNullOrEmpty(primary))   return secondary ?? "";
+            if (string.IsNullOrEmpty(secondary)) return primary;
+            if (primary == secondary)            return primary;
+            return primary + " and " + secondary;
+        }
+
+        private static string SkillToRole(string skill)
+        {
+            if (string.IsNullOrEmpty(skill)) return "";
+            string s = skill.ToLower();
             if (s.Contains("shooting") || s.Contains("combat"))    return "marksman";
             if (s.Contains("melee"))                                return "brawler warrior";
             if (s.Contains("medicine"))                             return "field medic";
@@ -225,6 +237,10 @@ Content: Render the character's appearance, expression, gear, and any special ef
 
             if (state.isHemogenic)
                 p.Append("pale aristocratic vampire-like appearance, faint red iris glow, sharp fangs, ");
+
+            // Fur (for fur-bearing xenotypes like Yttakin, custom furred genelines)
+            if (state.hasFur && !string.IsNullOrEmpty(state.furColor))
+                p.Append("thick " + state.furColor + " fur covering body, visible at neck and arms, ");
 
             // Pregnancy — visible bump
             if (state.pregnancyTrimester == 2)
@@ -351,6 +367,10 @@ Content: Render the character's appearance, expression, gear, and any special ef
         {
             if (state.isSleeping)
                 return "eyes peacefully closed, serene sleeping expression";
+
+            // Fleeing — overrides mood; covers ranged-flee jobs without a full mental break
+            if (state.isFleeing)
+                return "panicked fleeing expression, wide terrified eyes, mouth open in fear, glancing back over shoulder";
 
             if (!string.IsNullOrEmpty(state.mentalState))
             {
@@ -506,6 +526,14 @@ Content: Render the character's appearance, expression, gear, and any special ef
                     p.Append("gentle healer aura, soft green-white light, ");
                 else if (role.Contains("executor") || role.Contains("justicar"))
                     p.Append("grim executioner bearing, cold harsh light, chains and authority symbols, ");
+            }
+
+            // Ideology name — subtle faith descriptor, only if it's a player-named ideo (not generic)
+            if (!string.IsNullOrEmpty(state.ideologyName) &&
+                !state.ideologyName.ToLower().StartsWith("ideo_") &&  // skip default-generated names
+                state.ideologyName.Length < 60)
+            {
+                p.Append("devout follower of " + state.ideologyName + ", subtle ideoligion iconography, ");
             }
 
             // Rim light from ideology color — applies to all styles since it's on the character, not the background

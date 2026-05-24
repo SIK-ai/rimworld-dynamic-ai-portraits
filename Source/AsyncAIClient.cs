@@ -105,7 +105,8 @@ namespace AIPortraits
         private static IEnumerator GeneratePollinations(string prompt, AIPortraitsSettings settings, PortraitCallback callback)
         {
             string baseUrl = string.IsNullOrEmpty(settings.apiUrl) ? "https://image.pollinations.ai" : settings.apiUrl.TrimEnd('/');
-            string model = string.IsNullOrEmpty(settings.modelName) ? "flux" : settings.modelName;
+            // Pollinations consolidated to "sana" — "flux" no longer exists on their endpoint.
+            string model = string.IsNullOrEmpty(settings.modelName) ? "sana" : settings.modelName;
 
             // Pollinations puts the prompt in the URL path. URLs much over ~4KB get rejected, so
             // we hard-cap the encoded prompt length.

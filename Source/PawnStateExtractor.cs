@@ -118,67 +118,10 @@ namespace AIPortraits
         public bool isInhumanized;
         public bool isGhoul;
 
-        // ──────────────────────────────────────────────────────────────────────────
-        // HASH — all fields that affect appearance should be represented
-        // ──────────────────────────────────────────────────────────────────────────
-        public string GetStateHash()
-        {
-            StringBuilder sb = new StringBuilder();
-            sb.Append(pawnId).Append("_");
-            sb.Append(bioAge).Append("_");
-            sb.Append(gender).Append("_");
-            sb.Append(bodyType).Append("_");
-            sb.Append(headShape).Append("_");
-            sb.Append(hairStyle).Append("_");
-            sb.Append(hairColor).Append("_");
-            sb.Append(skinColor).Append("_");
-            sb.Append(beardStyle).Append("_");
-            sb.Append(tattooDef).Append("_");
-            sb.Append(furColor).Append("_");
-            sb.Append(xenotype).Append("_");
-            sb.Append(primaryWeapon).Append("_");
-            sb.Append(isSleeping ? "sleep" : "awake").Append("_");
-            sb.Append(isCombatDrafted ? "combat" : "peace").Append("_");
-            sb.Append(mentalState ?? "normal").Append("_");
-            sb.Append(isHemogenic).Append("_");
-            sb.Append(hasTail).Append("_");
-            sb.Append(hasHorns).Append("_");
-
-            foreach (string a   in apparel)       sb.Append(a).Append(",");
-            foreach (string g   in cosmeticGenes) sb.Append(g).Append(",");
-            foreach (string hi  in headInjuries)  sb.Append(hi).Append(",");
-            foreach (string bi  in bodyInjuries)  sb.Append(bi).Append(",");
-            foreach (string m   in missingParts)  sb.Append(m).Append(",");
-            foreach (string imp in implants)      sb.Append(imp).Append(",");
-            foreach (string t   in traits)        sb.Append(t).Append(",");
-
-            // Extended fields — volatile ones bucketed coarsely to avoid cache thrash
-            foreach (string ad  in addictions)         sb.Append(ad).Append(",");
-            foreach (string cc  in chronicConditions)  sb.Append(cc).Append(",");
-            foreach (string ps  in permanentScars)     sb.Append(ps).Append(",");
-            sb.Append(isExhausted    ? "tired_"   : "_");
-            sb.Append(isMalnourished ? "hungry_"  : "_");
-            sb.Append("preg").Append(pregnancyTrimester).Append("_");
-            sb.Append(royalTitle ?? "").Append("_");
-            sb.Append(psylinkLevel).Append("_");
-            sb.Append(factionName ?? "").Append("_");
-            sb.Append(pawnKind ?? "").Append("_");
-            sb.Append(hasSpouse ? "spouse" : (hasLover ? "lover" : "single")).Append("_");
-            sb.Append(isPrisoner ? "prisoner_" : "_");
-            sb.Append(isSlave    ? "slave_"    : "_");
-            sb.Append(isInhumanized ? "inhuman_" : "_");
-            sb.Append(isGhoul       ? "ghoul_"   : "_");
-
-            using (System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create())
-            {
-                byte[]        inputBytes = Encoding.UTF8.GetBytes(sb.ToString());
-                byte[]        hashBytes  = md5.ComputeHash(inputBytes);
-                StringBuilder hashSb    = new StringBuilder();
-                for (int i = 0; i < hashBytes.Length; i++)
-                    hashSb.Append(hashBytes[i].ToString("x2"));
-                return hashSb.ToString();
-            }
-        }
+        // NOTE: GetStateHash() was removed. The mod no longer auto-regenerates portraits on
+        // state change — once a pawn has a portrait it persists until manually refreshed via
+        // the Pawn Gallery's "Create New Portrait" button. Cache keys are now plain pawn IDs
+        // (in-memory: pawn.ThingID; on-disk: AIPortraitsManager.GetActiveKey = worldId_pawnId).
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -627,7 +570,6 @@ namespace AIPortraits
             // ── TOP SKILLS ────────────────────────────────────────────────────────
             if (pawn.skills != null)
             {
-                List<string> dominantSkills = new List<string>();
                 int best1Level = 0, best2Level = 0;
                 string best1Name = null, best2Name = null;
 
