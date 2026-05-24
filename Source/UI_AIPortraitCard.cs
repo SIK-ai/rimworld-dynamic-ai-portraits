@@ -271,6 +271,25 @@ namespace AIPortraits
                     activeRequests.Remove(pawnKey);
                     requestError.Remove(pawnKey);
 
+                    // Auto-pin the freshly generated portrait as the active one for this pawn.
+                    // Without this, a previously-locked portrait would keep taking priority in
+                    // GetPortraitTexture() and the refresh would appear to do nothing visually.
+                    // Also drop the cached locked-texture so the next render reloads from disk.
+                    if (!string.IsNullOrEmpty(savedPath) && AIPortraitsMod.settings != null)
+                    {
+                        string activeKey = GetActiveKey(pawn);
+                        AIPortraitsMod.settings.activePortraits[activeKey] = savedPath;
+                        AIPortraitsMod.Instance.WriteSettings();
+
+                        string lockedCacheKey = pawnKey + LockedSuffix;
+                        Texture2D oldLocked;
+                        if (loadedTextures.TryGetValue(lockedCacheKey, out oldLocked))
+                        {
+                            if (oldLocked != null && oldLocked != tex) UnityEngine.Object.Destroy(oldLocked);
+                            loadedTextures.Remove(lockedCacheKey);
+                        }
+                    }
+
                     PortraitsCache.SetDirty(pawn);
                 }
             });

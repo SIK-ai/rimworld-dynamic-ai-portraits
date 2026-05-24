@@ -76,9 +76,7 @@ namespace AIPortraits
             Text.Font = GameFont.Small;
             Text.Anchor = TextAnchor.UpperLeft;
 
-            TooltipHandler.TipRegion(rect,
-                "Refresh portrait — re-reads pawn state and generates a new image.\n" +
-                "Costs $0.02 on the paid (Imagen) backend, free on Pollinations.");
+            TooltipHandler.TipRegion(rect, "Refresh portrait");
 
             if (Widgets.ButtonInvisible(rect))
             {
