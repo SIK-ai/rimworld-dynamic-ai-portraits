@@ -271,6 +271,7 @@ namespace AIPortraits
                 {
                     if      (wq == QualityCategory.Awful)      wpnQuality = "battered ";
                     else if (wq == QualityCategory.Poor)       wpnQuality = "rough ";
+                    else if (wq == QualityCategory.Good)       wpnQuality = "well-maintained ";
                     else if (wq == QualityCategory.Excellent)  wpnQuality = "finely crafted ";
                     else if (wq == QualityCategory.Masterwork) wpnQuality = "masterwork ornate ";
                     else if (wq == QualityCategory.Legendary)  wpnQuality = "legendary gleaming ";
@@ -364,6 +365,7 @@ namespace AIPortraits
                     {
                         if      (q == QualityCategory.Awful)      qualityPrefix = "ragged ";
                         else if (q == QualityCategory.Poor)       qualityPrefix = "worn ";
+                        else if (q == QualityCategory.Good)       qualityPrefix = "well-made ";
                         else if (q == QualityCategory.Excellent)  qualityPrefix = "well-crafted ";
                         else if (q == QualityCategory.Masterwork) qualityPrefix = "masterwork ornate ";
                         else if (q == QualityCategory.Legendary)  qualityPrefix = "legendary gilt-trimmed ";

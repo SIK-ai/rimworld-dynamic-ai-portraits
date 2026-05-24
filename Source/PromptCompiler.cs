@@ -292,8 +292,8 @@ Eyes: The character's eyes must be OPEN and clearly visible by default. Only ren
                 // primaryWeapon already carries quality + stuff + colour + label + damage
                 // (built in PawnStateExtractor), so no name-based material-guessing needed.
                 string weapStyle = state.weaponType == "melee"
-                    ? "holding a " + state.primaryWeapon + " in hand, "
-                    : "armed with a " + state.primaryWeapon + " slung on back, ";
+                    ? "holding " + Article(state.primaryWeapon) + " " + state.primaryWeapon + " in hand, "
+                    : "armed with " + Article(state.primaryWeapon) + " " + state.primaryWeapon + " slung on back, ";
                 p.Append(weapStyle);
             }
             else if (state.isViolentIncapable)
@@ -613,6 +613,15 @@ Eyes: The character's eyes must be OPEN and clearly visible by default. Only ren
                 default:
                     return "";
             }
+        }
+
+        // Choose "a" or "an" based on the first phonetic letter of the next word.
+        // Crude but covers the common cases (autopistol, assault rifle, ornate sword, etc.)
+        private static string Article(string word)
+        {
+            if (string.IsNullOrEmpty(word)) return "a";
+            char c = char.ToLower(word[0]);
+            return (c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u') ? "an" : "a";
         }
     }
 }
