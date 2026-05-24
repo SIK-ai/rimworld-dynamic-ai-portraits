@@ -1,0 +1,4 @@
+
+## 2024-05-24 - Per-frame Disk I/O UI Bottlenecks
+**Learning:** Checking for file existence (`System.IO.File.Exists`) prior to checking an in-memory cache inside a UI render loop (`OnGUI` / `ExtraOnGUI` in RimWorld) is a massive bottleneck. The code was performing synchronous disk I/O every frame, severely impacting frame pacing. Furthermore, repeatedly missing file paths continuously triggered disk hits.
+**Action:** Always ensure fast-path memory cache checks occur *before* any disk I/O. For files that intentionally do not exist, maintain a "missing files" HashSet to prevent continuous negative disk queries on every frame. When caching keys based on game state (like RimWorld's `worldId`), implement cache invalidation that safely resets when the state transitions to avoid cross-save bleeding.
