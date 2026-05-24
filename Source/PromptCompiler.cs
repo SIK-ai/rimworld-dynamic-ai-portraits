@@ -15,21 +15,24 @@ namespace AIPortraits
 Style: Korean manhwa webtoon art (Limbus Company JRPG aesthetic). Painterly brushwork with sharp clean line art. Rich warm/cool shadow contrast. Vibrant but controlled colors. Soft detailed skin shading. Hair with visible strand definition.
 Composition: Bust or half-body shot. Single character. Subject centered.
 Background: Fully transparent PNG (alpha channel). No background elements, fills, gradients, or environment behind the character whatsoever.
-Content: Render the character's appearance, expression, gear, and any special effects exactly as described in the user prompt. Do not add, remove, or override any described details.";
+Content: Render the character's appearance, expression, gear, and any special effects exactly as described in the user prompt. Do not add, remove, or override any described details.
+Eyes: The character's eyes must be OPEN and clearly visible by default. Only render closed eyes if the prompt explicitly says the character is sleeping or dead. Do not default to closed-eye expressions even when the art style traditionally uses them (no anime-style closed-eye smile, no contemplative closed-eye pose).";
 
         private const string WesternImagenSystemPrompt =
 @"Generate a realistic dark fantasy character portrait for a game UI overlay.
 Style: Western RPG oil painting art (Path of Exile, Pillars of Eternity aesthetic). Dramatic chiaroscuro lighting. Rich deep saturated colors. Detailed intricate rendering of costume and armor. Painterly brushwork with precise edges.
 Composition: Bust or half-body shot. Single character. Subject centered.
 Background: Fully transparent PNG (alpha channel). No background elements, fills, gradients, or environment behind the character whatsoever.
-Content: Render the character's appearance, expression, gear, and any special effects exactly as described in the user prompt. Do not add, remove, or override any described details.";
+Content: Render the character's appearance, expression, gear, and any special effects exactly as described in the user prompt. Do not add, remove, or override any described details.
+Eyes: The character's eyes must be OPEN and clearly visible by default. Only render closed eyes if the prompt explicitly says the character is sleeping or dead. Do not default to closed-eye expressions even when the art style traditionally uses them (no anime-style closed-eye smile, no contemplative closed-eye pose).";
 
         private const string PixelImagenSystemPrompt =
 @"Generate a pixel-art character portrait for a game UI overlay.
 Style: 16-bit tactical JRPG sprite (Tactics Ogre, Final Fantasy Tactics aesthetic). Strict pixel grid — every pixel sharp and deliberate. No anti-aliasing, smooth gradients, or naturalistic textures. Thin dark pixel outlines on all boundaries. Cel-shading in 2-3 flat color bands per surface. Limited palette (32-48 colors), muted but rich.
 Composition: Bust or half-body shot. Single character. Subject centered.
 Background: Fully transparent PNG (alpha channel). No background elements, fills, gradients, or environment behind the character whatsoever.
-Content: Render the character's appearance, expression, gear, and any special effects exactly as described in the user prompt. Do not add, remove, or override any described details.";
+Content: Render the character's appearance, expression, gear, and any special effects exactly as described in the user prompt. Do not add, remove, or override any described details.
+Eyes: The character's eyes must be OPEN and clearly visible by default. Only render closed eyes if the prompt explicitly says the character is sleeping or dead. Do not default to closed-eye expressions even when the art style traditionally uses them (no anime-style closed-eye smile, no contemplative closed-eye pose).";
 
         // ──────────────────────────────────────────────────────────────────────────
         // MAIN ENTRY
@@ -373,20 +376,20 @@ Content: Render the character's appearance, expression, gear, and any special ef
             foreach (string trait in state.traits)
             {
                 string tl = trait.ToLower();
-                if (tl.Contains("psychopath"))                          return "cold flat emotionless gaze, slight disturbing smile";
-                if (tl.Contains("abrasive"))                            return "sneering aggressive expression, challenging stare";
-                if (tl.Contains("kind"))                                return "warm gentle eyes, soft empathetic smile";
-                if (tl.Contains("iron-willed") || tl.Contains("tough")) return "resolute stoic expression, iron-set jaw, determined unflinching gaze";
-                if (tl.Contains("neurotic"))                            return "anxious tense expression, nervous darting eyes";
-                if (tl.Contains("brawler"))                             return "cocky confident smirk, battle-ready stance";
-                if (tl.Contains("nimble") || tl.Contains("quick"))     return "alert focused sharp-eyed expression";
+                if (tl.Contains("psychopath"))                          return "eyes open with cold flat emotionless gaze, slight disturbing smile";
+                if (tl.Contains("abrasive"))                            return "eyes open with sneering aggressive expression, challenging stare";
+                if (tl.Contains("kind"))                                return "warm open eyes, soft empathetic smile";
+                if (tl.Contains("iron-willed") || tl.Contains("tough")) return "eyes open with resolute stoic expression, iron-set jaw, determined unflinching gaze";
+                if (tl.Contains("neurotic"))                            return "eyes open with anxious tense expression, nervous darting gaze";
+                if (tl.Contains("brawler"))                             return "eyes open with cocky confident smirk, battle-ready stance";
+                if (tl.Contains("nimble") || tl.Contains("quick"))     return "eyes wide open, alert focused sharp-eyed expression";
             }
 
-            if (state.moodLevel > 0.85f) return "warm confident smile, bright proud eyes, relaxed victorious expression";
-            if (state.moodLevel > 0.65f) return "calm composed expression, steady determined eyes";
-            if (state.moodLevel < 0.20f) return "hollow sunken eyes, deep frown, utterly defeated exhausted expression";
-            if (state.moodLevel < 0.40f) return "tired world-weary expression, heavy-lidded eyes, furrowed brow";
-            return "stoic neutral expression, focused distant gaze";
+            if (state.moodLevel > 0.85f) return "eyes wide open and bright with pride, warm confident smile, relaxed victorious expression";
+            if (state.moodLevel > 0.65f) return "eyes open, steady and determined gaze, calm composed expression";
+            if (state.moodLevel < 0.20f) return "eyes open but sunken and hollow, deep frown, utterly defeated exhausted expression";
+            if (state.moodLevel < 0.40f) return "eyes open, heavy-lidded and world-weary, furrowed brow";
+            return "eyes open and alert, focused forward gaze, stoic neutral expression";
         }
 
         // ──────────────────────────────────────────────────────────────────────────
