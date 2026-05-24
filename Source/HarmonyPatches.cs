@@ -34,9 +34,15 @@ namespace AIPortraits
             // width but clamp to a sane portrait size.
             float side = Mathf.Min(paneRect.width, 260f);
 
+            // Leave clearance for the inspect-pane tab strip (Log, Health, etc.) which
+            // sits in the space just above paneRect.y. Without this, the portrait's
+            // bottom edge overlaps the tab buttons.
+            const float TabStripClearance = 36f;
+
             // Center the portrait horizontally over the pane.
             float x = paneRect.x + (paneRect.width - side) * 0.5f;
-            Rect portraitRect = new Rect(x, paneRect.y - side, side, side);
+            float y = paneRect.y - side - TabStripClearance;
+            Rect portraitRect = new Rect(x, y, side, side);
 
             GUI.DrawTexture(portraitRect, portrait, ScaleMode.ScaleToFit);
         }
