@@ -54,7 +54,8 @@ Content: Render the character's appearance, expression, gear, and any special ef
             AppendGear(p, state);
             p.Append(GetExpression(state) + ", ");
             AppendHealthModifiers(p, state);
-            p.Append(GetBackground() + ", ");
+            // (Transparency is already declared once at the top of the prompt by the style
+            // header — no need to repeat it via GetBackground() and create a duplicate clause.)
             AppendLoreFlavor(p, state);
 
             if (!string.IsNullOrEmpty(settings.baseStylePrompt))
@@ -460,15 +461,6 @@ Content: Render the character's appearance, expression, gear, and any special ef
                 else if (al.Contains("alcohol"))   p.Append("alcoholic, ruddy nose with broken capillaries, bloodshot eyes, ");
                 else if (al.Contains("psychite"))  p.Append("psychite tea drinker, jittery focus, ");
             }
-        }
-
-        // ──────────────────────────────────────────────────────────────────────────
-        // BACKGROUND
-        // ──────────────────────────────────────────────────────────────────────────
-
-        private static string GetBackground()
-        {
-            return "isolated on a fully transparent background, alpha channel transparency, no background elements, pure transparent PNG";
         }
 
         // ──────────────────────────────────────────────────────────────────────────

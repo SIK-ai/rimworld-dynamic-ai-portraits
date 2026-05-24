@@ -61,20 +61,39 @@ namespace AIPortraits
             return fresh;
         }
 
+        /// <summary>
+        /// Only generate portraits for humanlike pawns aligned with the player —
+        /// colonists, prisoners, and slaves. Raiders, traders, animals, and mechs
+        /// are skipped (no API calls, no overlay).
+        /// </summary>
+        public static bool ShouldGenerateFor(Pawn pawn)
+        {
+            if (pawn == null || pawn.Destroyed) return false;
+            if (pawn.RaceProps == null || !pawn.RaceProps.Humanlike) return false;
+
+            Faction player = Faction.OfPlayerSilentFail;
+            if (player == null) return false;
+
+            if (pawn.Faction == player)     return true;  // colonists
+            if (pawn.HostFaction == player) return true;  // prisoners + slaves
+            return false;
+        }
+
         public static Texture2D GetPortraitTexture(Pawn pawn, out GenerationStatus status, out string error)
         {
             status = GenerationStatus.Idle; error = null;
             if (pawn == null || pawn.Destroyed) return null;
 
-            // Locked portrait (user pinned a specific image)
+            // Locked portrait check happens first — user pinned this manually, honour it
+            // even on pawns who later leave the colony.
             string lockedPath;
             if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.activePortraits.TryGetValue(GetActiveKey(pawn), out lockedPath))
             {
                 if (!string.IsNullOrEmpty(lockedPath) && System.IO.File.Exists(lockedPath))
                 {
-                    string cacheKey = pawn.ThingID + LockedSuffix;
+                    string lockedCacheKey = pawn.ThingID + LockedSuffix;
                     Texture2D lockedTex;
-                    if (loadedTextures.TryGetValue(cacheKey, out lockedTex))
+                    if (loadedTextures.TryGetValue(lockedCacheKey, out lockedTex))
                         return lockedTex;
 
                     try
@@ -83,7 +102,7 @@ namespace AIPortraits
                         Texture2D newTex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
                         if (ImageConversion.LoadImage(newTex, bytes))
                         {
-                            loadedTextures[cacheKey] = newTex;
+                            loadedTextures[lockedCacheKey] = newTex;
                             return newTex;
                         }
                     }
@@ -94,57 +113,86 @@ namespace AIPortraits
                 }
             }
 
-            PawnState state = GetCachedPawnState(pawn);
-            if (state == null) return null;
+            // Faction gate — no auto-generation for raiders, traders, animals, mechs.
+            if (!ShouldGenerateFor(pawn)) return null;
 
-            string stateHash = state.GetStateHash();
-            string key = pawn.ThingID + "_" + stateHash;
+            // Single key per pawn (per save). Once we have a portrait, we keep it
+            // until the user manually refreshes — state changes (gear, mood, addiction)
+            // do NOT trigger regeneration any more.
+            string pawnKey = pawn.ThingID;
+            string diskKey = GetActiveKey(pawn); // "worldId_pawnId" — disk cache name
 
             // In-memory hit
             Texture2D tex;
-            if (loadedTextures.TryGetValue(key, out tex)) return tex;
+            if (loadedTextures.TryGetValue(pawnKey, out tex)) return tex;
 
-            // Disk cache
-            if (CacheManager.IsCached(stateHash))
+            // Disk cache — restore across game restarts
+            if (CacheManager.IsCached(diskKey))
             {
-                Texture2D diskTex = CacheManager.LoadFromCache(stateHash);
+                Texture2D diskTex = CacheManager.LoadFromCache(diskKey);
                 if (diskTex != null)
                 {
-                    ClearOldDynamicTextures(pawn.ThingID);
-                    loadedTextures[key] = diskTex;
+                    loadedTextures[pawnKey] = diskTex;
                     return diskTex;
                 }
             }
 
-            // Already generating for this pawn? Don't pile on more requests, regardless of hash.
-            // (State can flicker every tick — drafted/sleeping/etc. — and would otherwise fire
-            // a new API call each frame while one is already in flight.)
-            if (activeRequests.ContainsKey(pawn.ThingID))
+            // In-flight guard — don't fire concurrent requests for the same pawn
+            if (activeRequests.ContainsKey(pawnKey))
             {
                 GenerationStatus cs;
-                if (requestStatus.TryGetValue(pawn.ThingID, out cs)) status = cs;
+                if (requestStatus.TryGetValue(pawnKey, out cs)) status = cs;
                 string ce;
-                if (requestError.TryGetValue(pawn.ThingID, out ce)) error = ce;
+                if (requestError.TryGetValue(pawnKey, out ce)) error = ce;
                 return null;
             }
 
-            // Start generation
-            TriggerGeneration(pawn, state, stateHash, null);
+            // First-time generation for this pawn
+            PawnState state = GetCachedPawnState(pawn);
+            if (state == null) return null;
+
+            TriggerGeneration(pawn, state, diskKey, null);
             status = GenerationStatus.Generating;
             return null;
         }
 
+        /// <summary>
+        /// Manual refresh — discards the current portrait (in-memory + disk cache)
+        /// and queues a fresh generation. This is the ONLY path that re-generates;
+        /// auto-regen on state change is disabled.
+        /// </summary>
         public static void TriggerNewPortraitWithContinuity(Pawn pawn)
         {
             if (pawn == null || pawn.Destroyed) return;
-            string pawnId = pawn.ThingID;
+            if (!ShouldGenerateFor(pawn)) return;
+
+            string pawnKey = pawn.ThingID;
+            string diskKey = GetActiveKey(pawn);
             string continuityToken = PromptCompiler.GetContinuityToken(AIPortraitsMod.settings.portraitStyle);
-            activeRequests.Remove(pawnId); requestStatus.Remove(pawnId); requestError.Remove(pawnId);
-            stateCache.Remove(pawnId); // force fresh extraction
+
+            // Drop in-memory texture (but preserve any locked one — that's user-pinned)
+            Texture2D oldTex;
+            if (loadedTextures.TryGetValue(pawnKey, out oldTex))
+            {
+                if (oldTex != null) UnityEngine.Object.Destroy(oldTex);
+                loadedTextures.Remove(pawnKey);
+            }
+
+            // Drop disk cache so the next GetPortraitTexture call won't reload the stale one
+            try
+            {
+                string diskPath = CacheManager.GetFilePath(diskKey);
+                if (System.IO.File.Exists(diskPath)) System.IO.File.Delete(diskPath);
+            }
+            catch (Exception ex) { Log.Warning("[Dynamic AI Portraits] Could not clear disk cache: " + ex.Message); }
+
+            // Reset request bookkeeping + force fresh state extraction
+            activeRequests.Remove(pawnKey); requestStatus.Remove(pawnKey); requestError.Remove(pawnKey);
+            stateCache.Remove(pawnKey);
+
             PawnState state = PawnStateExtractor.ExtractState(pawn);
             if (state == null) return;
-            string stateHash = state.GetStateHash() + "_new_" + DateTime.Now.Ticks;
-            TriggerGeneration(pawn, state, stateHash, continuityToken);
+            TriggerGeneration(pawn, state, diskKey, continuityToken);
         }
 
         public static string SaveCurrentPortrait(Pawn pawn)
@@ -170,31 +218,34 @@ namespace AIPortraits
             return requestError.TryGetValue(pawn.ThingID, out e) ? e : null;
         }
 
-        private static void TriggerGeneration(Pawn pawn, PawnState state, string stateHash, string continuityToken)
+        // `diskCacheKey` is the stable per-pawn-per-save key (worldId_pawnId).
+        // The texture is stored in loadedTextures under pawn.ThingID, and on disk under diskCacheKey.
+        private static void TriggerGeneration(Pawn pawn, PawnState state, string diskCacheKey, string continuityToken)
         {
-            string pawnId = pawn.ThingID;
+            string pawnKey = pawn.ThingID;
             PortraitStyle currentStyle = AIPortraitsMod.settings.portraitStyle;
 
-            activeRequests[pawnId] = stateHash;
-            requestStatus[pawnId] = GenerationStatus.Generating;
-            requestError[pawnId] = null;
+            activeRequests[pawnKey] = diskCacheKey;
+            requestStatus[pawnKey]  = GenerationStatus.Generating;
+            requestError[pawnKey]   = null;
 
             string positivePrompt = PromptCompiler.CompilePositivePrompt(state, AIPortraitsMod.settings, continuityToken);
-            // LOG the full prompt so user can verify context accuracy
             Log.Message("[Dynamic AI Portraits] PROMPT for " + pawn.LabelShortCap + ":\n" + positivePrompt);
 
             AsyncAIClient.QueueGeneration(state, AIPortraitsMod.settings, continuityToken, delegate(Texture2D tex, byte[] bytes, string err)
             {
                 if (err != null)
                 {
-                    requestStatus[pawnId] = GenerationStatus.Error;
-                    requestError[pawnId] = err;
+                    requestStatus[pawnKey] = GenerationStatus.Error;
+                    requestError[pawnKey] = err;
+                    activeRequests.Remove(pawnKey);
                 }
                 else if (tex != null && bytes != null)
                 {
-                    CacheManager.SaveToCache(stateHash, bytes);
+                    // Disk cache (per-save, single file per pawn — overwrites previous)
+                    CacheManager.SaveToCache(diskCacheKey, bytes);
 
-                    // Save to user documents directory automatically
+                    // User-visible gallery save (Documents/RimWorld Portraits/<name>/, timestamped)
                     string savedPath = CacheManager.SavePortraitToDisk(pawn.LabelShortCap, currentStyle, bytes);
                     if (savedPath != null)
                     {
@@ -209,38 +260,20 @@ namespace AIPortraits
                         }
                     }
 
-                    ClearOldDynamicTextures(pawnId);
-                    string key = pawnId + "_" + stateHash;
-                    loadedTextures[key] = tex;
-                    portraitData[pawnId] = new PawnPortraitData { texture = tex, rawBytes = bytes, style = currentStyle, savedPath = savedPath };
-                    requestStatus.Remove(pawnId);
-                    activeRequests.Remove(pawnId);
-                    requestError.Remove(pawnId);
+                    // Destroy previous in-memory texture for this pawn (if any) before replacing
+                    Texture2D prev;
+                    if (loadedTextures.TryGetValue(pawnKey, out prev) && prev != null && prev != tex)
+                        UnityEngine.Object.Destroy(prev);
 
-                    // Force refresh of Portraits Cache for Rimworld's UI
+                    loadedTextures[pawnKey] = tex;
+                    portraitData[pawnKey] = new PawnPortraitData { texture = tex, rawBytes = bytes, style = currentStyle, savedPath = savedPath };
+                    requestStatus.Remove(pawnKey);
+                    activeRequests.Remove(pawnKey);
+                    requestError.Remove(pawnKey);
+
                     PortraitsCache.SetDirty(pawn);
                 }
             });
-        }
-
-        // Sweep dynamic state-hash textures for this pawn — but never the locked entry, which is
-        // owned by the user's pinned active-portrait selection.
-        private static void ClearOldDynamicTextures(string pawnId)
-        {
-            string lockedKey = pawnId + LockedSuffix;
-            List<string> keysToRemove = new List<string>();
-            foreach (KeyValuePair<string, Texture2D> pair in loadedTextures)
-            {
-                if (pair.Key == lockedKey) continue;
-                if (pair.Key.StartsWith(pawnId + "_"))
-                    keysToRemove.Add(pair.Key);
-            }
-            foreach (string key in keysToRemove)
-            {
-                Texture2D oldTex = loadedTextures[key];
-                if (oldTex != null) UnityEngine.Object.Destroy(oldTex);
-                loadedTextures.Remove(key);
-            }
         }
 
         public static void ClearPawnActiveTextureCache(Pawn pawn)
