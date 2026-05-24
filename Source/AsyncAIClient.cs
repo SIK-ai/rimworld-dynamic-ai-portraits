@@ -97,11 +97,7 @@ namespace AIPortraits
                     yield break;
                 }
 
-                Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-                if (ImageConversion.LoadImage(texture, imgBytes))
-                    callback(texture, imgBytes, null);
-                else
-                    callback(null, null, "Failed to load image bytes from HuggingFace.");
+                DeliverImage(imgBytes, "HuggingFace", callback);
             }
         }
 
@@ -135,11 +131,7 @@ namespace AIPortraits
                     yield break;
                 }
 
-                Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-                if (ImageConversion.LoadImage(texture, imgBytes))
-                    callback(texture, imgBytes, null);
-                else
-                    callback(null, null, "Failed to load image bytes from Pollinations.");
+                DeliverImage(imgBytes, "Pollinations", callback);
             }
         }
 
@@ -208,11 +200,7 @@ namespace AIPortraits
                     string base64 = text.Substring(openQuote + 1, closeQuote - openQuote - 1);
                     byte[] imgBytes = Convert.FromBase64String(base64);
 
-                    Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-                    if (ImageConversion.LoadImage(texture, imgBytes))
-                        callback(texture, imgBytes, null);
-                    else
-                        callback(null, null, "Failed to decode image from Google Imagen bytes.");
+                    DeliverImage(imgBytes, "Google Imagen", callback);
                 }
                 catch (Exception ex)
                 {
@@ -222,6 +210,56 @@ namespace AIPortraits
         }
 
         // ── Helpers ──────────────────────────────────────────────────────────────────
+
+        // Decodes the raw image bytes, runs background removal, and hands the result
+        // back to the caller. If the BackgroundRemover produces a new texture (i.e.
+        // the image had an opaque background), the original decode is destroyed and
+        // the new texture + re-encoded PNG bytes are returned so the cache + disk
+        // save reflect the cleaned image.
+        private static void DeliverImage(byte[] imgBytes, string backendName, PortraitCallback callback)
+        {
+            if (imgBytes == null || imgBytes.Length == 0)
+            {
+                callback(null, null, backendName + ": empty image bytes.");
+                return;
+            }
+
+            Texture2D raw = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            if (!ImageConversion.LoadImage(raw, imgBytes))
+            {
+                UnityEngine.Object.Destroy(raw);
+                callback(null, null, backendName + ": failed to decode image bytes.");
+                return;
+            }
+
+            Texture2D processed;
+            byte[] finalBytes;
+            try
+            {
+                processed = BackgroundRemover.Process(raw);
+                if (processed != raw)
+                {
+                    // Background was removed — re-encode to PNG so the saved file
+                    // and cached image both have the cleaned transparent version.
+                    finalBytes = ImageConversion.EncodeToPNG(processed);
+                    UnityEngine.Object.Destroy(raw);
+                }
+                else
+                {
+                    // Already transparent or removal was skipped — use original.
+                    finalBytes = imgBytes;
+                }
+            }
+            catch (Exception ex)
+            {
+                // If background removal blows up for any reason, fall back to the raw image
+                Log.Warning("[Dynamic AI Portraits] BackgroundRemover failed (" + backendName + "): " + ex.Message + ". Using raw image.");
+                processed = raw;
+                finalBytes = imgBytes;
+            }
+
+            callback(processed, finalBytes, null);
+        }
 
         private static bool IsSuccess(UnityWebRequest request)
         {
