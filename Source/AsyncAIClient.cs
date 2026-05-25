@@ -134,13 +134,13 @@ namespace AIPortraits
                     if (!string.IsNullOrEmpty(generatedPrompt))
                         Log.Message("[Dynamic AI Portraits] LLM prompt: " + generatedPrompt);
                     else
-                        Log.Warning("[Dynamic AI Portraits] Gemini returned empty text. Raw: " +
-                                    Truncate(request.downloadHandler.text, 400));
+                        Log.Warning(SanitizeLog("[Dynamic AI Portraits] Gemini returned empty text. Raw: " +
+                                    Truncate(request.downloadHandler.text, 400), settings));
                 }
                 else
                 {
-                    Log.Warning("[Dynamic AI Portraits] Gemini Flash error: " + request.error +
-                                " | " + Truncate(request.downloadHandler.text, 200));
+                    Log.Warning(SanitizeLog("[Dynamic AI Portraits] Gemini Flash error: " + request.error +
+                                " | " + Truncate(request.downloadHandler.text, 200), settings));
                 }
             }
 
@@ -236,7 +236,7 @@ namespace AIPortraits
 
                 if (!IsSuccess(request))
                 {
-                    callback(null, null, null, "HuggingFace API Error: " + request.error + " - " + Truncate(request.downloadHandler.text, 400));
+                    callback(null, null, null, SanitizeLog("HuggingFace API Error: " + request.error + " - " + Truncate(request.downloadHandler.text, 400), settings));
                     yield break;
                 }
 
@@ -322,12 +322,12 @@ namespace AIPortraits
 
                 if (!IsSuccess(request))
                 {
-                    callback(null, null, null, "Google Imagen API Error: " + request.error + " | " + Truncate(request.downloadHandler.text, 400));
+                    callback(null, null, null, SanitizeLog("Google Imagen API Error: " + request.error + " | " + Truncate(request.downloadHandler.text, 400), settings));
                     yield break;
                 }
 
                 string text = request.downloadHandler.text;
-                Log.Message("[Dynamic AI Portraits] Google Imagen raw response (first 300): " + Truncate(text, 300));
+                Log.Message(SanitizeLog("[Dynamic AI Portraits] Google Imagen raw response (first 300): " + Truncate(text, 300), settings));
 
                 try
                 {
@@ -335,7 +335,7 @@ namespace AIPortraits
                     int keyIdx = text.IndexOf("\"bytesBase64Encoded\"");
                     if (keyIdx == -1)
                     {
-                        callback(null, null, null, "Could not find 'bytesBase64Encoded' in response. Full response: " + Truncate(text, 400));
+                        callback(null, null, null, SanitizeLog("Could not find 'bytesBase64Encoded' in response. Full response: " + Truncate(text, 400), settings));
                         yield break;
                     }
 
@@ -398,7 +398,7 @@ namespace AIPortraits
 
                 if (!IsSuccess(request))
                 {
-                    callback(null, null, null, "Cloudflare API Error: " + request.error + " - " + Truncate(request.downloadHandler.text, 400));
+                    callback(null, null, null, SanitizeLog("Cloudflare API Error: " + request.error + " - " + Truncate(request.downloadHandler.text, 400), settings));
                     yield break;
                 }
 
@@ -490,8 +490,8 @@ namespace AIPortraits
 
                 if (!IsSuccess(request))
                 {
-                    callback(null, null, null, "DeepInfra API Error: " + request.error +
-                                               " | " + Truncate(request.downloadHandler.text, 400));
+                    callback(null, null, null, SanitizeLog("DeepInfra API Error: " + request.error +
+                                               " | " + Truncate(request.downloadHandler.text, 400), settings));
                     yield break;
                 }
 
@@ -568,8 +568,8 @@ namespace AIPortraits
                 {
                     string hint = " | Is your local server running at " + baseUrl + "? " +
                                   "Start AUTOMATIC1111/Forge with --api flag before generating.";
-                    callback(null, null, null, "Local A1111 API Error: " + request.error + hint +
-                                         " | " + Truncate(request.downloadHandler.text, 200));
+                    callback(null, null, null, SanitizeLog("Local A1111 API Error: " + request.error + hint +
+                                         " | " + Truncate(request.downloadHandler.text, 200), settings));
                     yield break;
                 }
 
@@ -679,6 +679,22 @@ namespace AIPortraits
         private static bool IsSuccess(UnityWebRequest request)
         {
             return request.result == UnityWebRequest.Result.Success;
+        }
+
+        private static string SanitizeLog(string message, AIPortraitsSettings settings)
+        {
+            if (string.IsNullOrEmpty(message)) return message;
+            string sanitized = message;
+            string llmKey = GetLLMApiKey(settings);
+            if (!string.IsNullOrEmpty(llmKey))
+            {
+                sanitized = sanitized.Replace(llmKey, "[REDACTED]");
+            }
+            if (!string.IsNullOrEmpty(settings.apiKey))
+            {
+                sanitized = sanitized.Replace(settings.apiKey, "[REDACTED]");
+            }
+            return sanitized;
         }
 
         private static string Truncate(string s, int max)
