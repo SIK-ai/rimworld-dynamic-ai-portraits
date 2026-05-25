@@ -1,0 +1,3 @@
+## 2026-05-25 - IMGUI Hover States
+**Learning:** RimWorld's IMGUI framework handles hover states automatically for standard elements (like `Widgets.ButtonText`), but custom UI elements drawn with primitives (`Widgets.DrawBoxSolid`) and made interactive via `Widgets.ButtonInvisible` require manual hover state implementation using `Mouse.IsOver(rect)`.
+**Action:** Always check if a custom drawn UI element has a hover state to provide visual feedback. If using `Widgets.ButtonInvisible`, explicitly implement `Mouse.IsOver` to modify background colors or alpha values for better accessibility and UX.
