@@ -39,6 +39,18 @@ namespace AIPortraits
             }
         }
 
+        // Precomputed state for the flood-fill process to avoid expensive per-pixel operations.
+        private struct FloodContext
+        {
+            public int width;
+            public int coreMinX;
+            public int coreMaxX;
+            public int coreMinY;
+            public int coreMaxY;
+            public bool bgIsSkinLike;
+            public bool bgIsSaturated;
+        }
+
         public static Texture2D Process(Texture2D source)
         {
             if (source == null) return null;
@@ -60,19 +72,42 @@ namespace AIPortraits
             List<YCbCrColor> bgColors = SampleDominantEdgeColors(pixels, w, h);
             if (bgColors.Count == 0) return source;
 
+            // Precompute context
+            FloodContext ctx = new FloodContext();
+            ctx.width = w;
+            ctx.coreMinX = (int)(w * 0.28f);
+            ctx.coreMaxX = (int)(w * 0.72f);
+            ctx.coreMinY = (int)(h * 0.32f);
+            ctx.coreMaxY = (int)(h * 0.82f);
+
+            ctx.bgIsSkinLike = false;
+            ctx.bgIsSaturated = false;
+            foreach (var bg in bgColors)
+            {
+                if (bg.Cb >= 95f && bg.Cb <= 126f && bg.Cr >= 130f && bg.Cr <= 165f)
+                {
+                    ctx.bgIsSkinLike = true;
+                }
+                float bgSat = System.Math.Abs(bg.Cb - 128f) + System.Math.Abs(bg.Cr - 128f);
+                if (bgSat > 20f)
+                {
+                    ctx.bgIsSaturated = true;
+                }
+            }
+
             // Pass 1: Strict flood fill
             bool[] visited = new bool[w * h];
             Queue<int> queue = new Queue<int>(w * h / 4);
 
             for (int x = 0; x < w; x++)
             {
-                TrySeedStrict(pixels, visited, queue, x, 0, w, h, bgColors);
-                TrySeedStrict(pixels, visited, queue, x, h - 1, w, h, bgColors);
+                TrySeedStrict(pixels, visited, queue, x, 0, bgColors, ref ctx);
+                TrySeedStrict(pixels, visited, queue, x, h - 1, bgColors, ref ctx);
             }
             for (int y = 0; y < h; y++)
             {
-                TrySeedStrict(pixels, visited, queue, 0, y, w, h, bgColors);
-                TrySeedStrict(pixels, visited, queue, w - 1, y, w, h, bgColors);
+                TrySeedStrict(pixels, visited, queue, 0, y, bgColors, ref ctx);
+                TrySeedStrict(pixels, visited, queue, w - 1, y, bgColors, ref ctx);
             }
 
             while (queue.Count > 0)
@@ -81,10 +116,10 @@ namespace AIPortraits
                 int x = idx % w;
                 int y = idx / w;
 
-                if (x > 0)     TrySeedStrict(pixels, visited, queue, x - 1, y, w, h, bgColors);
-                if (x < w - 1) TrySeedStrict(pixels, visited, queue, x + 1, y, w, h, bgColors);
-                if (y > 0)     TrySeedStrict(pixels, visited, queue, x, y - 1, w, h, bgColors);
-                if (y < h - 1) TrySeedStrict(pixels, visited, queue, x, y + 1, w, h, bgColors);
+                if (x > 0)     TrySeedStrict(pixels, visited, queue, x - 1, y, bgColors, ref ctx);
+                if (x < w - 1) TrySeedStrict(pixels, visited, queue, x + 1, y, bgColors, ref ctx);
+                if (y > 0)     TrySeedStrict(pixels, visited, queue, x, y - 1, bgColors, ref ctx);
+                if (y < h - 1) TrySeedStrict(pixels, visited, queue, x, y + 1, bgColors, ref ctx);
             }
 
             // Pass 2: Loose flood fill (limited depth) from the edges of the strict pass
@@ -109,10 +144,10 @@ namespace AIPortraits
                 int y = idx / w;
                 byte nextD = (byte)(d + 1);
 
-                if (x > 0)     TrySeedLoose(pixels, visited, halo, haloDepth, x - 1, y, w, h, bgColors, nextD);
-                if (x < w - 1) TrySeedLoose(pixels, visited, halo, haloDepth, x + 1, y, w, h, bgColors, nextD);
-                if (y > 0)     TrySeedLoose(pixels, visited, halo, haloDepth, x, y - 1, w, h, bgColors, nextD);
-                if (y < h - 1) TrySeedLoose(pixels, visited, halo, haloDepth, x, y + 1, w, h, bgColors, nextD);
+                if (x > 0)     TrySeedLoose(pixels, visited, halo, haloDepth, x - 1, y, bgColors, nextD, ref ctx);
+                if (x < w - 1) TrySeedLoose(pixels, visited, halo, haloDepth, x + 1, y, bgColors, nextD, ref ctx);
+                if (y > 0)     TrySeedLoose(pixels, visited, halo, haloDepth, x, y - 1, bgColors, nextD, ref ctx);
+                if (y < h - 1) TrySeedLoose(pixels, visited, halo, haloDepth, x, y + 1, bgColors, nextD, ref ctx);
             }
 
             int removed = 0;
@@ -229,30 +264,30 @@ namespace AIPortraits
             }
         }
 
-        private static void TrySeedStrict(Color32[] pixels, bool[] visited, Queue<int> queue, int x, int y, int w, int h, List<YCbCrColor> bgColors)
+        private static void TrySeedStrict(Color32[] pixels, bool[] visited, Queue<int> queue, int x, int y, List<YCbCrColor> bgColors, ref FloodContext ctx)
         {
-            int idx = y * w + x;
+            int idx = y * ctx.width + x;
             if (visited[idx]) return;
 
             float chromaTol, lumaTol;
-            GetLocalTolerances(x, y, w, h, ChromaStrict, LumaStrict, out chromaTol, out lumaTol);
+            GetLocalTolerances(x, y, ChromaStrict, LumaStrict, out chromaTol, out lumaTol, ref ctx);
 
-            if (EvaluatePixel(pixels[idx], bgColors, chromaTol, lumaTol))
+            if (EvaluatePixel(pixels[idx], bgColors, chromaTol, lumaTol, ref ctx))
             {
                 visited[idx] = true;
                 queue.Enqueue(idx);
             }
         }
 
-        private static void TrySeedLoose(Color32[] pixels, bool[] visited, Queue<int> queue, Queue<byte> depthQ, int x, int y, int w, int h, List<YCbCrColor> bgColors, byte nextDepth)
+        private static void TrySeedLoose(Color32[] pixels, bool[] visited, Queue<int> queue, Queue<byte> depthQ, int x, int y, List<YCbCrColor> bgColors, byte nextDepth, ref FloodContext ctx)
         {
-            int idx = y * w + x;
+            int idx = y * ctx.width + x;
             if (visited[idx]) return;
 
             float chromaTol, lumaTol;
-            GetLocalTolerances(x, y, w, h, ChromaLoose, LumaLoose, out chromaTol, out lumaTol);
+            GetLocalTolerances(x, y, ChromaLoose, LumaLoose, out chromaTol, out lumaTol, ref ctx);
 
-            if (EvaluatePixel(pixels[idx], bgColors, chromaTol, lumaTol))
+            if (EvaluatePixel(pixels[idx], bgColors, chromaTol, lumaTol, ref ctx))
             {
                 visited[idx] = true;
                 queue.Enqueue(idx);
@@ -260,7 +295,7 @@ namespace AIPortraits
             }
         }
 
-        private static bool EvaluatePixel(Color32 pixel, List<YCbCrColor> bgColors, float chromaTol, float lumaTol)
+        private static bool EvaluatePixel(Color32 pixel, List<YCbCrColor> bgColors, float chromaTol, float lumaTol, ref FloodContext ctx)
         {
             if (pixel.a < AlreadyTransparentAlpha) return true;
 
@@ -269,33 +304,14 @@ namespace AIPortraits
             // Skin Tone Guard: Protect warm human skin colors (face, neck, ears) from erasure
             if (p.Cb >= 95f && p.Cb <= 126f && p.Cr >= 130f && p.Cr <= 165f)
             {
-                bool bgIsSkinLike = false;
-                foreach (var bg in bgColors)
-                {
-                    if (bg.Cb >= 95f && bg.Cb <= 126f && bg.Cr >= 130f && bg.Cr <= 165f)
-                    {
-                        bgIsSkinLike = true;
-                        break;
-                    }
-                }
-                if (!bgIsSkinLike) return false;
+                if (!ctx.bgIsSkinLike) return false;
             }
 
             // Saturated/Vibrant Color Guard: Protect colored hair/clothing if background is neutral
             float pSat = System.Math.Abs(p.Cb - 128f) + System.Math.Abs(p.Cr - 128f);
             if (pSat > 25f)
             {
-                bool bgIsSaturated = false;
-                foreach (var bg in bgColors)
-                {
-                    float bgSat = System.Math.Abs(bg.Cb - 128f) + System.Math.Abs(bg.Cr - 128f);
-                    if (bgSat > 20f)
-                    {
-                        bgIsSaturated = true;
-                        break;
-                    }
-                }
-                if (!bgIsSaturated) return false;
+                if (!ctx.bgIsSaturated) return false;
             }
 
             // Compare against dominant background color profiles
@@ -311,13 +327,10 @@ namespace AIPortraits
             return false;
         }
 
-        private static void GetLocalTolerances(int x, int y, int w, int h, float baseChroma, float baseLuma, out float chromaTol, out float lumaTol)
+        private static void GetLocalTolerances(int x, int y, float baseChroma, float baseLuma, out float chromaTol, out float lumaTol, ref FloodContext ctx)
         {
-            float px = (float)x / w;
-            float py = (float)y / h;
-
             // Tighten tolerances by 50% in the core face/neck zone to protect facial details
-            if (px >= 0.28f && px <= 0.72f && py >= 0.32f && py <= 0.82f)
+            if (x >= ctx.coreMinX && x <= ctx.coreMaxX && y >= ctx.coreMinY && y <= ctx.coreMaxY)
             {
                 chromaTol = baseChroma * 0.5f;
                 lumaTol   = baseLuma * 0.6f;

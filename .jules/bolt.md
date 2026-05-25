@@ -1,0 +1,3 @@
+## 2024-06-12 - Background Remover Optimizations
+**Learning:** Float division (`x/w` and `y/h`) in tight image processing loops (like `BackgroundRemover.cs` flood fill pixel evaluations) creates significant overhead when processed per-pixel. Invariant flag evaluations (`bgIsSkinLike` and `bgIsSaturated`) computed over the background colors array for every pixel further slow down the flood-fill execution.
+**Action:** Extract precomputable bounds and booleans into a `FloodContext` passed by reference. This converts per-pixel divisions into simple integer bounds checks and eliminates redundant collection iterations. Be sure to preserve existing document comments and carefully mock Unity dependencies when compiling locally.
