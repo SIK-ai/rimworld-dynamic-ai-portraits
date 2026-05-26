@@ -20,6 +20,33 @@ namespace AIPortraits
     // ─────────────────────────────────────────────────────────────────────────────
     // MANAGER — async generation, caching, triggers
     // ─────────────────────────────────────────────────────────────────────────────
+    public struct PawnFramingKey : IEquatable<PawnFramingKey>
+    {
+        public readonly int pawnId;
+        public readonly string framing;
+
+        public PawnFramingKey(int pawnId, string framing)
+        {
+            this.pawnId = pawnId;
+            this.framing = framing;
+        }
+
+        public bool Equals(PawnFramingKey other)
+        {
+            return pawnId == other.pawnId && framing == other.framing;
+        }
+
+        public override int GetHashCode()
+        {
+            return pawnId ^ (framing?.GetHashCode() ?? 0);
+        }
+
+        public override bool Equals(object obj)
+        {
+            return obj is PawnFramingKey key && Equals(key);
+        }
+    }
+
     public static class AIPortraitsManager
     {
         private const string LockedSuffix = "_locked";
@@ -42,7 +69,7 @@ namespace AIPortraits
         // GetActiveKey is called every frame on every selected pawn; without caching it allocates
         // strings on every paint. knownMissingFiles avoids hammering File.Exists on locked-portrait
         // paths the user has deleted.
-        private static Dictionary<string, string> activeKeyCache    = new Dictionary<string, string>();
+        private static Dictionary<PawnFramingKey, string> activeKeyCache    = new Dictionary<PawnFramingKey, string>();
         private static HashSet<string>            knownMissingFiles = new HashSet<string>();
         private static int                        lastWorldId       = -1;
         private static string                     lastWorldIdString = "global";
@@ -73,7 +100,7 @@ namespace AIPortraits
             }
 
             // Cache key composed of pawn + framing — both are inputs to the final key
-            string cacheLookup = pawn.ThingID + "|" + framing;
+            PawnFramingKey cacheLookup = new PawnFramingKey(pawn.thingIDNumber, framing);
             string cached;
             if (activeKeyCache.TryGetValue(cacheLookup, out cached))
                 return cached;
