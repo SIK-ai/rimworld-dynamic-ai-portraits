@@ -38,6 +38,15 @@ namespace AIPortraits
         private static Dictionary<string, PawnPortraitData>  portraitData   = new Dictionary<string, PawnPortraitData>();
         private static Dictionary<string, CachedState>       stateCache     = new Dictionary<string, CachedState>();
 
+        // Per-frame perf optimisation (originally Jules-bot bolt/optimize-portrait-render-loop).
+        // GetActiveKey is called every frame on every selected pawn; without caching it allocates
+        // strings on every paint. knownMissingFiles avoids hammering File.Exists on locked-portrait
+        // paths the user has deleted.
+        private static Dictionary<string, string> activeKeyCache    = new Dictionary<string, string>();
+        private static HashSet<string>            knownMissingFiles = new HashSet<string>();
+        private static int                        lastWorldId       = -1;
+        private static string                     lastWorldIdString = "global";
+
         public static string GetActiveFraming(Pawn pawn)
         {
             if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.pawnFraming != null)
@@ -51,10 +60,27 @@ namespace AIPortraits
 
         public static string GetActiveKeyForFraming(Pawn pawn, string framing)
         {
-            string worldId = "global";
+            // Invalidate cache if world changed (new save loaded)
+            int currentWorldId = -1;
             if (Find.World != null && Find.World.info != null)
-                worldId = Find.World.info.persistentRandomValue.ToString();
-            return worldId + "_" + pawn.ThingID + "_" + framing;
+                currentWorldId = Find.World.info.persistentRandomValue;
+            if (currentWorldId != lastWorldId)
+            {
+                lastWorldId = currentWorldId;
+                lastWorldIdString = currentWorldId == -1 ? "global" : currentWorldId.ToString();
+                activeKeyCache.Clear();
+                knownMissingFiles.Clear();
+            }
+
+            // Cache key composed of pawn + framing — both are inputs to the final key
+            string cacheLookup = pawn.ThingID + "|" + framing;
+            string cached;
+            if (activeKeyCache.TryGetValue(cacheLookup, out cached))
+                return cached;
+
+            string built = lastWorldIdString + "_" + pawn.ThingID + "_" + framing;
+            activeKeyCache[cacheLookup] = built;
+            return built;
         }
 
         public static string GetActiveKey(Pawn pawn)
@@ -175,23 +201,37 @@ namespace AIPortraits
             if (!string.IsNullOrEmpty(lockedPath))
             {
                 string lockedCacheKey = pawn.ThingID + "_" + GetActiveFraming(pawn) + LockedSuffix;
+
+                // Memory fast-path (no I/O)
                 Texture2D lockedTex;
                 if (loadedTextures.TryGetValue(lockedCacheKey, out lockedTex))
                     return lockedTex;
 
-                try
+                // Skip File.Exists/ReadAllBytes if we've already learned this path is gone.
+                // knownMissingFiles is cleared whenever a portrait is re-saved or world changes.
+                if (!knownMissingFiles.Contains(lockedPath))
                 {
-                    byte[] bytes = System.IO.File.ReadAllBytes(lockedPath);
-                    Texture2D newTex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-                    if (ImageConversion.LoadImage(newTex, bytes))
+                    if (System.IO.File.Exists(lockedPath))
                     {
-                        loadedTextures[lockedCacheKey] = newTex;
-                        return newTex;
+                        try
+                        {
+                            byte[] bytes = System.IO.File.ReadAllBytes(lockedPath);
+                            Texture2D newTex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                            if (ImageConversion.LoadImage(newTex, bytes))
+                            {
+                                loadedTextures[lockedCacheKey] = newTex;
+                                return newTex;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.Error("[Dynamic AI Portraits] Failed to load locked portrait from " + lockedPath + ": " + ex.Message);
+                        }
                     }
-                }
-                catch (Exception ex)
-                {
-                    Log.Error("[Dynamic AI Portraits] Failed to load locked portrait from " + lockedPath + ": " + ex.Message);
+                    else
+                    {
+                        knownMissingFiles.Add(lockedPath);
+                    }
                 }
             }
 
@@ -569,6 +609,8 @@ namespace AIPortraits
                 if (tex != null) UnityEngine.Object.Destroy(tex);
                 loadedTextures.Remove(cacheKey);
             }
+            // Clear "known missing" set — the file may have been regenerated/restored
+            knownMissingFiles.Clear();
             PortraitsCache.SetDirty(pawn);
         }
 
