@@ -4,6 +4,7 @@ using System.IO;
 using UnityEngine;
 using Verse;
 using RimWorld;
+using Verse.Sound;
 
 namespace AIPortraits
 {
@@ -29,58 +30,217 @@ namespace AIPortraits
     public class AIPortraitsSettings : ModSettings
     {
         public BackendType backendType = BackendType.Pollinations;
+
+        // Legacy (kept for migration but not actively used for storage)
         public string apiKey = "";
-        public string apiUrl = "https://image.pollinations.ai";
-        public string modelName = "sana";
+        public string apiUrl = "";
+        public string modelName = "";
+
+        // Distinct Backend Settings
+        public string cfApiKey = "";
+        public string cfApiUrl = "https://api.cloudflare.com";
+        public string cfModelName = "@cf/black-forest-labs/flux-1-schnell";
+
+        public string giApiKey = "";
+        public string giApiUrl = "https://generativelanguage.googleapis.com";
+        public string giModelName = "imagen-4.0-fast-generate-001";
+
+        public string diApiKey = "";
+        public string diApiUrl = "https://api.deepinfra.com";
+        public string diModelName = "black-forest-labs/FLUX-1-schnell";
+
+        public string hfApiKey = "";
+        public string hfApiUrl = "https://api-inference.huggingface.co";
+        public string hfModelName = "black-forest-labs/FLUX.1-schnell";
+
+        public string localApiUrl = "http://127.0.0.1:7860";
+
+        public string polApiUrl = "https://image.pollinations.ai";
+        public string polModelName = "sana";
+
+        public string CurrentApiKey
+        {
+            get
+            {
+                switch (backendType)
+                {
+                    case BackendType.Cloudflare: return cfApiKey;
+                    case BackendType.GoogleImagen: return giApiKey;
+                    case BackendType.DeepInfra: return diApiKey;
+                    case BackendType.HuggingFace: return hfApiKey;
+                    default: return "";
+                }
+            }
+            set
+            {
+                switch (backendType)
+                {
+                    case BackendType.Cloudflare: cfApiKey = value; break;
+                    case BackendType.GoogleImagen: giApiKey = value; break;
+                    case BackendType.DeepInfra: diApiKey = value; break;
+                    case BackendType.HuggingFace: hfApiKey = value; break;
+                }
+            }
+        }
+
+        public string CurrentApiUrl
+        {
+            get
+            {
+                switch (backendType)
+                {
+                    case BackendType.Cloudflare: return cfApiUrl;
+                    case BackendType.GoogleImagen: return giApiUrl;
+                    case BackendType.DeepInfra: return diApiUrl;
+                    case BackendType.HuggingFace: return hfApiUrl;
+                    case BackendType.LocalA1111: return localApiUrl;
+                    case BackendType.Pollinations: return polApiUrl;
+                    default: return "";
+                }
+            }
+            set
+            {
+                switch (backendType)
+                {
+                    case BackendType.Cloudflare: cfApiUrl = value; break;
+                    case BackendType.GoogleImagen: giApiUrl = value; break;
+                    case BackendType.DeepInfra: diApiUrl = value; break;
+                    case BackendType.HuggingFace: hfApiUrl = value; break;
+                    case BackendType.LocalA1111: localApiUrl = value; break;
+                    case BackendType.Pollinations: polApiUrl = value; break;
+                }
+            }
+        }
+
+        public string CurrentModelName
+        {
+            get
+            {
+                switch (backendType)
+                {
+                    case BackendType.Cloudflare: return cfModelName;
+                    case BackendType.GoogleImagen: return giModelName;
+                    case BackendType.DeepInfra: return diModelName;
+                    case BackendType.HuggingFace: return hfModelName;
+                    case BackendType.Pollinations: return polModelName;
+                    default: return "";
+                }
+            }
+            set
+            {
+                switch (backendType)
+                {
+                    case BackendType.Cloudflare: cfModelName = value; break;
+                    case BackendType.GoogleImagen: giModelName = value; break;
+                    case BackendType.DeepInfra: diModelName = value; break;
+                    case BackendType.HuggingFace: hfModelName = value; break;
+                    case BackendType.Pollinations: polModelName = value; break;
+                }
+            }
+        }
 
         public PortraitStyle portraitStyle = PortraitStyle.Realistic_Korean;
 
         // User-appended style suffix (overrides nothing, just appends)
         public string baseStylePrompt = "";
+        public string manhwaStylePrompt = "highly detailed digital illustration, professional webtoon manhwa key visual, sharp dynamic clean inked outlines, deep volumetric shading, dramatic cinematic lighting with rich chiaroscuro contrast, glowing colored rim highlights outlining the character silhouette, vibrant saturated colors, cinematic composition, exquisite detailed expressive eyes with realistic reflections, beautifully styled glossy hair flows, pristine smooth skin rendering, masterpiece anime art, aesthetic design";
+        public string cartoonStylePrompt = "Rick and Morty Adult Swim cartoon character, Justin Roiland animation style, thick consistent black outlines, flat 2D color fills, no gradients, no painterly shading, bulging round cartoon eyes with tiny black dot pupils, exaggerated wonky proportions, oversized head, hand-drawn animation cel look, bright primary color palette";
+        public string pixelStylePrompt = "high-quality 16-bit retro JRPG character sprite, Tactics Ogre and Final Fantasy Tactics style, clean pixel-art grid, zero anti-aliasing, sharp deliberate pixel edges, thin consistent dark outlines, clean flat cel-shading, limited color palette, anime-style cute facial features, detailed hair";
         public string baseNegativePrompt = "generic fantasy art, cartoon style, bright cheerful lighting, flat lighting, blurry textures, generic features, messy brushstrokes, standard clean weapon, generic clothing, missing face tattoos, missing horns, missing cybernetic eyes, missing scars, photorealistic photograph, 3d render, chibi, flat shading, low quality, watermark, extra limbs, deformed face, bad anatomy, multiple people, text, signature, anti-aliased pixels, jagged irregular lines, muddied unclear character design, illegible text, generic UI, inconsistency between sprite and portrait";
 
         public float cfgScale = 7f;
         public int steps = 20;
 
-        public bool forceOpenEyes = true;
-        public bool allowCuteProps = true;
         public bool includeIdeology = true;
         public bool includeRimLighting = true;
+        public bool useGearReferenceSheet = true;
 
         // LLM-assisted prompt generation (Gemini Flash)
         public bool   useLLMPrompt = false;
         public string llmApiKey    = "";
 
+        // AI Background Removal (Cloudflare Bria-RMBG-1.4)
+        public bool useAIBgRemoval = false;
+        public string cfBgRemovalKey = "";
+
         private Vector2 scrollPosition = Vector2.zero;
 
         public Dictionary<string, string> activePortraits = new Dictionary<string, string>();
         public Dictionary<string, string> pawnFraming = new Dictionary<string, string>();
+        public Dictionary<string, bool> pawnVideoToggles = new Dictionary<string, bool>();
 
         public override void ExposeData()
         {
             base.ExposeData();
             Scribe_Values.Look(ref backendType, "backendType", BackendType.Pollinations);
             Scribe_Values.Look(ref apiKey, "apiKey", "");
-            Scribe_Values.Look(ref apiUrl, "apiUrl", "https://image.pollinations.ai");
-            Scribe_Values.Look(ref modelName, "modelName", "sana");
+            Scribe_Values.Look(ref apiUrl, "apiUrl", "");
+            Scribe_Values.Look(ref modelName, "modelName", "");
+
+            Scribe_Values.Look(ref cfApiKey, "cfApiKey", "");
+            Scribe_Values.Look(ref cfApiUrl, "cfApiUrl", "https://api.cloudflare.com");
+            Scribe_Values.Look(ref cfModelName, "cfModelName", "@cf/black-forest-labs/flux-1-schnell");
+
+            Scribe_Values.Look(ref giApiKey, "giApiKey", "");
+            Scribe_Values.Look(ref giApiUrl, "giApiUrl", "https://generativelanguage.googleapis.com");
+            Scribe_Values.Look(ref giModelName, "giModelName", "imagen-4.0-fast-generate-001");
+
+            Scribe_Values.Look(ref diApiKey, "diApiKey", "");
+            Scribe_Values.Look(ref diApiUrl, "diApiUrl", "https://api.deepinfra.com");
+            Scribe_Values.Look(ref diModelName, "diModelName", "black-forest-labs/FLUX-1-schnell");
+
+            Scribe_Values.Look(ref hfApiKey, "hfApiKey", "");
+            Scribe_Values.Look(ref hfApiUrl, "hfApiUrl", "https://api-inference.huggingface.co");
+            Scribe_Values.Look(ref hfModelName, "hfModelName", "black-forest-labs/FLUX.1-schnell");
+
+            Scribe_Values.Look(ref localApiUrl, "localApiUrl", "http://127.0.0.1:7860");
+
+            Scribe_Values.Look(ref polApiUrl, "polApiUrl", "https://image.pollinations.ai");
+            Scribe_Values.Look(ref polModelName, "polModelName", "sana");
+
+            if (Scribe.mode == LoadSaveMode.PostLoadInit)
+            {
+                if (!string.IsNullOrEmpty(apiKey))
+                {
+                    CurrentApiKey = apiKey;
+                    apiKey = "";
+                }
+                if (!string.IsNullOrEmpty(apiUrl))
+                {
+                    CurrentApiUrl = apiUrl;
+                    apiUrl = "";
+                }
+                if (!string.IsNullOrEmpty(modelName))
+                {
+                    CurrentModelName = modelName;
+                    modelName = "";
+                }
+            }
             Scribe_Values.Look(ref portraitStyle, "portraitStyle", PortraitStyle.Realistic_Korean);
             Scribe_Values.Look(ref baseStylePrompt, "baseStylePrompt", "");
-            Scribe_Values.Look(ref baseNegativePrompt, "baseNegativePrompt", "");
+            Scribe_Values.Look(ref manhwaStylePrompt, "manhwaStylePrompt", "highly detailed digital illustration, professional webtoon manhwa key visual, sharp dynamic clean inked outlines, deep volumetric shading, dramatic cinematic lighting with rich chiaroscuro contrast, glowing colored rim highlights outlining the character silhouette, vibrant saturated colors, cinematic composition, exquisite detailed expressive eyes with realistic reflections, beautifully styled glossy hair flows, pristine smooth skin rendering, masterpiece anime art, aesthetic design");
+            Scribe_Values.Look(ref cartoonStylePrompt, "cartoonStylePrompt", "Rick and Morty Adult Swim cartoon character, Justin Roiland animation style, thick consistent black outlines, flat 2D color fills, no gradients, no painterly shading, bulging round cartoon eyes with tiny black dot pupils, exaggerated wonky proportions, oversized head, hand-drawn animation cel look, bright primary color palette");
+            Scribe_Values.Look(ref pixelStylePrompt, "pixelStylePrompt", "high-quality 16-bit retro JRPG character sprite, Tactics Ogre and Final Fantasy Tactics style, clean pixel-art grid, zero anti-aliasing, sharp deliberate pixel edges, thin consistent dark outlines, clean flat cel-shading, limited color palette, anime-style cute facial features, detailed hair");
+            Scribe_Values.Look(ref baseNegativePrompt, "baseNegativePrompt", "generic fantasy art, cartoon style, bright cheerful lighting, flat lighting, blurry textures, generic features, messy brushstrokes, standard clean weapon, generic clothing, missing face tattoos, missing horns, missing cybernetic eyes, missing scars, photorealistic photograph, 3d render, chibi, flat shading, low quality, watermark, extra limbs, deformed face, bad anatomy, multiple people, text, signature, anti-aliased pixels, jagged irregular lines, muddied unclear character design, illegible text, generic UI, inconsistency between sprite and portrait");
             Scribe_Values.Look(ref cfgScale, "cfgScale", 7f);
             Scribe_Values.Look(ref steps, "steps", 20);
-            Scribe_Values.Look(ref forceOpenEyes,     "forceOpenEyes",    true);
-            Scribe_Values.Look(ref allowCuteProps,     "allowCuteProps",   true);
             Scribe_Values.Look(ref includeIdeology,    "includeIdeology",  true);
             Scribe_Values.Look(ref includeRimLighting, "includeRimLighting", true);
+            Scribe_Values.Look(ref useGearReferenceSheet, "useGearReferenceSheet", true);
             Scribe_Values.Look(ref useLLMPrompt,       "useLLMPrompt",     false);
             Scribe_Values.Look(ref llmApiKey,          "llmApiKey",        "");
+            Scribe_Values.Look(ref useAIBgRemoval,     "useAIBgRemoval",   false);
+            Scribe_Values.Look(ref cfBgRemovalKey,     "cfBgRemovalKey",   "");
             Scribe_Collections.Look(ref activePortraits, "activePortraits", LookMode.Value, LookMode.Value);
             Scribe_Collections.Look(ref pawnFraming, "pawnFraming", LookMode.Value, LookMode.Value);
+            Scribe_Collections.Look(ref pawnVideoToggles, "pawnVideoToggles", LookMode.Value, LookMode.Value);
 
             if (activePortraits == null)
                 activePortraits = new Dictionary<string, string>();
             if (pawnFraming == null)
                 pawnFraming = new Dictionary<string, string>();
+            if (pawnVideoToggles == null)
+                pawnVideoToggles = new Dictionary<string, bool>();
         }
 
         // UI states (not serialized)
@@ -92,6 +252,8 @@ namespace AIPortraits
         private Vector2 promptScrollPosition = Vector2.zero;
         private Pawn selectedPawn = null;
         private Pawn promptTabSelectedPawn = null;
+        private SavedPortrait selectedSavedPortrait = null;
+        private string customPromptBuffer = "";
 
         public class SavedPortrait
         {
@@ -100,7 +262,12 @@ namespace AIPortraits
             public Texture2D texture;
             public string prompt;
             public string styleName;
+            public string framingName;
             public string timestamp;
+
+            // Reference textures
+            public Texture2D refGearTexture;
+            public Texture2D refPortraitTexture;
         }
 
         private Pawn lastCachedPawn = null;
@@ -108,12 +275,23 @@ namespace AIPortraits
 
         private void RefreshPawnPortraitsCache(Pawn pawn)
         {
+            selectedSavedPortrait = null;
+            customPromptBuffer = "";
+
             // Destroy textures to avoid memory leaks
             foreach (var sp in cachedSavedPortraits)
             {
                 if (sp.texture != null)
                 {
                     UnityEngine.Object.Destroy(sp.texture);
+                }
+                if (sp.refGearTexture != null)
+                {
+                    UnityEngine.Object.Destroy(sp.refGearTexture);
+                }
+                if (sp.refPortraitTexture != null)
+                {
+                    UnityEngine.Object.Destroy(sp.refPortraitTexture);
                 }
             }
             cachedSavedPortraits.Clear();
@@ -131,6 +309,12 @@ namespace AIPortraits
                 string[] files = Directory.GetFiles(dir, "*.png");
                 foreach (string file in files)
                 {
+                    // Skip reference files from main grid loading
+                    if (file.EndsWith("_ref_gear.png") || file.EndsWith("_ref_portrait.png"))
+                    {
+                        continue;
+                    }
+
                     try
                     {
                         byte[] bytes = File.ReadAllBytes(file);
@@ -154,20 +338,56 @@ namespace AIPortraits
                                 sp.prompt = "No prompt recorded.";
                             }
 
+                            // Load gear reference sheet if it exists
+                            string gearFile = Path.ChangeExtension(file, null) + "_ref_gear.png";
+                            if (File.Exists(gearFile))
+                            {
+                                byte[] gBytes = File.ReadAllBytes(gearFile);
+                                Texture2D gTex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                                if (ImageConversion.LoadImage(gTex, gBytes))
+                                {
+                                    sp.refGearTexture = gTex;
+                                }
+                                else
+                                {
+                                    UnityEngine.Object.Destroy(gTex);
+                                }
+                            }
+
+                            // Load active portrait reference if it exists
+                            string portFile = Path.ChangeExtension(file, null) + "_ref_portrait.png";
+                            if (File.Exists(portFile))
+                            {
+                                byte[] pBytes = File.ReadAllBytes(portFile);
+                                Texture2D pTex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                                if (ImageConversion.LoadImage(pTex, pBytes))
+                                {
+                                    sp.refPortraitTexture = pTex;
+                                }
+                                else
+                                {
+                                    UnityEngine.Object.Destroy(pTex);
+                                }
+                            }
+
                             string filename = Path.GetFileNameWithoutExtension(file);
                             string[] parts = filename.Split('_');
-                            if (parts.Length >= 3)
+                            if (parts.Length >= 5) // New format: Name_Style_Framing_Date_Time
                             {
                                 sp.styleName = parts[1];
-                                sp.timestamp = parts[2].Replace('-', ':');
-                                if (parts.Length > 3)
-                                {
-                                    sp.timestamp += " " + parts[3].Replace('-', ':');
-                                }
+                                sp.framingName = parts[2];
+                                sp.timestamp = parts[3].Replace('-', ':') + " " + parts[4].Replace('-', ':');
+                            }
+                            else if (parts.Length == 4) // Legacy format: Name_Style_Date_Time
+                            {
+                                sp.styleName = parts[1];
+                                sp.framingName = "portrait"; // Default to portrait
+                                sp.timestamp = parts[2].Replace('-', ':') + " " + parts[3].Replace('-', ':');
                             }
                             else
                             {
                                 sp.styleName = "Unknown";
+                                sp.framingName = "portrait";
                                 sp.timestamp = "Unknown";
                             }
 
@@ -230,36 +450,7 @@ namespace AIPortraits
         private void ApplyProviderDefaults(BackendType bt)
         {
             backendType = bt;
-            switch (bt)
-            {
-                case BackendType.Pollinations:
-                    apiUrl    = "https://image.pollinations.ai";
-                    modelName = "sana";
-                    apiKey    = "";
-                    break;
-                case BackendType.Cloudflare:
-                    apiUrl    = "https://api.cloudflare.com";
-                    modelName = "@cf/black-forest-labs/flux-1-schnell";
-                    // Don't clear apiKey — user may already have it set
-                    break;
-                case BackendType.GoogleImagen:
-                    apiUrl    = "https://generativelanguage.googleapis.com";
-                    modelName = "imagen-4.0-fast-generate-001";
-                    break;
-                case BackendType.DeepInfra:
-                    apiUrl    = "https://api.deepinfra.com";
-                    modelName = "black-forest-labs/FLUX-1-schnell";
-                    break;
-                case BackendType.HuggingFace:
-                    apiUrl    = "https://api-inference.huggingface.co";
-                    modelName = "black-forest-labs/FLUX.1-schnell";
-                    break;
-                case BackendType.LocalA1111:
-                    apiUrl    = "http://127.0.0.1:7860";
-                    modelName = "";
-                    apiKey    = "";
-                    break;
-            }
+            // distinct fields natively preserve configurations, no longer need to wipe/overwrite
         }
 
         private static string[] ModelsForProvider(BackendType bt)
@@ -277,6 +468,9 @@ namespace AIPortraits
                     };
                 case BackendType.GoogleImagen:
                     return new[] {
+                        "nanobanana-2",
+                        "nanobanana-pro",
+                        "nanobanana",
                         "imagen-4.0-fast-generate-001",
                         "imagen-4.0-generate-001",
                         "imagen-4.0-ultra-generate-001",
@@ -383,8 +577,9 @@ namespace AIPortraits
 
         private void DrawApiSettings(Rect inRect)
         {
-            float viewHeight = 550f;
+            float viewHeight = 650f;
             if (useLLMPrompt) viewHeight += 60f;
+            if (useAIBgRemoval) viewHeight += 60f;
             if (showAdvanced) viewHeight += 320f;
 
             Rect viewRect = new Rect(0f, 0f, inRect.width - 18f, viewHeight);
@@ -405,7 +600,7 @@ namespace AIPortraits
             Rect btnPixel   = new Rect(styleRow.x + styleW*2f, styleRow.y, styleW - 4f, 28f);
 
             if (portraitStyle == PortraitStyle.Realistic_Korean)  GUI.color = new Color(0.5f, 0.9f, 1f);
-            if (Widgets.ButtonText(btnKorean,  "🎨 Korean Webtoon"))  portraitStyle = PortraitStyle.Realistic_Korean;
+            if (Widgets.ButtonText(btnKorean,  "🎨 Manhwa"))  portraitStyle = PortraitStyle.Realistic_Korean;
             GUI.color = Color.white;
 
             if (portraitStyle == PortraitStyle.Realistic_Western) GUI.color = new Color(0.5f, 0.9f, 1f);
@@ -418,7 +613,7 @@ namespace AIPortraits
 
             listing.Gap(6f);
             string styleDesc =
-                portraitStyle == PortraitStyle.Realistic_Korean  ? "Korean webtoon manhwa (Solo Leveling) — sharp inked line art, dramatic chiaroscuro, saturated focal colors." :
+                portraitStyle == PortraitStyle.Realistic_Korean  ? "Korean webtoon manhwa style — sharp inked line art, dramatic chiaroscuro, saturated focal colors, custom-tailored aesthetics." :
                 portraitStyle == PortraitStyle.Realistic_Western ? "Adult Swim cartoon (Rick and Morty) — thick black outlines, flat 2D fills, bulging eyes, wonky proportions." :
                 portraitStyle == PortraitStyle.DotPixel          ? "16-bit pixel art — classic JRPG sprite style, strict pixel grid, cel-shading bands." : "";
             Text.Font = GameFont.Tiny;
@@ -464,14 +659,14 @@ namespace AIPortraits
                 Rect modelRow = listing.GetRect(34f);
                 Widgets.Label(new Rect(modelRow.x, modelRow.y + 8f, 90f, 24f), "Model:");
                 Rect modelBtn = new Rect(modelRow.x + 90f, modelRow.y, modelRow.width - 90f, 34f);
-                string currentModel = string.IsNullOrEmpty(modelName) ? availableModels[0] : modelName;
+                string currentModel = string.IsNullOrEmpty(CurrentModelName) ? availableModels[0] : CurrentModelName;
                 if (Widgets.ButtonText(modelBtn, currentModel))
                 {
                     var opts = new List<FloatMenuOption>();
                     foreach (string m in availableModels)
                     {
                         string captured = m;
-                        opts.Add(new FloatMenuOption(m, delegate () { modelName = captured; }));
+                        opts.Add(new FloatMenuOption(m, delegate () { CurrentModelName = captured; }));
                     }
                     Find.WindowStack.Add(new FloatMenu(opts));
                 }
@@ -492,7 +687,7 @@ namespace AIPortraits
             if (ProviderNeedsApiKey(backendType))
             {
                 listing.Label(ApiKeyLabel(backendType));
-                apiKey = listing.TextEntry(apiKey);
+                CurrentApiKey = listing.TextEntry(CurrentApiKey);
                 listing.Gap(2f);
                 Text.Font = GameFont.Tiny;
                 GUI.color = new Color(0.6f, 0.6f, 0.6f);
@@ -506,7 +701,7 @@ namespace AIPortraits
             {
                 listing.Gap(4f);
                 listing.Label("Server URL");
-                apiUrl = listing.TextEntry(apiUrl);
+                CurrentApiUrl = listing.TextEntry(CurrentApiUrl);
                 listing.Gap(2f);
                 Text.Font = GameFont.Tiny;
                 GUI.color = new Color(0.6f, 0.6f, 0.6f);
@@ -522,10 +717,9 @@ namespace AIPortraits
             // ── PORTRAIT DETAILS SETTINGS ─────────────────────────────────────────
             listing.Label("Portrait Details Settings");
             listing.Gap(4f);
-            listing.CheckboxLabeled("Force Open Eyes", ref forceOpenEyes, "Always command the AI to keep the pawn's eyes open (prevents sleeping/contemplative closed-eye generation by default).");
-            listing.CheckboxLabeled("Allow Cute & Skill Props", ref allowCuteProps, "Incorporate trait-based cute items (lollipops, joint, beer) and skill-based items (potted plants, book, medical kits) in hands.");
             listing.CheckboxLabeled("Include Ideology details", ref includeIdeology, "Include pawn's ideology role (e.g. Moral Guide) and follower description/iconography.");
             listing.CheckboxLabeled("Include Ideology Rim Lighting", ref includeRimLighting, "Separate the character silhouette from the background using a rim light styled with their favorite/ideoligion color.");
+            listing.CheckboxLabeled("Use Gear Reference Sheet (Gemini)", ref useGearReferenceSheet, "Stitch matched weapon/apparel sprites into a single reference image for Gemini models. Helps retain equipment designs across generations.");
             listing.Gap(8f);
 
             listing.GapLine();
@@ -573,7 +767,7 @@ namespace AIPortraits
             if (useLLMPrompt)
             {
                 // If using Imagen the same key works for Gemini Flash — show a green note.
-                bool canReuseImagenKey = (backendType == BackendType.GoogleImagen && !string.IsNullOrEmpty(apiKey));
+                bool canReuseImagenKey = (!string.IsNullOrEmpty(giApiKey));
                 if (canReuseImagenKey)
                 {
                     Rect reuseBox = listing.GetRect(30f);
@@ -606,6 +800,45 @@ namespace AIPortraits
             listing.GapLine();
             listing.Gap(6f);
 
+            // ── AI BACKGROUND REMOVAL ─────────────────────────────────────────────
+            listing.Label("AI Background Removal (Cloudflare)");
+            listing.Gap(4f);
+            listing.CheckboxLabeled("Use AI Background Removal", ref useAIBgRemoval, "Use Cloudflare's bria-rmbg-1.4 AI model for flawless background and halo removal. Fixes hair/clothing colors being erased by the local flood-fill. Requires a free Cloudflare API key.");
+            if (useAIBgRemoval)
+            {
+                bool canReuseCfKey = (!string.IsNullOrEmpty(cfApiKey) && cfApiKey.Contains(":"));
+                if (canReuseCfKey)
+                {
+                    Rect reuseBox = listing.GetRect(30f);
+                    Widgets.DrawBoxSolid(reuseBox, new Color(0.05f, 0.18f, 0.05f, 0.8f));
+                    GUI.color = new Color(1f, 1f, 1f, 0.15f);
+                    Widgets.DrawBox(reuseBox, 1);
+                    GUI.color = Color.white;
+                    Text.Font   = GameFont.Tiny;
+                    GUI.color   = new Color(0.5f, 0.95f, 0.5f);
+                    Widgets.Label(reuseBox.ContractedBy(5f), "\u2713  Using your Cloudflare image generation key \u2014 no extra key needed.");
+                    GUI.color   = Color.white;
+                    Text.Font   = GameFont.Small;
+                }
+                else
+                {
+                    listing.Label("Cloudflare API Key (account_id:token):");
+                    cfBgRemovalKey = listing.TextEntry(cfBgRemovalKey);
+                    listing.Gap(2f);
+                    Rect hintRect = listing.GetRect(20f);
+                    Text.Font = GameFont.Tiny;
+                    GUI.color = new Color(0.55f, 0.55f, 0.55f);
+                    Widgets.Label(hintRect, "  Format: <account_id>:<api_token>  \u2022  Free 10,000 uses/day via Workers AI.");
+                    GUI.color = Color.white;
+                    Text.Font = GameFont.Small;
+                }
+                listing.Gap(4f);
+            }
+
+            listing.Gap(8f);
+            listing.GapLine();
+            listing.Gap(6f);
+
             // ── ADVANCED ──────────────────────────────────────────────────────────
             Rect advHeaderRect = listing.GetRect(26f);
             string advLabel = (showAdvanced ? "▼" : "▶") + "  Advanced Settings";
@@ -616,15 +849,27 @@ namespace AIPortraits
             {
                 listing.Gap(6f);
                 listing.Label("API URL");
-                apiUrl = listing.TextEntry(apiUrl);
+                CurrentApiUrl = listing.TextEntry(CurrentApiUrl);
 
                 listing.Gap(6f);
                 listing.Label("Model Name");
-                modelName = listing.TextEntry(modelName);
+                CurrentModelName = listing.TextEntry(CurrentModelName);
 
                 listing.Gap(6f);
                 listing.Label("Extra Style Prompt (appended to every generation)");
                 baseStylePrompt = listing.TextEntry(baseStylePrompt, 2);
+
+                listing.Gap(6f);
+                listing.Label("Manhwa Style Prompt");
+                manhwaStylePrompt = listing.TextEntry(manhwaStylePrompt, 2);
+
+                listing.Gap(6f);
+                listing.Label("Cartoon Style Prompt");
+                cartoonStylePrompt = listing.TextEntry(cartoonStylePrompt, 2);
+
+                listing.Gap(6f);
+                listing.Label("Pixel Style Prompt");
+                pixelStylePrompt = listing.TextEntry(pixelStylePrompt, 2);
 
                 listing.Gap(6f);
                 listing.Label("Negative Prompt");
@@ -680,6 +925,8 @@ namespace AIPortraits
             if (selectedPawn == null || !colonists.Contains(selectedPawn))
             {
                 selectedPawn = colonists[0];
+                selectedSavedPortrait = null;
+                customPromptBuffer = "";
             }
 
             // Left Sidebar for Colonists
@@ -724,6 +971,8 @@ namespace AIPortraits
                 if (Widgets.ButtonText(rowRect, label))
                 {
                     selectedPawn = p;
+                    selectedSavedPortrait = null;
+                    customPromptBuffer = "";
                 }
                 GUI.color = Color.white;
             }
@@ -780,8 +1029,53 @@ namespace AIPortraits
                 RefreshPawnPortraitsCache(selectedPawn);
             }
 
+            // Framing buttons row
+            Rect framingRow = new Rect(gridAreaRect.x, gridAreaRect.y + 36f, gridAreaRect.width, 30f);
+            float fBtnW = (framingRow.width - 10f) / 3f;
+            Rect btnPort = new Rect(framingRow.x, framingRow.y, fBtnW, 30f);
+            Rect btnBody = new Rect(btnPort.xMax + 5f, framingRow.y, fBtnW, 30f);
+            Rect btnSpec = new Rect(btnBody.xMax + 5f, framingRow.y, fBtnW, 30f);
+
+            string currentFraming = AIPortraitsManager.GetActiveFraming(selectedPawn);
+
+            if (currentFraming == "portrait") GUI.color = new Color(0.5f, 0.9f, 1f);
+            if (Widgets.ButtonText(btnPort, "Portrait (P)"))
+            {
+                if (pawnFraming == null) pawnFraming = new Dictionary<string, string>();
+                pawnFraming[selectedPawn.ThingID] = "portrait";
+                selectedSavedPortrait = null;
+                customPromptBuffer = "";
+                AIPortraitsMod.Instance.WriteSettings();
+                SoundDefOf.Click.PlayOneShotOnCamera(null);
+            }
+            GUI.color = Color.white;
+
+            if (currentFraming == "bodyshot") GUI.color = new Color(0.5f, 0.9f, 1f);
+            if (Widgets.ButtonText(btnBody, "Full Shot (B)"))
+            {
+                if (pawnFraming == null) pawnFraming = new Dictionary<string, string>();
+                pawnFraming[selectedPawn.ThingID] = "bodyshot";
+                selectedSavedPortrait = null;
+                customPromptBuffer = "";
+                AIPortraitsMod.Instance.WriteSettings();
+                SoundDefOf.Click.PlayOneShotOnCamera(null);
+            }
+            GUI.color = Color.white;
+
+            if (currentFraming == "special") GUI.color = new Color(0.5f, 0.9f, 1f);
+            if (Widgets.ButtonText(btnSpec, "Special (S)"))
+            {
+                if (pawnFraming == null) pawnFraming = new Dictionary<string, string>();
+                pawnFraming[selectedPawn.ThingID] = "special";
+                selectedSavedPortrait = null;
+                customPromptBuffer = "";
+                AIPortraitsMod.Instance.WriteSettings();
+                SoundDefOf.Click.PlayOneShotOnCamera(null);
+            }
+            GUI.color = Color.white;
+
             // Sub Header Action Buttons (Create New, Use Dynamic)
-            Rect subHeaderRect = new Rect(gridAreaRect.x, gridAreaRect.y + 38f, gridAreaRect.width, 35f);
+            Rect subHeaderRect = new Rect(gridAreaRect.x, gridAreaRect.y + 72f, gridAreaRect.width, 35f);
             float createBtnWidth = subHeaderRect.width * 0.65f;
             float dynamicBtnWidth = subHeaderRect.width - createBtnWidth - 10f;
 
@@ -803,8 +1097,8 @@ namespace AIPortraits
 
             // Highlight dynamic button if NO active portrait is locked
             string activeKey = AIPortraitsManager.GetActiveKey(selectedPawn);
-            string lockedP;
-            bool hasLocked = activePortraits.TryGetValue(activeKey, out lockedP) && !string.IsNullOrEmpty(lockedP) && File.Exists(lockedP);
+            string activePathForCheck = AIPortraitsManager.GetActivePortraitPath(selectedPawn, currentFraming);
+            bool hasLocked = !string.IsNullOrEmpty(activePathForCheck) && File.Exists(activePathForCheck);
             if (!hasLocked)
             {
                 GUI.color = new Color(0.5f, 0.9f, 1f);
@@ -814,135 +1108,225 @@ namespace AIPortraits
                 if (activePortraits.ContainsKey(activeKey))
                 {
                     activePortraits.Remove(activeKey);
-                    AIPortraitsManager.ClearPawnActiveTextureCache(selectedPawn);
-                    AIPortraitsMod.Instance.WriteSettings();
                 }
+                if (currentFraming == "portrait")
+                {
+                    string worldId = "global";
+                    if (Find.World != null && Find.World.info != null)
+                        worldId = Find.World.info.persistentRandomValue.ToString();
+                    string legacyKey = worldId + "_" + selectedPawn.ThingID;
+                    if (activePortraits.ContainsKey(legacyKey))
+                    {
+                        activePortraits.Remove(legacyKey);
+                    }
+                }
+                AIPortraitsManager.ClearPawnActiveTextureCache(selectedPawn);
+                AIPortraitsMod.Instance.WriteSettings();
             }
             GUI.color = Color.white;
 
             // Grid of Images Scrollview
-            Rect gridScrollRect = new Rect(gridAreaRect.x, gridAreaRect.y + 80f, gridAreaRect.width, gridAreaRect.height - 80f);
+            Rect gridScrollRect = new Rect(gridAreaRect.x, gridAreaRect.y + 115f, gridAreaRect.width, gridAreaRect.height - 115f);
 
-            if (cachedSavedPortraits.Count == 0)
+            // Group portraits by framing Name
+            var groupedPortraits = new Dictionary<string, List<SavedPortrait>>();
+            groupedPortraits["portrait"] = new List<SavedPortrait>();
+            groupedPortraits["bodyshot"] = new List<SavedPortrait>();
+            groupedPortraits["special"] = new List<SavedPortrait>();
+
+            foreach (var sp in cachedSavedPortraits)
             {
-                Widgets.Label(gridScrollRect, "No saved portraits found. Click 'Create New' to generate a portrait for " + selectedPawn.LabelShortCap + ".");
+                if (!groupedPortraits.ContainsKey(sp.framingName))
+                    groupedPortraits[sp.framingName] = new List<SavedPortrait>();
+                groupedPortraits[sp.framingName].Add(sp);
+            }
+
+            int activeGroupCount = groupedPortraits.ContainsKey(currentFraming) ? groupedPortraits[currentFraming].Count : 0;
+            if (activeGroupCount == 0)
+            {
+                string framingFriendly = currentFraming == "portrait" ? "portrait" : (currentFraming == "bodyshot" ? "full body shot" : "special");
+                Widgets.Label(gridScrollRect, "No saved " + framingFriendly + " images found. Click 'Create New' to generate one for " + selectedPawn.LabelShortCap + ".");
             }
             else
             {
                 float cardW = 120f;
                 float cardH = 180f;
                 float margin = 8f;
-                int cols = Mathf.Max(1, Mathf.FloorToInt((gridScrollRect.width - 16f) / (cardW + margin)));
-                int rows = Mathf.CeilToInt((float)cachedSavedPortraits.Count / cols);
+                int cols = Mathf.Max(1, Mathf.FloorToInt((gridScrollRect.width - 24f) / (cardW + margin)));
 
-                Rect viewRectRight = new Rect(0f, 0f, gridScrollRect.width - 16f, rows * (cardH + margin) + 10f);
+                // Calculate total height needed for the selected framing
+                float totalHeight = 0f;
+                foreach (var kvp in groupedPortraits)
+                {
+                    if (kvp.Key != currentFraming) continue;
+                    if (kvp.Value.Count > 0)
+                    {
+                        totalHeight += 30f; // Header height
+                        int rows = Mathf.CeilToInt((float)kvp.Value.Count / cols);
+                        totalHeight += rows * (cardH + margin);
+                    }
+                }
+
+                Rect viewRectRight = new Rect(0f, 0f, gridScrollRect.width - 24f, totalHeight + 10f);
 
                 Widgets.BeginScrollView(gridScrollRect, ref rightScrollPosition, viewRectRight);
-                for (int i = 0; i < cachedSavedPortraits.Count; i++)
+                float curY = 0f;
+
+                foreach (var kvp in groupedPortraits)
                 {
-                    SavedPortrait sp = cachedSavedPortraits[i];
-                    int r = i / cols;
-                    int c = i % cols;
+                    if (kvp.Key != currentFraming) continue;
+                    if (kvp.Value.Count == 0) continue;
 
-                    float x = c * (cardW + margin);
-                    float y = r * (cardH + margin);
+                    string headerLabel = "";
+                    if (kvp.Key == "portrait") headerLabel = "Portraits (1:1)";
+                    else if (kvp.Key == "bodyshot") headerLabel = "Full Body Shots (3:4)";
+                    else if (kvp.Key == "special") headerLabel = "Special Shots (4:3)";
+                    else headerLabel = kvp.Key;
 
-                    Rect cardRect = new Rect(x, y, cardW, cardH);
+                    Widgets.Label(new Rect(0f, curY, viewRectRight.width, 25f), "<b>" + headerLabel + "</b>");
+                    curY += 30f;
 
-                    // Check if this image is the active/locked one
-                    string activePath;
-                    bool isActive = activePortraits.TryGetValue(activeKey, out activePath) && activePath == sp.pngPath;
-
-                    // Draw background and highlight border if active
-                    if (isActive)
+                    for (int i = 0; i < kvp.Value.Count; i++)
                     {
-                        Widgets.DrawBoxSolid(cardRect, new Color(0.2f, 0.18f, 0.08f, 1f));
-                        GUI.color = new Color(0.9f, 0.7f, 0f);
-                        Widgets.DrawBox(cardRect, 2);
-                        GUI.color = Color.white;
-                    }
-                    else
-                    {
-                        Widgets.DrawBoxSolid(cardRect, new Color(0.1f, 0.10f, 0.10f, 1f));
-                        GUI.color = new Color(1f, 1f, 1f, 0.15f);
-                        Widgets.DrawBox(cardRect, 1);
-                        GUI.color = Color.white;
-                    }
+                        SavedPortrait sp = kvp.Value[i];
+                        int r = i / cols;
+                        int c = i % cols;
 
-                    // Draw the image
-                    Rect imgRect = new Rect(cardRect.x + 4f, cardRect.y + 4f, cardW - 8f, cardW - 8f);
-                    if (sp.texture != null)
-                    {
-                        GUI.DrawTexture(imgRect, sp.texture, ScaleMode.ScaleToFit);
-                    }
-                    else
-                    {
-                        Widgets.Label(imgRect, "Image Error");
-                    }
+                        float x = c * (cardW + margin);
+                        float y = curY + r * (cardH + margin);
 
-                    // Tooltip and Click Action for Prompt
-                    TooltipHandler.TipRegion(imgRect, "Click image to copy prompt to clipboard.\n\nPrompt:\n" + sp.prompt);
+                        Rect cardRect = new Rect(x, y, cardW, cardH);
 
-                    if (Widgets.ButtonInvisible(imgRect))
-                    {
-                        GUIUtility.systemCopyBuffer = sp.prompt;
-                        Messages.Message("Prompt copied to clipboard!", MessageTypeDefOf.TaskCompletion, false);
-                    }
+                        // Check if this image is the active/locked one for its specific framing
+                        string activePath = AIPortraitsManager.GetActivePortraitPath(selectedPawn, sp.framingName);
+                        bool isActive = !string.IsNullOrEmpty(activePath) && activePath == sp.pngPath;
+                        bool isSelected = (selectedSavedPortrait == sp);
 
-                    // Button 1: Set Active
-                    Rect btnActiveRect = new Rect(cardRect.x + 4f, imgRect.yMax + 4f, cardW - 8f, 20f);
-                    if (isActive)
-                    {
-                        GUI.color = new Color(0.9f, 0.7f, 0f);
-                        Text.Anchor = TextAnchor.MiddleCenter;
-                        Text.Font = GameFont.Tiny;
-                        Widgets.Label(btnActiveRect, "★ Active");
-                        Text.Font = GameFont.Small;
-                        Text.Anchor = TextAnchor.UpperLeft;
-                        GUI.color = Color.white;
-                    }
-                    else
-                    {
-                        if (Widgets.ButtonText(btnActiveRect, "Set Active"))
+                        // Draw background and highlight border if selected/active
+                        if (isSelected)
                         {
-                            activePortraits[activeKey] = sp.pngPath;
-                            AIPortraitsManager.ClearPawnActiveTextureCache(selectedPawn);
-                            AIPortraitsMod.Instance.WriteSettings();
+                            Widgets.DrawBoxSolid(cardRect, new Color(0.08f, 0.18f, 0.22f, 1f));
+                            GUI.color = new Color(0.2f, 0.7f, 1f);
+                            Widgets.DrawBox(cardRect, 2);
+                            GUI.color = Color.white;
+                        }
+                        else if (isActive)
+                        {
+                            Widgets.DrawBoxSolid(cardRect, new Color(0.2f, 0.18f, 0.08f, 1f));
+                            GUI.color = new Color(0.9f, 0.7f, 0f);
+                            Widgets.DrawBox(cardRect, 2);
+                            GUI.color = Color.white;
+                        }
+                        else
+                        {
+                            Widgets.DrawBoxSolid(cardRect, new Color(0.1f, 0.10f, 0.10f, 1f));
+                            GUI.color = new Color(1f, 1f, 1f, 0.15f);
+                            Widgets.DrawBox(cardRect, 1);
+                            GUI.color = Color.white;
+                        }
+
+                        // Draw the image
+                        Rect imgRect = new Rect(cardRect.x + 4f, cardRect.y + 4f, cardW - 8f, cardW - 8f);
+                        if (sp.texture != null)
+                        {
+                            GUI.DrawTexture(imgRect, sp.texture, ScaleMode.ScaleToFit);
+                        }
+                        else
+                        {
+                            Widgets.Label(imgRect, "Image Error");
+                        }
+
+                        // Tooltip and Click Action for Selection
+                        TooltipHandler.TipRegion(imgRect, "Click to select this image and view/edit its prompt.\n\nPrompt:\n" + sp.prompt);
+
+                        if (Widgets.ButtonInvisible(imgRect))
+                        {
+                            selectedSavedPortrait = sp;
+                            customPromptBuffer = sp.prompt;
+                            SoundDefOf.Click.PlayOneShotOnCamera(null);
+                        }
+
+                        // Button 1: Set Active
+                        Rect btnActiveRect = new Rect(cardRect.x + 4f, imgRect.yMax + 4f, cardW - 8f, 20f);
+                        if (isActive)
+                        {
+                            GUI.color = new Color(0.9f, 0.7f, 0f);
+                            Text.Anchor = TextAnchor.MiddleCenter;
+                            Text.Font = GameFont.Tiny;
+                            Widgets.Label(btnActiveRect, "★ Active");
+                            Text.Font = GameFont.Small;
+                            Text.Anchor = TextAnchor.UpperLeft;
+                            GUI.color = Color.white;
+                        }
+                        else
+                        {
+                            if (Widgets.ButtonText(btnActiveRect, "Set Active"))
+                            {
+                                string key = selectedPawn.ThingID + "_" + sp.framingName;
+                                activePortraits[key] = sp.pngPath;
+                                AIPortraitsManager.ClearPawnActiveTextureCache(selectedPawn);
+                                AIPortraitsMod.Instance.WriteSettings();
+                            }
+                        }
+
+                        // Button 2: Delete
+                        Rect btnDelRect = new Rect(cardRect.x + 4f, btnActiveRect.yMax + 4f, cardW - 8f, 20f);
+                        if (Widgets.ButtonText(btnDelRect, "Delete"))
+                        {
+                            Find.WindowStack.Add(new Dialog_MessageBox(
+                                "Are you sure you want to delete this portrait?",
+                                "Yes",
+                                delegate()
+                                {
+                                    try
+                                    {
+                                        if (isActive)
+                                        {
+                                            string key = selectedPawn.ThingID + "_" + sp.framingName;
+                                            activePortraits.Remove(key);
+                                            if (sp.framingName == "portrait")
+                                            {
+                                                string worldId = "global";
+                                                if (Find.World != null && Find.World.info != null)
+                                                    worldId = Find.World.info.persistentRandomValue.ToString();
+                                                string legacyKey = worldId + "_" + selectedPawn.ThingID;
+                                                activePortraits.Remove(legacyKey);
+                                            }
+                                            AIPortraitsManager.ClearPawnActiveTextureCache(selectedPawn);
+                                            AIPortraitsMod.Instance.WriteSettings();
+                                        }
+
+                                        if (selectedSavedPortrait == sp)
+                                        {
+                                            selectedSavedPortrait = null;
+                                            customPromptBuffer = "";
+                                        }
+
+                                        if (File.Exists(sp.pngPath)) File.Delete(sp.pngPath);
+                                        if (!string.IsNullOrEmpty(sp.txtPath) && File.Exists(sp.txtPath)) File.Delete(sp.txtPath);
+
+                                        // Also delete reference files if they exist
+                                        string gearFile = Path.ChangeExtension(sp.pngPath, null) + "_ref_gear.png";
+                                        if (File.Exists(gearFile)) File.Delete(gearFile);
+                                        string portFile = Path.ChangeExtension(sp.pngPath, null) + "_ref_portrait.png";
+                                        if (File.Exists(portFile)) File.Delete(portFile);
+
+                                        RefreshPawnPortraitsCache(selectedPawn);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        Log.Error("[Dynamic AI Portraits] Failed to delete file: " + ex.Message);
+                                    }
+                                },
+                                "No"
+                            ));
                         }
                     }
 
-                    // Button 2: Delete
-                    Rect btnDelRect = new Rect(cardRect.x + 4f, btnActiveRect.yMax + 4f, cardW - 8f, 20f);
-                    if (Widgets.ButtonText(btnDelRect, "Delete"))
-                    {
-                        Find.WindowStack.Add(new Dialog_MessageBox(
-                            "Are you sure you want to delete this portrait?",
-                            "Yes",
-                            delegate()
-                            {
-                                try
-                                {
-                                    if (isActive)
-                                    {
-                                        activePortraits.Remove(activeKey);
-                                        AIPortraitsManager.ClearPawnActiveTextureCache(selectedPawn);
-                                        AIPortraitsMod.Instance.WriteSettings();
-                                    }
-
-                                    if (File.Exists(sp.pngPath)) File.Delete(sp.pngPath);
-                                    if (!string.IsNullOrEmpty(sp.txtPath) && File.Exists(sp.txtPath)) File.Delete(sp.txtPath);
-
-                                    RefreshPawnPortraitsCache(selectedPawn);
-                                }
-                                catch (Exception ex)
-                                {
-                                    Log.Error("[Dynamic AI Portraits] Failed to delete file: " + ex.Message);
-                                }
-                            },
-                            "No"
-                        ));
-                    }
+                    int rowsForSection = Mathf.CeilToInt((float)kvp.Value.Count / cols);
+                    curY += rowsForSection * (cardH + margin);
                 }
+
                 Widgets.EndScrollView();
             }
 
@@ -951,160 +1335,197 @@ namespace AIPortraits
             Rect vibeContentRect = vibeAreaRect.ContractedBy(8f);
 
             Text.Font = GameFont.Medium;
-            Widgets.Label(new Rect(vibeContentRect.x, vibeContentRect.y, vibeContentRect.width, 30f), "Pawn Summary & Prompt");
+            Widgets.Label(new Rect(vibeContentRect.x, vibeContentRect.y, vibeContentRect.width, 30f), "Custom Prompt & Preview");
             Text.Font = GameFont.Small;
 
             Rect vibeScrollArea = new Rect(vibeContentRect.x, vibeContentRect.y + 35f, vibeContentRect.width, vibeContentRect.height - 35f);
 
-            PawnState state = PawnStateExtractor.ExtractState(selectedPawn);
-            if (state != null)
+            // Pre-load default prompt if buffer is empty
+            if (string.IsNullOrEmpty(customPromptBuffer))
             {
-                float viewWidth = vibeScrollArea.width - 16f;
-                string compiledPrompt;
-                if (useLLMPrompt)
+                if (selectedSavedPortrait != null)
                 {
-                    string framing = "portrait";
-                    if (selectedPawn != null && pawnFraming != null)
-                        pawnFraming.TryGetValue(selectedPawn.ThingID, out framing);
-
-                    compiledPrompt = "🤖 Gemini 3.1 Flash-Lite Prompt Generation is active.\n" +
-                                     "At generation time, the pawn data sheet below is sent to the LLM to write a custom prompt.\n\n" +
-                                     "--- SYSTEM INSTRUCTION (GEMINI PROMPT) ---\n" +
-                                     PromptCompiler.GetLLMSystemPrompt(portraitStyle, framing) +
-                                     "\n\n--- PAWN DATA SHEET (LLM INPUT) ---\n" +
-                                     PromptCompiler.CompilePawnStateDescription(state, this);
+                    customPromptBuffer = selectedSavedPortrait.prompt;
                 }
                 else
                 {
-                    compiledPrompt = PromptCompiler.CompilePositivePrompt(state, this);
-                }
-                float promptHeight = Text.CalcHeight(compiledPrompt, viewWidth - 8f);
-
-                string identityText = "• Gender: " + state.gender + "\n• Age: " + state.bioAge + "\n• Body Type: " + state.bodyType + "\n• Xenotype: " + state.xenotype;
-                if (!string.IsNullOrEmpty(state.xenotypeName)) identityText += " (" + state.xenotypeName + ")";
-                if (state.isHemogenic) identityText += "\n• Bloodfeeder / Sanguophage";
-                float idHeight = Text.CalcHeight(identityText, viewWidth - 5f);
-
-                string backstoryText = "• Childhood: " + (state.childhoodTitle ?? "None") + "\n• Adulthood: " + (state.adulthoodTitle ?? "None");
-                float bsHeight = Text.CalcHeight(backstoryText, viewWidth - 5f);
-
-                float traitsHeight = 22f + (state.traits.Count > 0 ? state.traits.Count * 20f : 20f);
-                float apparelHeight = 44f + (state.apparel.Count > 0 ? state.apparel.Count * 20f : 20f);
-
-                int healthItemsCount = state.implants.Count + state.missingParts.Count + state.headInjuries.Count + state.bodyInjuries.Count;
-                if (state.isSick) healthItemsCount++;
-                if (state.isBloodloss) healthItemsCount++;
-                if (state.isBurning) healthItemsCount++;
-                float healthHeight = 22f + (healthItemsCount > 0 ? healthItemsCount * 20f : 20f);
-
-                float contentHeight = idHeight + bsHeight + traitsHeight + apparelHeight + healthHeight + promptHeight + 180f;
-
-                Rect viewRectVibe = new Rect(0f, 0f, viewWidth, contentHeight);
-                Widgets.BeginScrollView(vibeScrollArea, ref vibeScrollPosition, viewRectVibe);
-
-                float curY = 0f;
-
-                // 1. Identity
-                Widgets.Label(new Rect(0f, curY, viewWidth, 22f), "<b>Identity:</b>");
-                curY += 22f;
-                Widgets.Label(new Rect(5f, curY, viewWidth - 5f, idHeight), identityText);
-                curY += idHeight + 10f;
-
-                // 2. Backstory
-                Widgets.Label(new Rect(0f, curY, viewWidth, 22f), "<b>Backstory:</b>");
-                curY += 22f;
-                Widgets.Label(new Rect(5f, curY, viewWidth - 5f, bsHeight), backstoryText);
-                curY += bsHeight + 10f;
-
-                // 3. Traits & Mood
-                Widgets.Label(new Rect(0f, curY, viewWidth, 22f), "<b>Traits & Mood (Mood: " + (state.moodLevel * 100f).ToString("F0") + "%):</b>");
-                curY += 22f;
-                if (state.traits.Count > 0)
-                {
-                    for (int i = 0; i < state.traits.Count; i++)
+                    PawnState pState = AIPortraitsManager.GetCachedPawnState(selectedPawn);
+                    if (pState != null)
                     {
-                        Widgets.Label(new Rect(5f, curY, viewWidth - 5f, 20f), "• " + state.traits[i]);
-                        curY += 20f;
+                        customPromptBuffer = PromptCompiler.CompilePositivePrompt(pState, this);
                     }
                 }
-                else
-                {
-                    Widgets.Label(new Rect(5f, curY, viewWidth - 5f, 20f), "• No special traits");
-                    curY += 20f;
-                }
-                curY += 10f;
+            }
 
-                // 4. Apparel & Equipment
-                string weaponStr = string.IsNullOrEmpty(state.primaryWeapon) ? "Unarmed" : state.primaryWeapon + " (" + state.weaponType + ")";
-                Widgets.Label(new Rect(0f, curY, viewWidth, 22f), "<b>Equipment:</b> " + weaponStr);
-                curY += 24f;
-                Widgets.Label(new Rect(0f, curY, viewWidth, 22f), "<b>Apparel:</b>");
-                curY += 22f;
-                if (state.apparel.Count > 0)
-                {
-                    for (int i = 0; i < state.apparel.Count; i++)
-                    {
-                        Widgets.Label(new Rect(5f, curY, viewWidth - 5f, 20f), "• " + state.apparel[i]);
-                        curY += 20f;
-                    }
-                }
-                else
-                {
-                    Widgets.Label(new Rect(5f, curY, viewWidth - 5f, 20f), "• Nude / No apparel");
-                    curY += 20f;
-                }
-                curY += 10f;
+            float viewWidth = vibeScrollArea.width - 16f;
+            float contentHeight = 500f; // estimated content height
+            Rect viewRectVibe = new Rect(0f, 0f, viewWidth, contentHeight);
 
-                // 5. Health & Body
-                Widgets.Label(new Rect(0f, curY, viewWidth, 22f), "<b>Health & Body:</b>");
-                curY += 22f;
-                List<string> healthLines = new List<string>();
-                for (int i = 0; i < state.implants.Count; i++) healthLines.Add("• Implant: " + state.implants[i]);
-                for (int i = 0; i < state.missingParts.Count; i++) healthLines.Add("• Missing: " + state.missingParts[i]);
-                for (int i = 0; i < state.headInjuries.Count; i++) healthLines.Add("• Head: " + state.headInjuries[i]);
-                for (int i = 0; i < state.bodyInjuries.Count; i++) healthLines.Add("• Body: " + state.bodyInjuries[i]);
-                if (state.isSick) healthLines.Add("• Sick/Diseased");
-                if (state.isBloodloss) healthLines.Add("• Experiencing blood loss");
-                if (state.isBurning) healthLines.Add("• Wounded by fire/burning");
+            Widgets.BeginScrollView(vibeScrollArea, ref vibeScrollPosition, viewRectVibe);
+            float vibeCurY = 0f;
 
-                if (healthLines.Count > 0)
-                {
-                    for (int i = 0; i < healthLines.Count; i++)
-                    {
-                        Widgets.Label(new Rect(5f, curY, viewWidth - 5f, 20f), healthLines[i]);
-                        curY += 20f;
-                    }
-                }
-                else
-                {
-                    Widgets.Label(new Rect(5f, curY, viewWidth - 5f, 20f), "• Healthy (No active conditions)");
-                    curY += 20f;
-                }
-                curY += 15f;
+            // 1. Status / Title
+            string statusLabelText = selectedSavedPortrait != null
+                ? "Editing prompt for saved portrait (" + selectedSavedPortrait.styleName + ")"
+                : "New custom prompt for " + selectedPawn.LabelShortCap;
+            Widgets.Label(new Rect(0f, vibeCurY, viewWidth, 22f), "<b>" + statusLabelText + "</b>");
+            vibeCurY += 25f;
 
-                // 6. Compiled Prompt
-                Widgets.Label(new Rect(0f, curY, viewWidth, 22f), "<b>Compiled AI Prompt:</b>");
-                curY += 24f;
-
-                Rect copyBtnRect = new Rect(0f, curY, 120f, 24f);
-                if (Widgets.ButtonText(copyBtnRect, "Copy Prompt"))
-                {
-                    GUIUtility.systemCopyBuffer = compiledPrompt;
-                    Messages.Message("Compiled prompt copied to clipboard!", MessageTypeDefOf.TaskCompletion, false);
-                }
-                curY += 28f;
-
-                Rect promptBoxRect = new Rect(0f, curY, viewWidth, promptHeight + 20f);
-                Widgets.TextArea(promptBoxRect, compiledPrompt, true);
-
-                curY += promptBoxRect.height + 20f;
-
-                Widgets.EndScrollView();
+            // 2. Image Preview
+            Texture2D previewTex = null;
+            if (selectedSavedPortrait != null)
+            {
+                previewTex = selectedSavedPortrait.texture;
             }
             else
             {
-                Widgets.Label(vibeScrollArea, "No pawn selected or unable to retrieve state.");
+                // Fallback to active portrait for the selected framing
+                GenerationStatus previewStatus;
+                string previewErr;
+                previewTex = AIPortraitsManager.GetPortraitTexture(selectedPawn, out previewStatus, out previewErr);
             }
+
+            Rect previewRect = new Rect((viewWidth - 128f) / 2f, vibeCurY, 128f, 128f);
+            Widgets.DrawBoxSolid(previewRect, new Color(0.06f, 0.06f, 0.06f, 1f));
+            if (previewTex != null)
+            {
+                GUI.DrawTexture(previewRect.ContractedBy(2f), previewTex, ScaleMode.ScaleToFit);
+            }
+            else
+            {
+                Text.Anchor = TextAnchor.MiddleCenter;
+                Text.Font = GameFont.Tiny;
+                Widgets.Label(previewRect, "No Image");
+                Text.Font = GameFont.Small;
+                Text.Anchor = TextAnchor.UpperLeft;
+            }
+            GUI.color = new Color(1f, 1f, 1f, 0.15f);
+            Widgets.DrawBox(previewRect, 1);
+            GUI.color = Color.white;
+            vibeCurY += 138f;
+
+            // ── Draw references if they exist ──
+            if (selectedSavedPortrait != null && (selectedSavedPortrait.refGearTexture != null || selectedSavedPortrait.refPortraitTexture != null))
+            {
+                vibeCurY += 8f;
+                Widgets.Label(new Rect(0f, vibeCurY, viewWidth, 20f), "<b>References Used:</b>");
+                vibeCurY += 22f;
+
+                float refW = 80f;
+                float refH = 80f;
+                float refX = 0f;
+
+                if (selectedSavedPortrait.refPortraitTexture != null)
+                {
+                    Rect refPortRect = new Rect(refX, vibeCurY, refW, refH);
+                    Widgets.DrawBoxSolid(refPortRect, new Color(0.06f, 0.06f, 0.06f, 1f));
+                    GUI.DrawTexture(refPortRect.ContractedBy(2f), selectedSavedPortrait.refPortraitTexture, ScaleMode.ScaleToFit);
+                    TooltipHandler.TipRegion(refPortRect, "Portrait reference used for identity continuity.");
+                    GUI.color = new Color(1f, 1f, 1f, 0.15f);
+                    Widgets.DrawBox(refPortRect, 1);
+                    GUI.color = Color.white;
+                    refX += refW + 8f;
+                }
+
+                if (selectedSavedPortrait.refGearTexture != null)
+                {
+                    Rect refGearRect = new Rect(refX, vibeCurY, refW * 2f, refH); // gear sheet is horizontal/wider
+                    Widgets.DrawBoxSolid(refGearRect, new Color(0.06f, 0.06f, 0.06f, 1f));
+                    GUI.DrawTexture(refGearRect.ContractedBy(2f), selectedSavedPortrait.refGearTexture, ScaleMode.ScaleToFit);
+                    TooltipHandler.TipRegion(refGearRect, "Gear sprite reference sheet used for item design consistency.");
+                    GUI.color = new Color(1f, 1f, 1f, 0.15f);
+                    Widgets.DrawBox(refGearRect, 1);
+                    GUI.color = Color.white;
+                    refX += refW * 2f + 8f;
+                }
+
+                vibeCurY += refH + 5f;
+            }
+
+            // 3. Prompt Header
+            Widgets.Label(new Rect(0f, vibeCurY, viewWidth, 20f), "<b>Prompt:</b>");
+            vibeCurY += 22f;
+
+            // 4. Text Area for prompt
+            Rect promptBoxRect = new Rect(0f, vibeCurY, viewWidth, 160f);
+            customPromptBuffer = Widgets.TextArea(promptBoxRect, customPromptBuffer);
+            vibeCurY += 170f;
+
+            // 5. Buttons - Row 1
+            float row1BtnW = (viewWidth - 5f) / 2f;
+            Rect btnSavePrompt = new Rect(0f, vibeCurY, row1BtnW, 28f);
+            Rect btnGenerate = new Rect(btnSavePrompt.xMax + 5f, vibeCurY, row1BtnW, 28f);
+
+            // Save Prompt (only enabled if we have selected a saved portrait)
+            if (selectedSavedPortrait == null)
+            {
+                GUI.enabled = false;
+            }
+            if (Widgets.ButtonText(btnSavePrompt, "Save Text Sibling"))
+            {
+                try
+                {
+                    if (selectedSavedPortrait != null && !string.IsNullOrEmpty(selectedSavedPortrait.txtPath))
+                    {
+                        File.WriteAllText(selectedSavedPortrait.txtPath, customPromptBuffer);
+                        selectedSavedPortrait.prompt = customPromptBuffer;
+                        Messages.Message("Prompt text updated on disk!", MessageTypeDefOf.TaskCompletion, false);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Error("[Dynamic AI Portraits] Failed to update prompt text: " + ex.Message);
+                }
+            }
+            GUI.enabled = true;
+
+            // Generate Button
+            GenerationStatus genStatus = AIPortraitsManager.GetStatus(selectedPawn);
+            bool isGenRunning = (genStatus == GenerationStatus.Generating);
+            if (isGenRunning)
+            {
+                GUI.enabled = false;
+            }
+            string genLabel = isGenRunning ? "Generating..." : "Generate Custom";
+            if (Widgets.ButtonText(btnGenerate, genLabel))
+            {
+                AIPortraitsManager.TriggerCustomGeneration(selectedPawn, customPromptBuffer);
+            }
+            GUI.enabled = true;
+            vibeCurY += 33f;
+
+            // Row 2 Buttons
+            Rect btnReset = new Rect(0f, vibeCurY, row1BtnW, 28f);
+            Rect btnCopy = new Rect(btnReset.xMax + 5f, vibeCurY, row1BtnW, 28f);
+
+            // Reset Button
+            if (Widgets.ButtonText(btnReset, "Reset Prompt"))
+            {
+                if (selectedSavedPortrait != null)
+                {
+                    customPromptBuffer = selectedSavedPortrait.prompt;
+                }
+                else
+                {
+                    PawnState pState = AIPortraitsManager.GetCachedPawnState(selectedPawn);
+                    if (pState != null)
+                    {
+                        customPromptBuffer = PromptCompiler.CompilePositivePrompt(pState, this);
+                    }
+                }
+                SoundDefOf.Click.PlayOneShotOnCamera(null);
+            }
+
+            // Copy Button
+            if (Widgets.ButtonText(btnCopy, "Copy Prompt"))
+            {
+                GUIUtility.systemCopyBuffer = customPromptBuffer;
+                Messages.Message("Prompt copied to clipboard!", MessageTypeDefOf.TaskCompletion, false);
+            }
+
+            vibeCurY += 35f;
+            contentHeight = vibeCurY; // dynamically adjust scrollable height
+            Widgets.EndScrollView();
         }
 
         // ── PROMPT PREVIEW TAB ────────────────────────────────────────────────────
@@ -1168,7 +1589,7 @@ namespace AIPortraits
 
             string structuredDesc = PromptCompiler.CompilePawnStateDescription(state, this);
             string compiledPrompt = PromptCompiler.CompilePositivePrompt(state, this, null);
-            string llmSystem      = useLLMPrompt ? PromptCompiler.GetLLMSystemPrompt(portraitStyle, framing) : null;
+            string llmSystem      = useLLMPrompt ? PromptCompiler.GetLLMSystemPrompt(portraitStyle, this, framing) : null;
 
             // Read the most recent .txt sibling next to this pawn's saved PNGs — that's
             // the canonical "what was actually sent to the image API last time" record.

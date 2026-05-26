@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Video;
 using Verse;
 using RimWorld;
 
@@ -39,10 +40,13 @@ namespace AIPortraits
 
         public static string GetActiveFraming(Pawn pawn)
         {
-            string f = "portrait";
             if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.pawnFraming != null)
-                AIPortraitsMod.settings.pawnFraming.TryGetValue(pawn.ThingID, out f);
-            return f;
+            {
+                string val;
+                if (AIPortraitsMod.settings.pawnFraming.TryGetValue(pawn.ThingID, out val) && !string.IsNullOrEmpty(val))
+                    return val;
+            }
+            return "portrait";
         }
 
         public static string GetActiveKeyForFraming(Pawn pawn, string framing)
@@ -56,6 +60,74 @@ namespace AIPortraits
         public static string GetActiveKey(Pawn pawn)
         {
             return GetActiveKeyForFraming(pawn, GetActiveFraming(pawn));
+        }
+
+        public static string GetActivePortraitPath(Pawn pawn, string framing)
+        {
+            if (pawn == null) return null;
+            if (AIPortraitsMod.settings == null || AIPortraitsMod.settings.activePortraits == null) return null;
+            string key = GetActiveKeyForFraming(pawn, framing);
+            string path;
+            if (AIPortraitsMod.settings.activePortraits.TryGetValue(key, out path) && !string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
+            {
+                return path;
+            }
+            if (framing == "portrait")
+            {
+                // Fallback to legacy key without framing suffix
+                string worldId = "global";
+                if (Find.World != null && Find.World.info != null)
+                    worldId = Find.World.info.persistentRandomValue.ToString();
+                string legacyKey = worldId + "_" + pawn.ThingID;
+                if (AIPortraitsMod.settings.activePortraits.TryGetValue(legacyKey, out path) && !string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
+                {
+                    return path;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Returns the raw bytes of the currently displayed portrait image for this pawn,
+        /// using whichever framing (portrait / bodyshot / special) is currently active.
+        /// This is used for video generation input — NOT the reference gear sheet.
+        /// </summary>
+        public static byte[] GetActivePortraitBytes(Pawn pawn)
+        {
+            if (pawn == null) return null;
+            // Use the active framing so the video matches what the user is looking at.
+            string framing = GetActiveFraming(pawn);
+            return GetActivePortraitBytesForFraming(pawn, framing);
+        }
+
+        /// <summary>
+        /// Returns raw bytes for a specific framing, with a fallback to 'portrait'.
+        /// Used internally — image generation still passes 'portrait' bytes as its
+        /// continuity input, while video generation uses the active framing.
+        /// </summary>
+        public static byte[] GetActivePortraitBytesForFraming(Pawn pawn, string framing)
+        {
+            if (pawn == null) return null;
+            string path = GetActivePortraitPath(pawn, framing);
+            if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
+            {
+                try { return System.IO.File.ReadAllBytes(path); }
+                catch (Exception ex)
+                {
+                    Log.Warning("[Dynamic AI Portraits] Failed to read portrait file (" + framing + "): " + ex.Message);
+                }
+            }
+            // Fallback to portrait framing if the requested framing has no image yet
+            if (framing != "portrait")
+            {
+                string fallbackPath = GetActivePortraitPath(pawn, "portrait");
+                if (!string.IsNullOrEmpty(fallbackPath) && System.IO.File.Exists(fallbackPath))
+                {
+                    try { return System.IO.File.ReadAllBytes(fallbackPath); }
+                    catch { }
+                }
+            }
+            return null;
         }
 
         public static PawnState GetCachedPawnState(Pawn pawn)
@@ -99,30 +171,27 @@ namespace AIPortraits
 
             // Locked portrait check happens first — user pinned this manually, honour it
             // even on pawns who later leave the colony.
-            string lockedPath;
-            if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.activePortraits.TryGetValue(GetActiveKey(pawn), out lockedPath))
+            string lockedPath = GetActivePortraitPath(pawn, GetActiveFraming(pawn));
+            if (!string.IsNullOrEmpty(lockedPath))
             {
-                if (!string.IsNullOrEmpty(lockedPath) && System.IO.File.Exists(lockedPath))
-                {
-                    string lockedCacheKey = pawn.ThingID + "_" + GetActiveFraming(pawn) + LockedSuffix;
-                    Texture2D lockedTex;
-                    if (loadedTextures.TryGetValue(lockedCacheKey, out lockedTex))
-                        return lockedTex;
+                string lockedCacheKey = pawn.ThingID + "_" + GetActiveFraming(pawn) + LockedSuffix;
+                Texture2D lockedTex;
+                if (loadedTextures.TryGetValue(lockedCacheKey, out lockedTex))
+                    return lockedTex;
 
-                    try
+                try
+                {
+                    byte[] bytes = System.IO.File.ReadAllBytes(lockedPath);
+                    Texture2D newTex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                    if (ImageConversion.LoadImage(newTex, bytes))
                     {
-                        byte[] bytes = System.IO.File.ReadAllBytes(lockedPath);
-                        Texture2D newTex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-                        if (ImageConversion.LoadImage(newTex, bytes))
-                        {
-                            loadedTextures[lockedCacheKey] = newTex;
-                            return newTex;
-                        }
+                        loadedTextures[lockedCacheKey] = newTex;
+                        return newTex;
                     }
-                    catch (Exception ex)
-                    {
-                        Log.Error("[Dynamic AI Portraits] Failed to load locked portrait from " + lockedPath + ": " + ex.Message);
-                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Error("[Dynamic AI Portraits] Failed to load locked portrait from " + lockedPath + ": " + ex.Message);
                 }
             }
 
@@ -148,65 +217,20 @@ namespace AIPortraits
                 }
             }
 
-            // Find any fallback texture if we don't have the active one yet (including during generation)
-            string[] backupFramings = (framing == "portrait") ? new[] { "bodyshot", "special" } :
-                                      (framing == "bodyshot") ? new[] { "portrait", "special" } :
-                                                                new[] { "portrait", "bodyshot" };
-            
-            Texture2D fallbackTex = null;
-            foreach (string backup in backupFramings)
+            // We do not have the requested framing.
+            // Check if the pawn has ANY portrait for ANY framing.
+            bool hasAnyPortrait = false;
+            string[] allFramings = new[] { "portrait", "bodyshot", "special" };
+            foreach (string f in allFramings)
             {
-                string bKey = pawn.ThingID + "_" + backup;
-                Texture2D bTex;
-                if (loadedTextures.TryGetValue(bKey, out bTex) && bTex != null)
-                {
-                    fallbackTex = bTex;
-                    break;
-                }
-                
-                string bLockedKey = pawn.ThingID + "_" + backup + LockedSuffix;
-                if (loadedTextures.TryGetValue(bLockedKey, out bTex) && bTex != null)
-                {
-                    fallbackTex = bTex;
-                    break;
-                }
+                if (f == framing) continue;
+                string fPawnKey = pawn.ThingID + "_" + f;
+                string fDiskKey = GetActiveKeyForFraming(pawn, f);
+                string fLockedPath = GetActivePortraitPath(pawn, f);
 
-                // Check activePortraits (gallery pinned path) for the backup framing
-                string bActiveKey = GetActiveKeyForFraming(pawn, backup);
-                string bLockedPath;
-                if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.activePortraits.TryGetValue(bActiveKey, out bLockedPath))
-                {
-                    if (!string.IsNullOrEmpty(bLockedPath) && System.IO.File.Exists(bLockedPath))
-                    {
-                        try
-                        {
-                            byte[] bytes = System.IO.File.ReadAllBytes(bLockedPath);
-                            Texture2D newTex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-                            if (ImageConversion.LoadImage(newTex, bytes))
-                            {
-                                loadedTextures[bLockedKey] = newTex;
-                                fallbackTex = newTex;
-                                break;
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            Log.Error("[Dynamic AI Portraits] Failed to load backup locked portrait from " + bLockedPath + ": " + ex.Message);
-                        }
-                    }
-                }
-
-                string bDiskKey = GetActiveKeyForFraming(pawn, backup);
-                if (CacheManager.IsCached(bDiskKey))
-                {
-                    Texture2D bDiskTex = CacheManager.LoadFromCache(bDiskKey);
-                    if (bDiskTex != null)
-                    {
-                        loadedTextures[bKey] = bDiskTex;
-                        fallbackTex = bDiskTex;
-                        break;
-                    }
-                }
+                if (loadedTextures.ContainsKey(fPawnKey) || loadedTextures.ContainsKey(fPawnKey + LockedSuffix)) { hasAnyPortrait = true; break; }
+                if (CacheManager.IsCached(fDiskKey)) { hasAnyPortrait = true; break; }
+                if (!string.IsNullOrEmpty(fLockedPath)) { hasAnyPortrait = true; break; }
             }
 
             // Check if active request is running or failed for the selected framing
@@ -217,23 +241,23 @@ namespace AIPortraits
             {
                 status = GenerationStatus.Generating;
                 requestError.TryGetValue(pawnKey, out error);
-                return fallbackTex;
+                return null;
             }
             else if (currentStatus == GenerationStatus.Error)
             {
                 status = GenerationStatus.Error;
                 requestError.TryGetValue(pawnKey, out error);
-                return fallbackTex;
+                return null;
             }
 
-            // If we have a fallback, return it and remain Idle (we won't auto-generate!)
-            if (fallbackTex != null)
+            // If the pawn already has a portrait for ANOTHER framing, do NOT auto-generate!
+            // Wait for the user to manually click Refresh.
+            if (hasAnyPortrait)
             {
-                status = GenerationStatus.Idle;
-                return fallbackTex;
+                return null;
             }
 
-            // If no cache and no fallback exists, trigger first-time generation for this pawn
+            // Trigger first-time generation ONLY if the pawn has NO portraits at all.
             PawnState state = GetCachedPawnState(pawn);
             if (state == null) return null;
 
@@ -273,6 +297,19 @@ namespace AIPortraits
             }
             catch (Exception ex) { Log.Warning("[Dynamic AI Portraits] Could not clear disk cache: " + ex.Message); }
 
+            // Clear video cache and stop playback if active
+            try
+            {
+                string videoPath = System.IO.Path.Combine(CacheManager.GetCacheDirectory(), diskKey + ".mp4");
+                if (System.IO.File.Exists(videoPath)) System.IO.File.Delete(videoPath);
+            }
+            catch (Exception ex) { Log.Warning("[Dynamic AI Portraits] Could not clear video cache: " + ex.Message); }
+
+            string videoKey = pawn.ThingID + "_" + framing;
+            videoStatus.Remove(videoKey);
+            videoError.Remove(videoKey);
+            VideoPlaybackManager.StopPlayback();
+
             // Reset request bookkeeping + force fresh state extraction
             activeRequests.Remove(pawnKey); requestStatus.Remove(pawnKey); requestError.Remove(pawnKey);
             stateCache.Remove(pawn.ThingID + "_" + framing);
@@ -291,7 +328,7 @@ namespace AIPortraits
             string pawnKey = pawn.ThingID + "_" + framing;
             if (!portraitData.TryGetValue(pawnKey, out data)) return null;
             if (data.rawBytes == null || data.rawBytes.Length == 0) return null;
-            return CacheManager.SavePortraitToDisk(pawn.LabelShortCap, data.style, data.rawBytes);
+            return CacheManager.SavePortraitToDisk(pawn.LabelShortCap, data.style, framing, data.rawBytes);
         }
 
         public static GenerationStatus GetStatus(Pawn pawn)
@@ -327,7 +364,15 @@ namespace AIPortraits
             string positivePrompt = PromptCompiler.CompilePositivePrompt(state, AIPortraitsMod.settings, continuityToken);
             Log.Message("[Dynamic AI Portraits] PROMPT for " + pawn.LabelShortCap + " (" + framing + "):\n" + positivePrompt);
 
-            AsyncAIClient.QueueGeneration(state, AIPortraitsMod.settings, continuityToken, delegate(Texture2D tex, byte[] bytes, string promptUsed, string err)
+            // Portrait generates fresh (no continuity image).
+            // Bodyshot and special anchor to the latest portrait image for consistency.
+            byte[] portraitBytes = null;
+            if (framing == "bodyshot" || framing == "special")
+            {
+                portraitBytes = GetActivePortraitBytesForFraming(pawn, "portrait");
+            }
+
+            AsyncAIClient.QueueGeneration(state, AIPortraitsMod.settings, continuityToken, portraitBytes, delegate(Texture2D tex, byte[] bytes, string promptUsed, string err)
             {
                 if (err != null)
                 {
@@ -341,17 +386,33 @@ namespace AIPortraits
                     CacheManager.SaveToCache(diskCacheKey, bytes);
 
                     // User-visible gallery save (Documents/RimWorld Portraits/<name>/, timestamped)
-                    string savedPath = CacheManager.SavePortraitToDisk(pawn.LabelShortCap, currentStyle, bytes);
+                    string savedPath = CacheManager.SavePortraitToDisk(pawn.LabelShortCap, currentStyle, framing, bytes);
                     if (savedPath != null)
                     {
                         try
                         {
                             string promptFile = System.IO.Path.ChangeExtension(savedPath, ".txt");
                             System.IO.File.WriteAllText(promptFile, promptUsed ?? positivePrompt);
+
+                            // Save references if they were used during generation
+                            if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.useGearReferenceSheet)
+                            {
+                                byte[] refSheet = AsyncAIClient.BuildReferenceSheet(state);
+                                if (refSheet != null && refSheet.Length > 0)
+                                {
+                                    string gearFile = System.IO.Path.ChangeExtension(savedPath, null) + "_ref_gear.png";
+                                    System.IO.File.WriteAllBytes(gearFile, refSheet);
+                                }
+                            }
+                            if (portraitBytes != null && portraitBytes.Length > 0)
+                            {
+                                string portFile = System.IO.Path.ChangeExtension(savedPath, null) + "_ref_portrait.png";
+                                System.IO.File.WriteAllBytes(portFile, portraitBytes);
+                            }
                         }
                         catch (Exception ex)
                         {
-                            Log.Error("[Dynamic AI Portraits] Failed to save prompt text to disk: " + ex.Message);
+                            Log.Error("[Dynamic AI Portraits] Failed to save prompt text or references to disk: " + ex.Message);
                         }
                     }
 
@@ -390,6 +451,113 @@ namespace AIPortraits
             });
         }
 
+        public static void TriggerCustomGeneration(Pawn pawn, string customPrompt)
+        {
+            if (pawn == null || pawn.Destroyed) return;
+            if (!ShouldGenerateFor(pawn)) return;
+
+            string framing = GetActiveFraming(pawn);
+            string pawnKey = pawn.ThingID + "_" + framing;
+            string diskKey = GetActiveKey(pawn);
+            PortraitStyle currentStyle = AIPortraitsMod.settings.portraitStyle;
+
+            // Mark as generating
+            activeRequests[pawnKey] = diskKey;
+            requestStatus[pawnKey]  = GenerationStatus.Generating;
+            requestError[pawnKey]   = null;
+
+            PawnState state = GetCachedPawnState(pawn);
+            if (state == null)
+            {
+                state = PawnStateExtractor.ExtractState(pawn);
+            }
+
+            Log.Message("[Dynamic AI Portraits] CUSTOM PROMPT for " + pawn.LabelShortCap + " (" + framing + "):\n" + customPrompt);
+
+            // Portrait generates fresh (no continuity image).
+            // Bodyshot and special anchor to the latest portrait image for consistency.
+            byte[] portraitBytes = null;
+            if (framing == "bodyshot" || framing == "special")
+            {
+                portraitBytes = GetActivePortraitBytesForFraming(pawn, "portrait");
+            }
+
+            AsyncAIClient.QueueCustomGeneration(customPrompt, AIPortraitsMod.settings, state, portraitBytes, delegate(Texture2D tex, byte[] bytes, string promptUsed, string err)
+            {
+                if (err != null)
+                {
+                    requestStatus[pawnKey] = GenerationStatus.Error;
+                    requestError[pawnKey] = err;
+                    activeRequests.Remove(pawnKey);
+                }
+                else if (tex != null && bytes != null)
+                {
+                    // Disk cache (per-save, single file per pawn — overwrites previous)
+                    CacheManager.SaveToCache(diskKey, bytes);
+
+                    // User-visible gallery save (Documents/RimWorld Portraits/<name>/, timestamped)
+                    string savedPath = CacheManager.SavePortraitToDisk(pawn.LabelShortCap, currentStyle, framing, bytes);
+                    if (savedPath != null)
+                    {
+                        try
+                        {
+                            string promptFile = System.IO.Path.ChangeExtension(savedPath, ".txt");
+                            System.IO.File.WriteAllText(promptFile, promptUsed ?? customPrompt);
+
+                            // Save references if they were used during generation
+                            if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.useGearReferenceSheet)
+                            {
+                                byte[] refSheet = AsyncAIClient.BuildReferenceSheet(state);
+                                if (refSheet != null && refSheet.Length > 0)
+                                {
+                                    string gearFile = System.IO.Path.ChangeExtension(savedPath, null) + "_ref_gear.png";
+                                    System.IO.File.WriteAllBytes(gearFile, refSheet);
+                                }
+                            }
+                            if (portraitBytes != null && portraitBytes.Length > 0)
+                            {
+                                string portFile = System.IO.Path.ChangeExtension(savedPath, null) + "_ref_portrait.png";
+                                System.IO.File.WriteAllBytes(portFile, portraitBytes);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.Error("[Dynamic AI Portraits] Failed to save custom prompt text or references to disk: " + ex.Message);
+                        }
+                    }
+
+                    // Destroy previous in-memory texture for this pawn (if any) before replacing
+                    Texture2D prev;
+                    if (loadedTextures.TryGetValue(pawnKey, out prev) && prev != null && prev != tex)
+                        UnityEngine.Object.Destroy(prev);
+
+                    loadedTextures[pawnKey] = tex;
+                    portraitData[pawnKey] = new PawnPortraitData { texture = tex, rawBytes = bytes, style = currentStyle, savedPath = savedPath };
+                    requestStatus.Remove(pawnKey);
+                    activeRequests.Remove(pawnKey);
+                    requestError.Remove(pawnKey);
+
+                    // Auto-pin the freshly generated portrait as the active one for this pawn.
+                    if (!string.IsNullOrEmpty(savedPath) && AIPortraitsMod.settings != null)
+                    {
+                        string activeKey = GetActiveKeyForFraming(pawn, framing);
+                        AIPortraitsMod.settings.activePortraits[activeKey] = savedPath;
+                        AIPortraitsMod.Instance.WriteSettings();
+
+                        string lockedCacheKey = pawnKey + LockedSuffix;
+                        Texture2D oldLocked;
+                        if (loadedTextures.TryGetValue(lockedCacheKey, out oldLocked))
+                        {
+                            if (oldLocked != null && oldLocked != tex) UnityEngine.Object.Destroy(oldLocked);
+                        }
+                        loadedTextures[lockedCacheKey] = tex;
+                    }
+
+                    PortraitsCache.SetDirty(pawn);
+                }
+            });
+        }
+
         public static void ClearPawnActiveTextureCache(Pawn pawn)
         {
             if (pawn == null) return;
@@ -402,6 +570,49 @@ namespace AIPortraits
                 loadedTextures.Remove(cacheKey);
             }
             PortraitsCache.SetDirty(pawn);
+        }
+
+        // ── Video generation helpers ──────────────────────────────────────────────────
+        public static Dictionary<string, GenerationStatus> videoStatus = new Dictionary<string, GenerationStatus>();
+        public static Dictionary<string, string>           videoError  = new Dictionary<string, string>();
+
+        public static void GetVideoStatus(Pawn pawn, out GenerationStatus status, out string error)
+        {
+            status = GenerationStatus.Idle;
+            error = null;
+            if (pawn == null) return;
+            string key = pawn.ThingID + "_" + GetActiveFraming(pawn);
+            videoStatus.TryGetValue(key, out status);
+            videoError.TryGetValue(key, out error);
+        }
+
+        public static void TriggerVideoGeneration(Pawn pawn, byte[] initImageBytes)
+        {
+            if (pawn == null || pawn.Destroyed) return;
+            string framing = GetActiveFraming(pawn);
+            string key = pawn.ThingID + "_" + framing;
+
+            videoStatus[key] = GenerationStatus.Generating;
+            videoError[key] = null;
+
+            PawnState state = GetCachedPawnState(pawn);
+            string apiKey = AIPortraitsMod.settings.giApiKey;
+
+            AsyncAIClient.QueueVideoGeneration(pawn, state, initImageBytes, apiKey, delegate(string videoPath, string err)
+            {
+                if (err != null)
+                {
+                    videoStatus[key] = GenerationStatus.Error;
+                    videoError[key] = err;
+                    Log.Error("[Dynamic AI Portraits] Veo Video Generation Error: " + err);
+                }
+                else
+                {
+                    videoStatus.Remove(key);
+                    videoError.Remove(key);
+                    Log.Message("[Dynamic AI Portraits] Veo Video Generation Succeeded for " + pawn.LabelShortCap);
+                }
+            });
         }
     }
 
@@ -516,7 +727,7 @@ namespace AIPortraits
             Rect btnWestern = new Rect(rect.x + btnW, rect.y, btnW, btnH);
             Rect btnPixel = new Rect(rect.x + btnW * 2f, rect.y, btnW, btnH);
 
-            DrawStyleButton(btnKorean, "🎨 Webtoon", PortraitStyle.Realistic_Korean, "Korean webtoon manhwa (Solo Leveling style)");
+            DrawStyleButton(btnKorean, "🎨 Manhwa", PortraitStyle.Realistic_Korean, "Korean webtoon manhwa style");
             DrawStyleButton(btnWestern, "📺 Cartoon", PortraitStyle.Realistic_Western, "Rick and Morty / Adult Swim cartoon style");
             DrawStyleButton(btnPixel, "🟦 Pixel", PortraitStyle.DotPixel, "Retro pixel art / dot style");
         }
@@ -558,11 +769,30 @@ namespace AIPortraits
             Rect btnSave = new Rect(rect.x + btnW, rect.y, btnW, btnH);
             Rect btnFolder = new Rect(rect.x + btnW * 2f, rect.y, btnW, btnH);
 
-            // Button 1: New
-            DrawButton(btnNew, "♻ New", new Color(0.2f, 0.55f, 0.35f), "Generate a new portrait using current traits and character vibe.");
+            // Button 1: New — respects [V] video toggle
+            bool videoModeNew = false;
+            if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.pawnVideoToggles != null)
+                AIPortraitsMod.settings.pawnVideoToggles.TryGetValue(pawn.ThingID, out videoModeNew);
+
+            string newLabel   = videoModeNew ? "\u267b Video" : "\u267b New";
+            string newTooltip = videoModeNew ? "Regenerate the animated video for this pawn." : "Generate a new portrait using current traits and character vibe.";
+            Color  newColor   = videoModeNew ? new Color(0.2f, 0.45f, 0.7f) : new Color(0.2f, 0.55f, 0.35f);
+
+            DrawButton(btnNew, newLabel, newColor, newTooltip);
             if (Widgets.ButtonInvisible(btnNew))
             {
-                AIPortraitsManager.TriggerNewPortraitWithContinuity(pawn);
+                if (videoModeNew)
+                {
+                    byte[] imgBytes = AIPortraitsManager.GetActivePortraitBytes(pawn);
+                    if (imgBytes != null && imgBytes.Length > 0)
+                        AIPortraitsManager.TriggerVideoGeneration(pawn, imgBytes);
+                    else
+                        Messages.Message("No portrait image available to animate.", MessageTypeDefOf.RejectInput, false);
+                }
+                else
+                {
+                    AIPortraitsManager.TriggerNewPortraitWithContinuity(pawn);
+                }
             }
 
             // Button 2: Save
@@ -580,11 +810,11 @@ namespace AIPortraits
                 }
             }
 
-            // Button 3: Folder
-            DrawButton(btnFolder, "📁 Folder", new Color(0.35f, 0.35f, 0.35f), "Open the folder containing saved portraits for this pawn.");
+            // Button 3: Gallery
+            DrawButton(btnFolder, "🎬 Gallery", new Color(0.35f, 0.28f, 0.5f), "Browse saved portraits and videos for this pawn.");
             if (Widgets.ButtonInvisible(btnFolder))
             {
-                CacheManager.OpenPortraitFolder(pawn.LabelShortCap);
+                Find.WindowStack.Add(new Dialog_PawnGallery(pawn));
             }
         }
 
@@ -603,6 +833,376 @@ namespace AIPortraits
             Text.Font = font; Text.Anchor = TextAnchor.MiddleCenter;
             GUI.color = color; Widgets.Label(rect, text); GUI.color = Color.white;
             Text.Anchor = TextAnchor.UpperLeft; Text.Font = GameFont.Small;
+        }
+    }
+
+    [StaticConstructorOnStartup]
+    public static class VideoPlaybackManager
+    {
+        private static GameObject activeVideoGo;
+        private static VideoPlayer activeVideoPlayer;
+        private static RenderTexture activeRenderTexture;
+        private static string activePawnId;
+        private static string activeVideoPath;
+
+        public static bool IsPlaying(string pawnId)
+        {
+            return activeVideoPlayer != null && activePawnId == pawnId && activeVideoPlayer.isPlaying;
+        }
+
+        public static RenderTexture GetActiveTexture()
+        {
+            if (activeVideoPlayer != null && activeVideoPlayer.isPlaying)
+            {
+                return activeRenderTexture;
+            }
+            return null;
+        }
+
+        public static void StartPlayback(string pawnId, string videoPath)
+        {
+            if (activeVideoPlayer != null && activePawnId == pawnId && activeVideoPath == videoPath)
+            {
+                // Already playing this video
+                return;
+            }
+
+            StopPlayback();
+
+            try
+            {
+                activePawnId = pawnId;
+                activeVideoPath = videoPath;
+
+                activeVideoGo = new GameObject("AIPortraits_VideoPlayer_" + pawnId);
+                UnityEngine.Object.DontDestroyOnLoad(activeVideoGo);
+
+                activeVideoPlayer = activeVideoGo.AddComponent<VideoPlayer>();
+                activeVideoPlayer.isLooping = true;
+                activeVideoPlayer.renderMode = VideoRenderMode.RenderTexture;
+
+                // 9:16 vertical format matches portrait/bodyshot; use tall RT so it renders without upscaling.
+                activeRenderTexture = new RenderTexture(512, 910, 0, RenderTextureFormat.ARGB32);
+                activeRenderTexture.Create();
+
+                activeVideoPlayer.targetTexture = activeRenderTexture;
+                activeVideoPlayer.url = videoPath;
+
+                // Mute audio to avoid unwanted noise from the pawn video
+                activeVideoPlayer.audioOutputMode = VideoAudioOutputMode.None;
+
+                activeVideoPlayer.Play();
+            }
+            catch (Exception ex)
+            {
+                Log.Error("[Dynamic AI Portraits] Failed to start video playback: " + ex.Message);
+                StopPlayback();
+            }
+        }
+
+        public static void StopPlayback()
+        {
+            if (activeVideoPlayer != null)
+            {
+                activeVideoPlayer.Stop();
+                activeVideoPlayer = null;
+            }
+            if (activeRenderTexture != null)
+            {
+                activeRenderTexture.Release();
+                UnityEngine.Object.Destroy(activeRenderTexture);
+                activeRenderTexture = null;
+            }
+            if (activeVideoGo != null)
+            {
+                UnityEngine.Object.Destroy(activeVideoGo);
+                activeVideoGo = null;
+            }
+            activePawnId = null;
+            activeVideoPath = null;
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Gallery Window — in-game browser for saved portraits and videos
+    // ─────────────────────────────────────────────────────────────────────────────
+    public class Dialog_PawnGallery : Window
+    {
+        private readonly Pawn pawn;
+        private readonly string galleryDir;
+
+        private struct GalleryEntry
+        {
+            public string path;
+            public bool isVideo;
+            public Texture2D thumb;
+            public bool thumbLoaded;
+        }
+
+        private List<GalleryEntry> entries = new List<GalleryEntry>();
+        private Vector2 scrollPos;
+
+        // Video preview inside the gallery
+        private GameObject galleryVideoGo;
+        private VideoPlayer galleryVideoPlayer;
+        private RenderTexture galleryRenderTex;
+        private string playingVideoPath;
+
+        private const float TileSize = 128f;
+        private const float TilePad  = 6f;
+        private const float HeaderH  = 36f;
+        private const float FooterH  = 34f;
+
+        public override Vector2 InitialSize { get { return new Vector2(700f, 560f); } }
+
+        public Dialog_PawnGallery(Pawn pawn)
+        {
+            this.pawn  = pawn;
+            galleryDir = CacheManager.GetPortraitSaveDirectory(pawn.LabelShortCap);
+            doCloseX   = true;
+            doWindowBackground     = true;
+            absorbInputAroundWindow = false;
+            forcePause = false;
+            RefreshEntries();
+        }
+
+        private void RefreshEntries()
+        {
+            entries.Clear();
+            if (!System.IO.Directory.Exists(galleryDir)) return;
+
+            var files = new List<string>();
+            files.AddRange(System.IO.Directory.GetFiles(galleryDir, "*.png"));
+            files.AddRange(System.IO.Directory.GetFiles(galleryDir, "*.mp4"));
+            // Exclude helper reference files
+            files.RemoveAll(f => f.Contains("_ref_gear") || f.Contains("_ref_portrait"));
+            // Newest first
+            files.Sort((a, b) => System.IO.File.GetLastWriteTime(b).CompareTo(System.IO.File.GetLastWriteTime(a)));
+
+            foreach (string f in files)
+            {
+                bool vid = f.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase);
+                entries.Add(new GalleryEntry { path = f, isVideo = vid });
+            }
+        }
+
+        public override void DoWindowContents(Rect inRect)
+        {
+            // Header
+            Rect header = new Rect(inRect.x, inRect.y, inRect.width, HeaderH);
+            Text.Font = GameFont.Medium; Text.Anchor = TextAnchor.MiddleLeft;
+            GUI.color = new Color(0.9f, 0.85f, 1f);
+            Widgets.Label(header, "  \ud83c\udfac  " + pawn.LabelShortCap + "  \u2014  Gallery  (" + entries.Count + ")");
+            GUI.color = Color.white;
+            Text.Anchor = TextAnchor.UpperLeft; Text.Font = GameFont.Small;
+
+            // Footer
+            Rect footer = new Rect(inRect.x, inRect.yMax - FooterH, inRect.width, FooterH);
+            float fBtnW = 130f;
+            Rect btnRefresh = new Rect(footer.x, footer.y + 3f, fBtnW, footer.height - 6f);
+            Rect btnFolder  = new Rect(footer.x + fBtnW + 6f, footer.y + 3f, fBtnW, footer.height - 6f);
+            Rect btnStop    = new Rect(footer.xMax - fBtnW, footer.y + 3f, fBtnW, footer.height - 6f);
+
+            if (Widgets.ButtonText(btnRefresh, "\u21bb Refresh")) RefreshEntries();
+            if (Widgets.ButtonText(btnFolder,  "\ud83d\udcc1 Open Folder")) CacheManager.OpenPortraitFolder(pawn.LabelShortCap);
+            if (!string.IsNullOrEmpty(playingVideoPath) && Widgets.ButtonText(btnStop, "\u23f9 Stop Video")) StopGalleryVideo();
+
+            // Scroll area
+            Rect scrollOuter = new Rect(inRect.x, inRect.y + HeaderH + 4f, inRect.width,
+                                        inRect.height - HeaderH - FooterH - 8f);
+
+            if (entries.Count == 0)
+            {
+                Text.Anchor = TextAnchor.MiddleCenter; GUI.color = new Color(0.55f, 0.55f, 0.55f);
+                Widgets.Label(scrollOuter, "No saved portraits or videos yet.\nGenerate portraits and use the Gallery to see them here.");
+                GUI.color = Color.white; Text.Anchor = TextAnchor.UpperLeft;
+                return;
+            }
+
+            int cols = Mathf.Max(1, Mathf.FloorToInt((scrollOuter.width - 16f) / (TileSize + TilePad)));
+            int rows = Mathf.CeilToInt((float)entries.Count / cols);
+            float innerH = rows * (TileSize + TilePad) + TilePad;
+
+            Rect innerRect = new Rect(0, 0, scrollOuter.width - 20f, innerH);
+            Widgets.BeginScrollView(scrollOuter, ref scrollPos, innerRect);
+
+            for (int i = 0; i < entries.Count; i++)
+            {
+                int col = i % cols;
+                int row = i / cols;
+                Rect tile = new Rect(
+                    TilePad + col * (TileSize + TilePad),
+                    TilePad + row * (TileSize + TilePad),
+                    TileSize, TileSize);
+
+                // Cull off-screen tiles
+                if (tile.yMax < scrollPos.y - TileSize || tile.y > scrollPos.y + scrollOuter.height + TileSize)
+                    continue;
+
+                DrawTile(tile, i);
+            }
+
+            Widgets.EndScrollView();
+        }
+
+        private void DrawTile(Rect tile, int idx)
+        {
+            GalleryEntry e = entries[idx];
+            bool isPlayingThis = !string.IsNullOrEmpty(playingVideoPath) && playingVideoPath == e.path;
+
+            // Background
+            Widgets.DrawBoxSolid(tile, isPlayingThis
+                ? new Color(0.15f, 0.4f, 0.7f, 0.95f)
+                : new Color(0.1f, 0.1f, 0.13f, 1f));
+            GUI.color = new Color(1f, 1f, 1f, isPlayingThis ? 0.5f : 0.1f);
+            Widgets.DrawBox(tile, 1);
+            GUI.color = Color.white;
+
+            Rect imgArea   = new Rect(tile.x + 2f, tile.y + 2f, tile.width - 4f, tile.height - 22f);
+            Rect labelArea = new Rect(tile.x + 2f, tile.yMax - 21f, tile.width - 4f, 19f);
+
+            if (e.isVideo)
+            {
+                if (isPlayingThis && galleryRenderTex != null)
+                {
+                    GUI.DrawTexture(imgArea, galleryRenderTex, ScaleMode.ScaleAndCrop);
+                    // Playing indicator
+                    GUI.color = new Color(1f, 1f, 1f, 0.75f);
+                    Text.Font = GameFont.Tiny; Text.Anchor = TextAnchor.UpperRight;
+                    Widgets.Label(new Rect(imgArea.xMax - 22f, imgArea.y + 2f, 20f, 16f), "\u25b6");
+                    Text.Anchor = TextAnchor.UpperLeft; Text.Font = GameFont.Small;
+                    GUI.color = Color.white;
+                }
+                else
+                {
+                    // Video placeholder
+                    Widgets.DrawBoxSolid(imgArea, new Color(0.04f, 0.04f, 0.09f, 1f));
+                    Text.Font = GameFont.Medium; Text.Anchor = TextAnchor.MiddleCenter;
+                    GUI.color = new Color(0.45f, 0.65f, 1f, 0.9f);
+                    Widgets.Label(imgArea, "\ud83c\udfac\n\u25b6 Play");
+                    GUI.color = Color.white; Text.Anchor = TextAnchor.UpperLeft; Text.Font = GameFont.Small;
+                }
+
+                Text.Font = GameFont.Tiny; Text.Anchor = TextAnchor.MiddleCenter;
+                GUI.color = new Color(0.5f, 0.8f, 1f);
+                Widgets.Label(labelArea, "VIDEO");
+                GUI.color = Color.white; Text.Anchor = TextAnchor.UpperLeft; Text.Font = GameFont.Small;
+            }
+            else
+            {
+                // Lazy-load thumbnail
+                if (!e.thumbLoaded)
+                {
+                    try
+                    {
+                        byte[] bytes = System.IO.File.ReadAllBytes(e.path);
+                        Texture2D t = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                        if (ImageConversion.LoadImage(t, bytes)) e.thumb = t;
+                    }
+                    catch { }
+                    e.thumbLoaded = true;
+                    entries[idx] = e;
+                }
+
+                if (e.thumb != null)
+                    GUI.DrawTexture(imgArea, e.thumb, ScaleMode.ScaleAndCrop);
+                else
+                {
+                    Widgets.DrawBoxSolid(imgArea, new Color(0.06f, 0.06f, 0.06f));
+                    Text.Anchor = TextAnchor.MiddleCenter; GUI.color = new Color(0.3f, 0.3f, 0.3f);
+                    Widgets.Label(imgArea, "?"); GUI.color = Color.white; Text.Anchor = TextAnchor.UpperLeft;
+                }
+
+                Text.Font = GameFont.Tiny; Text.Anchor = TextAnchor.MiddleCenter;
+                GUI.color = new Color(0.55f, 0.9f, 0.55f);
+                Widgets.Label(labelArea, "IMAGE");
+                GUI.color = Color.white; Text.Anchor = TextAnchor.UpperLeft; Text.Font = GameFont.Small;
+            }
+
+            // Hover + tooltip
+            if (Mouse.IsOver(tile))
+            {
+                Widgets.DrawHighlight(tile);
+                TooltipHandler.TipRegion(tile, System.IO.Path.GetFileName(e.path));
+            }
+
+            // Click
+            if (Widgets.ButtonInvisible(tile))
+            {
+                if (e.isVideo)
+                    PlayGalleryVideo(e.path);
+                else if (e.thumb != null)
+                    Find.WindowStack.Add(new Dialog_GalleryImagePreview(e.thumb));
+            }
+        }
+
+        private void PlayGalleryVideo(string path)
+        {
+            StopGalleryVideo();
+            try
+            {
+                playingVideoPath = path;
+                galleryVideoGo = new GameObject("AIPortraits_GalleryVideo");
+                UnityEngine.Object.DontDestroyOnLoad(galleryVideoGo);
+                galleryVideoPlayer = galleryVideoGo.AddComponent<VideoPlayer>();
+                galleryVideoPlayer.isLooping = true;
+                galleryVideoPlayer.renderMode = VideoRenderMode.RenderTexture;
+                galleryRenderTex = new RenderTexture(512, 512, 0, RenderTextureFormat.ARGB32);
+                galleryRenderTex.Create();
+                galleryVideoPlayer.targetTexture = galleryRenderTex;
+                galleryVideoPlayer.audioOutputMode = VideoAudioOutputMode.None;
+                galleryVideoPlayer.url = path;
+                galleryVideoPlayer.Play();
+            }
+            catch (Exception ex)
+            {
+                Log.Error("[Dynamic AI Portraits] Gallery video playback error: " + ex.Message);
+                StopGalleryVideo();
+            }
+        }
+
+        private void StopGalleryVideo()
+        {
+            if (galleryVideoPlayer != null) { galleryVideoPlayer.Stop(); galleryVideoPlayer = null; }
+            if (galleryRenderTex  != null) { galleryRenderTex.Release(); UnityEngine.Object.Destroy(galleryRenderTex); galleryRenderTex = null; }
+            if (galleryVideoGo    != null) { UnityEngine.Object.Destroy(galleryVideoGo); galleryVideoGo = null; }
+            playingVideoPath = null;
+        }
+
+        public override void PostClose()
+        {
+            base.PostClose();
+            StopGalleryVideo();
+            foreach (var e in entries)
+                if (!e.isVideo && e.thumb != null)
+                    UnityEngine.Object.Destroy(e.thumb);
+            entries.Clear();
+        }
+    }
+
+    // ─── Full-size image preview ───────────────────────────────────────────────
+    public class Dialog_GalleryImagePreview : Window
+    {
+        private readonly Texture2D tex;
+        public override Vector2 InitialSize { get { return new Vector2(600f, 650f); } }
+
+        public Dialog_GalleryImagePreview(Texture2D tex)
+        {
+            this.tex = tex;
+            doCloseX = true;
+            doWindowBackground = true;
+            absorbInputAroundWindow = false;
+        }
+
+        public override void DoWindowContents(Rect inRect)
+        {
+            float imgSize = Mathf.Min(inRect.width, inRect.height);
+            Rect imgRect = new Rect(inRect.x + (inRect.width - imgSize) * 0.5f, inRect.y, imgSize, imgSize);
+            if (tex != null)
+            {
+                Widgets.DrawBoxSolid(imgRect, Color.black);
+                GUI.DrawTexture(imgRect, tex, ScaleMode.ScaleToFit);
+            }
         }
     }
 }

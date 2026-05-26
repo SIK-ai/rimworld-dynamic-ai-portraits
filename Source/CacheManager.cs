@@ -82,7 +82,7 @@ namespace AIPortraits
         /// Saves the portrait PNG to Documents/RimWorld Portraits/{pawnName}/.
         /// Returns the full file path on success, null on failure.
         /// </summary>
-        public static string SavePortraitToDisk(string pawnName, PortraitStyle style, byte[] bytes)
+        public static string SavePortraitToDisk(string pawnName, PortraitStyle style, string framing, byte[] bytes)
         {
             if (bytes == null || bytes.Length == 0)
             {
@@ -95,7 +95,8 @@ namespace AIPortraits
                 string dir  = GetPortraitSaveDirectory(pawnName);
                 string ts   = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
                 string suf  = style.ToString();
-                string file = SanitizeFileName(pawnName) + "_" + suf + "_" + ts + ".png";
+                string safeFraming = SanitizeFileName(framing ?? "portrait");
+                string file = SanitizeFileName(pawnName) + "_" + suf + "_" + safeFraming + "_" + ts + ".png";
                 string path = Path.Combine(dir, file);
 
                 File.WriteAllBytes(path, bytes);

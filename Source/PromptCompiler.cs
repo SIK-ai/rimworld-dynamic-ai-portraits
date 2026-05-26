@@ -10,28 +10,7 @@ namespace AIPortraits
         // IMAGEN SYSTEM PROMPTS (one per art style, Imagen-only)
         // ──────────────────────────────────────────────────────────────────────────
 
-        private const string KoreanImagenSystemPrompt =
-@"Generate a Korean webtoon manhwa character portrait for a game UI overlay.
-Style: Modern Korean webtoon manhwa illustration (Solo Leveling aesthetic). Sharp dynamic line art with strong inking. Dramatic high-contrast chiaroscuro lighting — deep blacks against bright rim highlights. Saturated focal colors with muted environment palette. Cinematic three-quarter or front-facing pose. Detailed sharp facial features, intense expressive eyes, refined modern proportions. Hair rendered in clean defined strands with glossy highlights. Skin smooth with subtle cool-blue shadow ramps.
-Composition: Bust or half-body shot. Single character. Subject centered. Dramatic light source from one side.
-Background: Fully transparent PNG (alpha channel). No background elements, fills, gradients, or environment behind the character whatsoever.
-Content: Render the character's appearance, expression, gear, and any special effects exactly as described in the user prompt. Do not add, remove, or override any described details.
-Eyes: The character's eyes must be OPEN and clearly visible by default. Only render closed eyes if the prompt explicitly says the character is sleeping or dead. Do not default to closed-eye expressions even when the art style traditionally uses them.";
 
-        private const string WesternImagenSystemPrompt =
-@"Generate an Adult Swim cartoon character portrait for a game UI overlay.
-Style: Rick and Morty animation style (Justin Roiland / Adult Swim aesthetic). Thick consistent black outlines around every shape. Flat 2D color fills with NO gradients, NO painterly shading — just solid colors blocked in. Simple bulging round eyes with tiny black pupils. Exaggerated cartoon facial features, oversized heads on smaller necks/shoulders, slightly off-model wonky proportions. Bright primary palette with occasional drool, sweat drop, or wonky tooth detail. Hand-drawn 2D animation cel look, NOT realistic, NOT painterly.
-Composition: Bust or half-body shot. Single character. Subject centered.
-Background: Fully transparent PNG (alpha channel). No background elements, fills, gradients, or environment behind the character whatsoever.
-Content: Render the character's appearance, expression, gear, and any special effects exactly as described in the user prompt. Do not add, remove, or override any described details.
-Eyes: The character's eyes must be OPEN and clearly visible by default — bulging cartoon eyes with small dot pupils. Only render closed eyes if the prompt explicitly says the character is sleeping or dead.";
-
-        private const string PixelImagenSystemPrompt =
-@"Generate a high-quality 16-bit JRPG retro pixel-art character portrait for a game UI overlay.
-Style: Retro JRPG character sprite (Tactics Ogre, Final Fantasy Tactics, or modern premium pixel art like Stardew Valley). Clean, precise pixel art grid foundation. Every single pixel must be sharp and deliberate. Zero anti-aliasing, no smooth gradients, no vector-like edges, and no naturalistic textures. Use thin consistent dark pixelated outlines (espresso brown or charcoal grey) to define the silhouette of the hair, facial features, and clothing seams. Cel-shading in 2-3 flat color bands per surface. Limited color palette (32-48 colors), vibrant and cohesive colors.
-Composition: Bust or half-body shot. Single character centered.
-Background: Fully transparent background (alpha channel transparency). No solid background, no gradient background, no textured background behind the character.
-Content: Render the character's appearance, clean expression, and gear exactly as described in the user prompt. Keep the portrait looking clean, professional, and aesthetically pleasing. Never render closed eyes, screaming faces, or distorted facial features unless explicitly requested.";
 
         // ──────────────────────────────────────────────────────────────────────────
         // MAIN ENTRY
@@ -45,10 +24,10 @@ Content: Render the character's appearance, clean expression, and gear exactly a
 
             switch (settings.portraitStyle)
             {
-                case PortraitStyle.Realistic_Korean:  AppendKoreanRealisticHeader(p, continuityStyleToken, state); break;
-                case PortraitStyle.Realistic_Western: AppendWesternRealisticHeader(p, continuityStyleToken, state); break;
-                case PortraitStyle.DotPixel:          AppendPixelHeader(p, continuityStyleToken, state); break;
-                default:                              AppendKoreanRealisticHeader(p, continuityStyleToken, state); break;
+                case PortraitStyle.Realistic_Korean:  AppendKoreanRealisticHeader(p, continuityStyleToken, state, settings); break;
+                case PortraitStyle.Realistic_Western: AppendWesternRealisticHeader(p, continuityStyleToken, state, settings); break;
+                case PortraitStyle.DotPixel:          AppendPixelHeader(p, continuityStyleToken, state, settings); break;
+                default:                              AppendKoreanRealisticHeader(p, continuityStyleToken, state, settings); break;
             }
 
             AppendRaceClass(p, state, settings);
@@ -56,11 +35,8 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             AppendGear(p, state);
             p.Append(GetExpression(state, settings) + ", ");
             bool addictionPropShown = false;
-            if (settings.allowCuteProps)
-            {
-                bool holdingProp = AppendCuteProps(p, state, out addictionPropShown);
-                AppendSkillProps(p, state, holdingProp);
-            }
+            bool holdingProp = AppendCuteProps(p, state, out addictionPropShown);
+            AppendSkillProps(p, state, holdingProp);
             // Pass addictionPropShown so health modifiers skip the visual description
             // for addictions already represented by a cute prop (avoids contradictions
             // like "holding a beer mug" + "bloodshot eyes from alcoholism" in same prompt).
@@ -77,14 +53,33 @@ Content: Render the character's appearance, clean expression, and gear exactly a
 
         // Returns the Imagen system prompt for the given style.
         // Only used by AsyncAIClient for the Imagen backend — other backends use the style headers in the positive prompt.
-        public static string CompileImagenSystemPrompt(PortraitStyle style)
+        public static string CompileImagenSystemPrompt(PortraitStyle style, AIPortraitsSettings settings)
         {
             switch (style)
             {
-                case PortraitStyle.Realistic_Korean:  return KoreanImagenSystemPrompt;
-                case PortraitStyle.Realistic_Western: return WesternImagenSystemPrompt;
-                case PortraitStyle.DotPixel:          return PixelImagenSystemPrompt;
-                default:                              return PixelImagenSystemPrompt;
+                case PortraitStyle.Realistic_Korean:
+                    return @"Generate a Korean webtoon manhwa character portrait for a game UI overlay.
+Style: " + settings.manhwaStylePrompt + @"
+Composition: Bust or half-body shot. Single character. Subject centered. Dramatic light source from one side.
+Background: Isolated on a solid white background, flat clean background, no environment, no gradients, no shadows.
+Content: Render the character's appearance, expression, gear, and any special effects exactly as described in the user prompt. Do not add, remove, or override any described details.
+Eyes: The character's eyes must be OPEN and clearly visible by default. Only render closed eyes if the prompt explicitly says the character is sleeping or dead. Do not default to closed-eye expressions even when the art style traditionally uses them.";
+
+                case PortraitStyle.Realistic_Western:
+                    return @"Generate an Adult Swim cartoon character portrait for a game UI overlay.
+Style: " + settings.cartoonStylePrompt + @"
+Composition: Bust or half-body shot. Single character. Subject centered.
+Background: Isolated on a solid white background, flat clean background, no environment, no gradients, no shadows.
+Content: Render the character's appearance, expression, gear, and any special effects exactly as described in the user prompt. Do not add, remove, or override any described details.
+Eyes: The character's eyes must be OPEN and clearly visible by default — bulging cartoon eyes with small dot pupils. Only render closed eyes if the prompt explicitly says the character is sleeping or dead.";
+
+                case PortraitStyle.DotPixel:
+                default:
+                    return @"Generate a high-quality 16-bit JRPG retro pixel-art character portrait for a game UI overlay.
+Style: " + settings.pixelStylePrompt + @"
+Composition: Bust or half-body shot. Single character centered.
+Background: Isolated on a solid white background, flat clean background, no environment, no gradients, no shadows.
+Content: Render the character's appearance, clean expression, and gear exactly as described in the user prompt. Keep the portrait looking clean, professional, and aesthetically pleasing. Never render closed eyes, screaming faces, or distorted facial features unless explicitly requested.";
             }
         }
 
@@ -92,7 +87,7 @@ Content: Render the character's appearance, clean expression, and gear exactly a
         // ART STYLE HEADERS (positive prompt preamble for all backends)
         // ──────────────────────────────────────────────────────────────────────────
 
-        private static void AppendKoreanRealisticHeader(StringBuilder p, string continuityToken, PawnState state)
+        private static void AppendKoreanRealisticHeader(StringBuilder p, string continuityToken, PawnState state, AIPortraitsSettings settings)
         {
             string frameText = GetFramingHeaderPart(state);
             string bgText = GetBackgroundText(state);
@@ -100,12 +95,12 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             if (state.framing == "bodyshot") subjectType = "character full body illustration";
             else if (state.framing == "special") subjectType = "character dynamic scene illustration";
 
-            p.Append("Korean webtoon manhwa " + subjectType + ", Solo Leveling art style, sharp dynamic line art with strong inking, dramatic chiaroscuro lighting with deep blacks and bright rim highlights, saturated focal colors against muted environment palette, cinematic pose, sharp expressive eyes, refined modern proportions, glossy detailed hair strands, " + frameText + ", " + bgText + ", ");
+            p.Append(settings.manhwaStylePrompt + ", " + subjectType + ", " + frameText + ", " + bgText + ", ");
             if (!string.IsNullOrEmpty(continuityToken))
                 p.Append(continuityToken + ", ");
         }
 
-        private static void AppendWesternRealisticHeader(StringBuilder p, string continuityToken, PawnState state)
+        private static void AppendWesternRealisticHeader(StringBuilder p, string continuityToken, PawnState state, AIPortraitsSettings settings)
         {
             string frameText = GetFramingHeaderPart(state);
             string bgText = GetBackgroundText(state);
@@ -113,12 +108,12 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             if (state.framing == "bodyshot") subjectType = "character full body illustration";
             else if (state.framing == "special") subjectType = "character dynamic scene illustration";
 
-            p.Append("Rick and Morty Adult Swim cartoon " + subjectType + ", Justin Roiland animation style, thick consistent black outlines, flat 2D color fills with NO gradients or painterly shading, bulging round cartoon eyes with tiny black dot pupils, exaggerated wonky proportions, oversized head, hand-drawn animation cel look, bright primary color palette, " + frameText + ", " + bgText + ", ");
+            p.Append(settings.cartoonStylePrompt + ", " + subjectType + ", " + frameText + ", " + bgText + ", ");
             if (!string.IsNullOrEmpty(continuityToken))
                 p.Append(continuityToken + ", ");
         }
 
-        private static void AppendPixelHeader(StringBuilder p, string continuityToken, PawnState state)
+        private static void AppendPixelHeader(StringBuilder p, string continuityToken, PawnState state, AIPortraitsSettings settings)
         {
             string frameText = GetFramingHeaderPart(state);
             string bgText = GetBackgroundText(state);
@@ -126,7 +121,7 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             if (state.framing == "bodyshot") subjectType = "character full body sprite";
             else if (state.framing == "special") subjectType = "character dynamic scene illustration";
 
-            p.Append("high-quality 16-bit retro JRPG " + subjectType + ", clean pixel-art grid, zero anti-aliasing, sharp deliberate pixel edges, thin consistent dark outlines, clean flat cel-shading, limited color palette, anime-style cute facial features, detailed hair, " + frameText + ", " + bgText + ", ");
+            p.Append(settings.pixelStylePrompt + ", " + subjectType + ", " + frameText + ", " + bgText + ", ");
             if (!string.IsNullOrEmpty(continuityToken))
                 p.Append(continuityToken + ", ");
         }
@@ -134,7 +129,7 @@ Content: Render the character's appearance, clean expression, and gear exactly a
         private static string GetFramingHeaderPart(PawnState state)
         {
             string framing = state.framing;
-            if (framing == "bodyshot") return "full length full body shot framing showing the character from head to toe with complete clothing visible";
+            if (framing == "bodyshot") return "full length full body shot, head-to-toe framing showing the entire body including legs and boots, standing pose, no cropping at the knees or ankles, complete outfit visible";
             if (framing == "special")
             {
                 int hash = 0;
@@ -180,7 +175,7 @@ Content: Render the character's appearance, clean expression, and gear exactly a
         private static string GetBackgroundText(PawnState state)
         {
             if (state.framing != "special")
-                return "transparent PNG background, alpha channel transparency, no background elements";
+                return "isolated on a solid white background, flat clean background, no environment, no gradients, no shadows, crisp sharp edges with the background";
 
             if (!string.IsNullOrEmpty(state.mentalState))
                 return "standing in a dramatic chaotic red-hued psychic storm background";
@@ -687,8 +682,7 @@ Content: Render the character's appearance, clean expression, and gear exactly a
 
         private static string GetExpression(PawnState state, AIPortraitsSettings settings)
         {
-            bool forceOpen = settings == null || settings.forceOpenEyes;
-            string prefix = forceOpen ? "eyes open, " : "";
+            string prefix = "eyes open, ";
 
             // Focus on clean, composed, JRPG/anime-style expressions with open/desired eyes.
             foreach (string trait in state.traits)
@@ -696,7 +690,7 @@ Content: Render the character's appearance, clean expression, and gear exactly a
                 string tl = trait.ToLower();
                 if (tl.Contains("psychopath"))                          return prefix + "calm neutral expression, cool emotionless gaze";
                 if (tl.Contains("abrasive"))                            return prefix + "steady confident expression, sharp intense stare";
-                if (tl.Contains("kind"))                                return forceOpen ? "eyes open, soft gentle smile, warm kind eyes" : "smiling with eyes closed in a warm gentle expression";
+                if (tl.Contains("kind"))                                return "eyes open, soft gentle smile, warm kind eyes";
                 if (tl.Contains("iron-willed") || tl.Contains("tough")) return prefix + "resolute composed expression, determined unflinching gaze";
                 if (tl.Contains("neurotic"))                            return prefix + "alert focused expression, steady gaze";
                 if (tl.Contains("brawler"))                             return prefix + "confident smirk, battle-ready composed look";
@@ -890,10 +884,18 @@ Content: Render the character's appearance, clean expression, and gear exactly a
         // NEGATIVE PROMPT (SD backends — HuggingFace, Pollinations)
         // ──────────────────────────────────────────────────────────────────────────
 
-        public static string CompileNegativePrompt(AIPortraitsSettings settings)
+        public static string CompileNegativePrompt(AIPortraitsSettings settings, string framing = "portrait")
         {
             string baseNeg = settings.baseNegativePrompt;
-            string suffix  = "photorealistic photograph, blurry, 3d render, anti-aliasing, multiple characters in one frame, solid background, gradient background, textured background, complex background, any non-transparent background behind the character, deformed anatomy, bad anatomy, extra limbs, watermark, text, signature";
+            string suffix;
+            if (framing == "special")
+            {
+                suffix = "photorealistic photograph, blurry, 3d render, anti-aliasing, multiple characters in one frame, solid background, flat background, plain background, white background, gradient background, deformed anatomy, bad anatomy, extra limbs, watermark, text, signature";
+            }
+            else
+            {
+                suffix = "photorealistic photograph, blurry, 3d render, anti-aliasing, multiple characters in one frame, gradient background, textured background, complex background, detailed background, environment, scenery, shadows, deformed anatomy, bad anatomy, extra limbs, watermark, text, signature";
+            }
             return string.IsNullOrEmpty(baseNeg) ? suffix : baseNeg + ", " + suffix;
         }
 
@@ -1008,7 +1010,7 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             if (!string.IsNullOrEmpty(state.framing))
             {
                 if (state.framing == "bodyshot")
-                    sb.AppendLine("Framing: full body shot (head to toe framing showing entire outfit and body)");
+                    sb.AppendLine("Framing: full length full body shot (head to toe framing showing the entire character including legs, feet, and boots, standing pose, absolutely no cropping)");
                 else if (state.framing == "special")
                     sb.AppendLine("Framing: special (dynamic selfie shot or expressive custom illustration close-up)");
                 else
@@ -1022,26 +1024,23 @@ Content: Render the character's appearance, clean expression, and gear exactly a
         /// Returns the Gemini Flash system prompt for the given art style.
         /// This tells the model exactly what kind of image-generation prompt to produce.
         /// </summary>
-        public static string GetLLMSystemPrompt(PortraitStyle style, string framing = "portrait")
+        public static string GetLLMSystemPrompt(PortraitStyle style, AIPortraitsSettings settings, string framing = "portrait")
         {
             string styleDesc;
             switch (style)
             {
                 case PortraitStyle.Realistic_Korean:
-                    styleDesc = "modern Korean webtoon manhwa (Solo Leveling style): " +
-                                "sharp inked line art, dramatic chiaroscuro with deep blacks and bright rim highlights, " +
-                                "saturated focal colors, cinematic dynamic pose, sharp expressive eyes, " +
-                                "refined modern proportions, glossy detailed hair strands, masterpiece, professional digital anime illustration, highly polished";
+                    styleDesc = "modern Korean webtoon manhwa style: " +
+                                (settings != null ? settings.manhwaStylePrompt : "sharp inked line art, dramatic chiaroscuro with deep blacks and bright rim highlights, saturated focal colors, refined modern proportions") +
+                                ", professional digital anime illustration, highly polished";
                     break;
                 case PortraitStyle.Realistic_Western:
                     styleDesc = "Rick and Morty / Adult Swim 2D cartoon animation style: " +
-                                "clean bold black outlines, flat vibrant cell-shaded colors, expressive character-focused design, " +
-                                "crisp hand-drawn vector art, no gradients or painterly shading";
+                                (settings != null ? settings.cartoonStylePrompt : "clean bold outlines, flat vibrant color fills");
                     break;
                 case PortraitStyle.DotPixel:
-                    styleDesc = "high-quality 16-bit retro JRPG pixel art (Tactics Ogre / Final Fantasy Tactics style): " +
-                                "sharp deliberate pixel grid, zero anti-aliasing, thin dark outlines, " +
-                                "2-3 band flat cel-shading, limited vibrant color palette, cute anime facial features, masterpiece retro game asset, clean sprite art";
+                    styleDesc = "high-quality JRPG pixel art style: " +
+                                (settings != null ? settings.pixelStylePrompt : "sharp deliberate pixel grid, thin dark outlines, limited color palette");
                     break;
                 default:
                     styleDesc = "semi-realistic anime RPG character portrait, professional digital illustration";
@@ -1049,13 +1048,13 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             }
 
             string framingTask = "write one optimized image generation prompt for a bust-up portrait.";
-            string rule5 = "Always end with: transparent PNG background, alpha channel transparency, no background elements, bust-up framing.";
+            string rule5 = "Always end with: isolated on a solid white background, flat clean background, no environment, no gradients, no shadows, crisp sharp edges with the background, bust-up framing.";
             string rule7 = "FACE COVERS & BEARDS: If a face-covering mask, respirator, veil, goggles, or visor is listed, describe it as worn on the face/eyes. If they also have a beard or facial hair, DO NOT describe the beard/facial hair (or state it is completely hidden inside the mask) to ensure the mask renders cleanly without clipping.";
 
             if (framing == "bodyshot")
             {
-                framingTask = "write one optimized image generation prompt for a full-length body illustration showing the character from head to toe.";
-                rule5 = "Always end with: transparent PNG background, alpha channel transparency, no background elements, full body length framing showing the character from head to toe.";
+                framingTask = "write one optimized image generation prompt for a full-length body illustration showing the character from head to toe, including legs, pants, and boots/shoes.";
+                rule5 = "Always end with: isolated on a solid white background, flat clean background, no environment, no gradients, no shadows, crisp sharp edges with the background, standing full body length framing showing the entire character from head to toe including boots and legs, no cropping.";
             }
             else if (framing == "special")
             {
@@ -1074,10 +1073,10 @@ Content: Render the character's appearance, clean expression, and gear exactly a
                 "3. Resolve contradictions — when traits conflict, pick the more visually striking interpretation.\n" +
                 "4. You have full creative freedom over pose, composition, camera angle, lighting, and overall styling. Aim for a premium, visually striking portrait that captures the character's identity. Use your judgment to make the most impactful artistic decisions.\n" +
                 "5. " + rule5 + "\n" +
-                "6. HEADGEAR/HELMET MANDATE: If a helmet, hat, hood, cap, cowl, or mask is in the apparel list, you MUST include it. Describe it either worn on their head/face, held under one arm, slung on a shoulder strap, or slung around their neck.\n" +
+                "6. HEADGEAR/HELMET MANDATE: If a helmet, hat, hood, cap, cowl, or mask is in the apparel list, you ABSOLUTELY MUST include it in the prompt. Describe it prominently as worn on their head/face, or held under one arm.\n" +
                 "7. " + rule7 + "\n" +
                 "8. HIGH QUALITY VISUALS: Elevate the aesthetic by requesting dramatic lighting, strong shadow play, crisp linework, and clean color harmony tailored to the style. Avoid generic terms like 'hyperrealistic' or 'detailed'; use concrete modifiers instead (e.g. 'perfect anatomy', 'masterpiece digital art', 'crisp pixel alignment').\n" +
-                "9. Keep total output under 220 words.\n" +
+                "9. Keep total output under 350 words.\n" +
                 "10. Output ONLY the prompt — no explanations, no headers, no quotes.";
         }
     }

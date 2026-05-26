@@ -18,11 +18,11 @@ namespace AIPortraits
         private const float ChromaStrict = 8f;
         private const float LumaStrict = 25f;
 
-        private const float ChromaLoose = 12f;
-        private const float LumaLoose = 40f;
+        private const float ChromaLoose = 10f;
+        private const float LumaLoose = 30f;
 
-        private const int HaloMaxDepth = 3;
-        private const float MaxRemovedFraction = 0.80f;
+        private const int HaloMaxDepth = 1;
+        private const float MaxRemovedFraction = 0.95f;
         private const byte AlreadyTransparentAlpha = 10;
 
         private struct YCbCrColor
@@ -56,7 +56,7 @@ namespace AIPortraits
                 return source;
             }
 
-            // Sample up to 3 dominant background colors from edges
+            // Sample up to 3 dominant background colors from corners
             List<YCbCrColor> bgColors = SampleDominantEdgeColors(pixels, w, h);
             if (bgColors.Count == 0) return source;
 
@@ -64,15 +64,19 @@ namespace AIPortraits
             bool[] visited = new bool[w * h];
             Queue<int> queue = new Queue<int>(w * h / 4);
 
-            for (int x = 0; x < w; x++)
+            // Seed from a safe strip along the upper left and upper right edges, avoiding the center.
+            int seedW = w / 10;
+            int seedH = h / 2; // Upper half
+            for (int y = h - seedH; y < h; y++)
             {
-                TrySeedStrict(pixels, visited, queue, x, 0, w, h, bgColors);
-                TrySeedStrict(pixels, visited, queue, x, h - 1, w, h, bgColors);
-            }
-            for (int y = 0; y < h; y++)
-            {
-                TrySeedStrict(pixels, visited, queue, 0, y, w, h, bgColors);
-                TrySeedStrict(pixels, visited, queue, w - 1, y, w, h, bgColors);
+                for (int x = 0; x < seedW; x++)
+                {
+                    TrySeedStrict(pixels, visited, queue, x, y, w, h, bgColors);
+                }
+                for (int x = w - seedW; x < w; x++)
+                {
+                    TrySeedStrict(pixels, visited, queue, x, y, w, h, bgColors);
+                }
             }
 
             while (queue.Count > 0)
@@ -129,6 +133,68 @@ namespace AIPortraits
             if (removed >= pixels.Length * MaxRemovedFraction) return source;
             if (removed == 0) return source;
 
+            // Pass 3: Multi-level alpha feathering/anti-aliasing of the cut-out edge
+            byte[] dist = new byte[w * h];
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                dist[i] = (pixels[i].a == 0) ? (byte)0 : (byte)255;
+            }
+
+            // Find pixels at distance 1
+            List<int> border1 = new List<int>();
+            for (int y = 1; y < h - 1; y++)
+            {
+                for (int x = 1; x < w - 1; x++)
+                {
+                    int i = y * w + x;
+                    if (dist[i] == 255)
+                    {
+                        if (dist[i - 1] == 0 || dist[i + 1] == 0 || dist[i - w] == 0 || dist[i + w] == 0)
+                        {
+                            border1.Add(i);
+                        }
+                    }
+                }
+            }
+            foreach (int i in border1)
+            {
+                dist[i] = 1;
+            }
+
+            // Find pixels at distance 2
+            List<int> border2 = new List<int>();
+            for (int y = 1; y < h - 1; y++)
+            {
+                for (int x = 1; x < w - 1; x++)
+                {
+                    int i = y * w + x;
+                    if (dist[i] == 255)
+                    {
+                        if (dist[i - 1] == 1 || dist[i + 1] == 1 || dist[i - w] == 1 || dist[i + w] == 1)
+                        {
+                            border2.Add(i);
+                        }
+                    }
+                }
+            }
+            foreach (int i in border2)
+            {
+                dist[i] = 2;
+            }
+
+            // Soften alpha based on distance
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                if (dist[i] == 1)
+                {
+                    pixels[i].a = (byte)(pixels[i].a * 0.4f);
+                }
+                else if (dist[i] == 2)
+                {
+                    pixels[i].a = (byte)(pixels[i].a * 0.75f);
+                }
+            }
+
             Texture2D result = new Texture2D(w, h, TextureFormat.RGBA32, false);
             result.SetPixels32(pixels);
             result.Apply();
@@ -139,15 +205,25 @@ namespace AIPortraits
         {
             int[] buckets = new int[8 * 8 * 8];
 
-            for (int x = 0; x < w; x++)
+            int cornerW = w / 8;
+            int cornerH = h / 8;
+
+            // Top-left corner
+            for (int y = h - cornerH; y < h; y++)
             {
-                BucketIncrement(buckets, pixels[x]);
-                BucketIncrement(buckets, pixels[(h - 1) * w + x]);
+                for (int x = 0; x < cornerW; x++)
+                {
+                    BucketIncrement(buckets, pixels[y * w + x]);
+                }
             }
-            for (int y = 1; y < h - 1; y++)
+
+            // Top-right corner
+            for (int y = h - cornerH; y < h; y++)
             {
-                BucketIncrement(buckets, pixels[y * w]);
-                BucketIncrement(buckets, pixels[y * w + (w - 1)]);
+                for (int x = w - cornerW; x < w; x++)
+                {
+                    BucketIncrement(buckets, pixels[y * w + x]);
+                }
             }
 
             // Find top 3 peaks in the edge color histogram
@@ -196,15 +272,25 @@ namespace AIPortraits
             long sumR = 0, sumG = 0, sumB = 0;
             int cnt = 0;
 
-            for (int x = 0; x < w; x++)
+            int cornerW = w / 8;
+            int cornerH = h / 8;
+
+            // Top-left corner
+            for (int y = h - cornerH; y < h; y++)
             {
-                AverageIfMatch(pixels[x], bucketIdx, ref sumR, ref sumG, ref sumB, ref cnt);
-                AverageIfMatch(pixels[(h - 1) * w + x], bucketIdx, ref sumR, ref sumG, ref sumB, ref cnt);
+                for (int x = 0; x < cornerW; x++)
+                {
+                    AverageIfMatch(pixels[y * w + x], bucketIdx, ref sumR, ref sumG, ref sumB, ref cnt);
+                }
             }
-            for (int y = 1; y < h - 1; y++)
+
+            // Top-right corner
+            for (int y = h - cornerH; y < h; y++)
             {
-                AverageIfMatch(pixels[y * w], bucketIdx, ref sumR, ref sumG, ref sumB, ref cnt);
-                AverageIfMatch(pixels[y * w + (w - 1)], bucketIdx, ref sumR, ref sumG, ref sumB, ref cnt);
+                for (int x = w - cornerW; x < w; x++)
+                {
+                    AverageIfMatch(pixels[y * w + x], bucketIdx, ref sumR, ref sumG, ref sumB, ref cnt);
+                }
             }
 
             if (cnt > 0)
@@ -313,20 +399,11 @@ namespace AIPortraits
 
         private static void GetLocalTolerances(int x, int y, int w, int h, float baseChroma, float baseLuma, out float chromaTol, out float lumaTol)
         {
-            float px = (float)x / w;
-            float py = (float)y / h;
-
-            // Tighten tolerances by 50% in the core face/neck zone to protect facial details
-            if (px >= 0.28f && px <= 0.72f && py >= 0.32f && py <= 0.82f)
-            {
-                chromaTol = baseChroma * 0.5f;
-                lumaTol   = baseLuma * 0.6f;
-            }
-            else
-            {
-                chromaTol = baseChroma;
-                lumaTol   = baseLuma;
-            }
+            // Instead of assuming the face is dead-center (which breaks for bodyshots),
+            // we apply a slight global tightening to base tolerances to prevent
+            // aggressive bleeding into the character anywhere on the screen.
+            chromaTol = baseChroma * 0.7f;
+            lumaTol   = baseLuma * 0.75f;
         }
     }
 }

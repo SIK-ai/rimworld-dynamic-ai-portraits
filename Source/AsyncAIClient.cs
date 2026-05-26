@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -31,25 +32,32 @@ namespace AIPortraits
 
         private const int RequestTimeoutSeconds = 120;
 
-        public static void QueueGeneration(PawnState state, AIPortraitsSettings settings, string continuityToken, PortraitCallback callback)
+        public static void QueueGeneration(PawnState state, AIPortraitsSettings settings, string continuityToken, byte[] portraitBytes, PortraitCallback callback)
         {
             // If Gemini Flash prompt generation is enabled and a key is available, run that path.
             if (settings.useLLMPrompt && !string.IsNullOrEmpty(GetLLMApiKey(settings)))
             {
-                CoroutineRunner.Instance.StartCoroutine(GenerateLLMThenDispatch(state, settings, continuityToken, callback));
+                CoroutineRunner.Instance.StartCoroutine(GenerateLLMThenDispatch(state, settings, continuityToken, portraitBytes, callback));
                 return;
             }
 
             // Standard compiled-template path
             string positivePrompt = PromptCompiler.CompilePositivePrompt(state, settings, continuityToken);
-            string negativePrompt = PromptCompiler.CompileNegativePrompt(settings);
+            string negativePrompt = PromptCompiler.CompileNegativePrompt(settings, state != null ? state.framing : "portrait");
             Log.Message("[Dynamic AI Portraits] Prompt: " + positivePrompt);
-            DispatchImageBackend(positivePrompt, negativePrompt, settings, state, callback);
+            DispatchImageBackend(positivePrompt, negativePrompt, settings, state, portraitBytes, callback);
+        }
+
+        public static void QueueCustomGeneration(string customPrompt, AIPortraitsSettings settings, PawnState state, byte[] portraitBytes, PortraitCallback callback)
+        {
+            string negativePrompt = PromptCompiler.CompileNegativePrompt(settings, state != null ? state.framing : "portrait");
+            Log.Message("[Dynamic AI Portraits] Custom Prompt: " + customPrompt);
+            DispatchImageBackend(customPrompt, negativePrompt, settings, state, portraitBytes, callback);
         }
 
         /// <summary>Routes a compiled prompt to the configured image backend.</summary>
         private static void DispatchImageBackend(string positivePrompt, string negativePrompt,
-                                                 AIPortraitsSettings settings, PawnState state, PortraitCallback callback)
+                                                 AIPortraitsSettings settings, PawnState state, byte[] portraitBytes, PortraitCallback callback)
         {
             switch (settings.backendType)
             {
@@ -60,7 +68,7 @@ namespace AIPortraits
                     CoroutineRunner.Instance.StartCoroutine(GeneratePollinations(positivePrompt, settings, state, callback));
                     break;
                 case BackendType.GoogleImagen:
-                    CoroutineRunner.Instance.StartCoroutine(GenerateGoogleImagen(positivePrompt, negativePrompt, settings, state, callback));
+                    CoroutineRunner.Instance.StartCoroutine(GenerateGoogleImagen(positivePrompt, negativePrompt, settings, state, portraitBytes, callback));
                     break;
                 case BackendType.LocalA1111:
                     CoroutineRunner.Instance.StartCoroutine(GenerateLocalA1111(positivePrompt, negativePrompt, settings, state, callback));
@@ -85,8 +93,8 @@ namespace AIPortraits
         private static string GetLLMApiKey(AIPortraitsSettings settings)
         {
             if (!string.IsNullOrEmpty(settings.llmApiKey)) return settings.llmApiKey;
-            if (settings.backendType == BackendType.GoogleImagen && !string.IsNullOrEmpty(settings.apiKey))
-                return settings.apiKey;
+            if (!string.IsNullOrEmpty(settings.giApiKey))
+                return settings.giApiKey;
             return null;
         }
 
@@ -97,11 +105,11 @@ namespace AIPortraits
         /// always succeeds even without a valid LLM key.
         /// </summary>
         private static IEnumerator GenerateLLMThenDispatch(PawnState state, AIPortraitsSettings settings,
-                                                            string continuityToken, PortraitCallback callback)
+                                                            string continuityToken, byte[] portraitBytes, PortraitCallback callback)
         {
             string llmKey    = GetLLMApiKey(settings);
             string pawnDesc  = PromptCompiler.CompilePawnStateDescription(state, settings);
-            string sysPrompt = PromptCompiler.GetLLMSystemPrompt(settings.portraitStyle, state.framing);
+            string sysPrompt = PromptCompiler.GetLLMSystemPrompt(settings.portraitStyle, settings, state.framing);
 
             // gemini-3.1-flash-lite is free-tier and very fast (~1 s round-trip).
             string llmUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=" + llmKey;
@@ -151,8 +159,8 @@ namespace AIPortraits
                 generatedPrompt = PromptCompiler.CompilePositivePrompt(state, settings, continuityToken);
             }
 
-            string negativePrompt = PromptCompiler.CompileNegativePrompt(settings);
-            DispatchImageBackend(generatedPrompt, negativePrompt, settings, state, callback);
+            string negativePrompt = PromptCompiler.CompileNegativePrompt(settings, state != null ? state.framing : "portrait");
+            DispatchImageBackend(generatedPrompt, negativePrompt, settings, state, portraitBytes, callback);
         }
 
         /// <summary>
@@ -208,9 +216,17 @@ namespace AIPortraits
         // ── HuggingFace ──────────────────────────────────────────────────────────────
         private static IEnumerator GenerateHuggingFace(string prompt, string negativePrompt, AIPortraitsSettings settings, PawnState state, PortraitCallback callback)
         {
-            string modelId = string.IsNullOrEmpty(settings.modelName) ? "stabilityai/stable-diffusion-xl-base-1.0" : settings.modelName;
-            string baseUrl = string.IsNullOrEmpty(settings.apiUrl) ? "https://api-inference.huggingface.co" : settings.apiUrl.TrimEnd('/');
+            string modelId = string.IsNullOrEmpty(settings.CurrentModelName) ? "stabilityai/stable-diffusion-xl-base-1.0" : settings.CurrentModelName;
+            string baseUrl = string.IsNullOrEmpty(settings.CurrentApiUrl) ? "https://api-inference.huggingface.co" : settings.CurrentApiUrl.TrimEnd('/');
             string url = baseUrl + "/models/" + modelId;
+
+            int width = 512;
+            int height = 512;
+            if (state != null)
+            {
+                if (state.framing == "bodyshot") { width = 512; height = 768; }
+                else if (state.framing == "special") { width = 768; height = 512; }
+            }
 
             StringBuilder json = new StringBuilder();
             json.Append("{");
@@ -218,6 +234,8 @@ namespace AIPortraits
             json.Append("\"parameters\":{");
             json.Append("\"negative_prompt\":\"").Append(EscapeJson(negativePrompt)).Append("\",");
             json.Append("\"num_inference_steps\":").Append(settings.steps).Append(",");
+            json.Append("\"width\":").Append(width).Append(",");
+            json.Append("\"height\":").Append(height).Append(",");
             json.Append("\"guidance_scale\":").Append(settings.cfgScale.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
             json.Append("}}");
 
@@ -229,8 +247,8 @@ namespace AIPortraits
                 request.downloadHandler = new DownloadHandlerBuffer();
                 request.SetRequestHeader("Content-Type", "application/json");
                 request.timeout = RequestTimeoutSeconds;
-                if (!string.IsNullOrEmpty(settings.apiKey))
-                    request.SetRequestHeader("Authorization", "Bearer " + settings.apiKey);
+                if (!string.IsNullOrEmpty(settings.CurrentApiKey))
+                    request.SetRequestHeader("Authorization", "Bearer " + settings.CurrentApiKey);
 
                 yield return request.SendWebRequest();
 
@@ -247,22 +265,31 @@ namespace AIPortraits
                     yield break;
                 }
 
-                DeliverImage(imgBytes, prompt, "HuggingFace", state, callback);
+                DeliverImage(imgBytes, prompt, "HuggingFace", state, settings, callback);
             }
         }
 
         // ── Pollinations ─────────────────────────────────────────────────────────────
         private static IEnumerator GeneratePollinations(string prompt, AIPortraitsSettings settings, PawnState state, PortraitCallback callback)
         {
-            string baseUrl = string.IsNullOrEmpty(settings.apiUrl) ? "https://image.pollinations.ai" : settings.apiUrl.TrimEnd('/');
-            // Pollinations consolidated to "sana" — "flux" no longer exists on their endpoint.
-            string model = string.IsNullOrEmpty(settings.modelName) ? "sana" : settings.modelName;
+            string baseUrl = string.IsNullOrEmpty(settings.CurrentApiUrl) ? "https://image.pollinations.ai" : settings.CurrentApiUrl.TrimEnd('/');
+            string url = baseUrl + "/prompt/" + Uri.EscapeDataString(prompt);
+            string model = string.IsNullOrEmpty(settings.CurrentModelName) ? "sana" : settings.CurrentModelName;
 
             // Pollinations puts the prompt in the URL path. URLs much over ~4KB get rejected, so
             // we hard-cap the encoded prompt length.
             string encodedPrompt = Uri.EscapeDataString(prompt);
             if (encodedPrompt.Length > 3500) encodedPrompt = encodedPrompt.Substring(0, 3500);
-            string url = baseUrl + "/prompt/" + encodedPrompt + "?width=512&height=512&model=" + Uri.EscapeDataString(model) + "&nologo=true&private=true";
+
+            int width = 512;
+            int height = 512;
+            if (state != null)
+            {
+                if (state.framing == "bodyshot") { width = 512; height = 768; }
+                else if (state.framing == "special") { width = 768; height = 512; }
+            }
+
+            url = baseUrl + "/prompt/" + encodedPrompt + "?width=" + width + "&height=" + height + "&model=" + Uri.EscapeDataString(model) + "&nologo=true&private=true";
 
             using (UnityWebRequest request = UnityWebRequest.Get(url))
             {
@@ -282,29 +309,116 @@ namespace AIPortraits
                     yield break;
                 }
 
-                DeliverImage(imgBytes, prompt, "Pollinations", state, callback);
+                DeliverImage(imgBytes, prompt, "Pollinations", state, settings, callback);
             }
         }
 
         // ── Google Imagen ────────────────────────────────────────────────────────────
-        private static IEnumerator GenerateGoogleImagen(string prompt, string negativePrompt, AIPortraitsSettings settings, PawnState state, PortraitCallback callback)
+        private static IEnumerator GenerateGoogleImagen(string prompt, string negativePrompt, AIPortraitsSettings settings, PawnState state, byte[] portraitBytes, PortraitCallback callback)
         {
-            string baseUrl = string.IsNullOrEmpty(settings.apiUrl) ? "https://generativelanguage.googleapis.com" : settings.apiUrl.TrimEnd('/');
-            string model = string.IsNullOrEmpty(settings.modelName) ? "imagen-4.0-fast-generate-001" : settings.modelName;
-            string url = baseUrl + "/v1beta/models/" + model + ":predict";
+            string baseUrl = string.IsNullOrEmpty(settings.CurrentApiUrl) ? "https://generativelanguage.googleapis.com" : settings.CurrentApiUrl.TrimEnd('/');
+            string model = string.IsNullOrEmpty(settings.CurrentModelName) ? "imagen-4.0-fast-generate-001" : settings.CurrentModelName;
 
-            string fullPrompt = PromptCompiler.CompileImagenSystemPrompt(settings.portraitStyle) + "\n\n" + prompt;
+            // Map UI names to official Google Model IDs
+            string apiModel = model;
+            if (apiModel == "nanobanana-2") apiModel = "gemini-3.1-flash-image-preview";
+            else if (apiModel == "nanobanana") apiModel = "gemini-2.5-flash-image";
+            else if (apiModel == "nanobanana-pro") apiModel = "gemini-3-pro-image-preview";
 
+            bool isGeminiImageModel = apiModel.Contains("gemini-") && apiModel.Contains("-image");
+
+            string url;
             StringBuilder json = new StringBuilder();
-            json.Append("{");
-            json.Append("\"instances\":[{");
-            json.Append("\"prompt\":\"").Append(EscapeJson(fullPrompt)).Append("\"");
-            json.Append("}],");
-            json.Append("\"parameters\":{");
-            json.Append("\"sampleCount\":1,");
-            json.Append("\"aspectRatio\":\"1:1\",");
-            json.Append("\"outputMimeType\":\"image/png\"");
-            json.Append("}}");
+
+            if (isGeminiImageModel)
+            {
+                url = baseUrl + "/v1beta/models/" + apiModel + ":generateContent?key=" + (settings.CurrentApiKey ?? "");
+
+                byte[] refSheetBytes = settings.useGearReferenceSheet ? BuildReferenceSheet(state) : null;
+                string fullPrompt = PromptCompiler.CompileImagenSystemPrompt(settings.portraitStyle, settings) + "\n\n" + prompt;
+                if (refSheetBytes != null && refSheetBytes.Length > 0)
+                {
+                    fullPrompt += "\n\nattached is a reference sheet of the character's equipment sprites. please render the character wearing/holding these exact items.";
+                }
+
+                string aspectRatio = "1:1";
+                if (state != null)
+                {
+                    if (state.framing == "bodyshot") aspectRatio = "3:4";
+                    else if (state.framing == "special") aspectRatio = "4:3";
+                }
+
+                json.Append("{");
+                json.Append("\"contents\":[{");
+                json.Append("\"parts\":[");
+                json.Append("{\"text\":\"").Append(EscapeJson(fullPrompt)).Append("\"}");
+
+                if (portraitBytes != null && portraitBytes.Length > 0)
+                {
+                    string base64Image = Convert.ToBase64String(portraitBytes);
+                    json.Append(",{");
+                    json.Append("\"inlineData\":{");
+                    json.Append("\"mimeType\":\"image/png\",");
+                    json.Append("\"data\":\"").Append(base64Image).Append("\"");
+                    json.Append("}");
+                    json.Append("}");
+                }
+
+                if (refSheetBytes != null && refSheetBytes.Length > 0)
+                {
+                    string base64Ref = Convert.ToBase64String(refSheetBytes);
+                    json.Append(",{");
+                    json.Append("\"inlineData\":{");
+                    json.Append("\"mimeType\":\"image/png\",");
+                    json.Append("\"data\":\"").Append(base64Ref).Append("\"");
+                    json.Append("}");
+                    json.Append("}");
+                }
+
+                json.Append("]");
+                json.Append("}],");
+                json.Append("\"generationConfig\":{");
+                json.Append("\"responseModalities\":[\"IMAGE\"],");
+                json.Append("\"imageConfig\":{");
+                json.Append("\"aspectRatio\":\"").Append(aspectRatio).Append("\"");
+                json.Append("}");
+                json.Append("}");
+                json.Append("}");
+            }
+            else
+            {
+                url = baseUrl + "/v1beta/models/" + apiModel + ":predict";
+                string fullPrompt = PromptCompiler.CompileImagenSystemPrompt(settings.portraitStyle, settings) + "\n\n" + prompt;
+
+                string aspectRatio = "1:1";
+                if (state != null)
+                {
+                    if (state.framing == "bodyshot") aspectRatio = "3:4";
+                    else if (state.framing == "special") aspectRatio = "4:3";
+                }
+
+                bool isCapabilityModel = apiModel.Contains("nanobanana") || apiModel.Contains("capability") || apiModel.Contains("editing");
+
+                json.Append("{");
+                json.Append("\"instances\":[{");
+                json.Append("\"prompt\":\"").Append(EscapeJson(fullPrompt)).Append("\"");
+
+                if (isCapabilityModel && portraitBytes != null && portraitBytes.Length > 0)
+                {
+                    string base64Image = Convert.ToBase64String(portraitBytes);
+                    json.Append(",\"referenceImage\":{");
+                    json.Append("\"bytesBase64Encoded\":\"").Append(base64Image).Append("\",");
+                    json.Append("\"mimeType\":\"image/png\"");
+                    json.Append("}");
+                }
+
+                json.Append("}],");
+                json.Append("\"parameters\":{");
+                json.Append("\"sampleCount\":1,");
+                json.Append("\"aspectRatio\":\"").Append(aspectRatio).Append("\",");
+                json.Append("\"outputMimeType\":\"image/png\"");
+                json.Append("}}");
+            }
 
             byte[] jsonBytes = Encoding.UTF8.GetBytes(json.ToString());
 
@@ -313,49 +427,86 @@ namespace AIPortraits
                 request.uploadHandler = new UploadHandlerRaw(jsonBytes);
                 request.downloadHandler = new DownloadHandlerBuffer();
                 request.SetRequestHeader("Content-Type", "application/json");
-                request.SetRequestHeader("x-goog-api-key", settings.apiKey ?? "");
+                if (!isGeminiImageModel)
+                {
+                    request.SetRequestHeader("x-goog-api-key", settings.CurrentApiKey ?? "");
+                }
                 request.timeout = RequestTimeoutSeconds;
 
-                Log.Message("[Dynamic AI Portraits] Google Imagen URL: " + url);
+                Log.Message("[Dynamic AI Portraits] Google AI URL: " + url);
 
                 yield return request.SendWebRequest();
 
                 if (!IsSuccess(request))
                 {
-                    callback(null, null, null, "Google Imagen API Error: " + request.error + " | " + Truncate(request.downloadHandler.text, 400));
+                    callback(null, null, null, "Google AI API Error: " + request.error + " | " + Truncate(request.downloadHandler.text, 400));
                     yield break;
                 }
 
                 string text = request.downloadHandler.text;
-                Log.Message("[Dynamic AI Portraits] Google Imagen raw response (first 300): " + Truncate(text, 300));
+                Log.Message("[Dynamic AI Portraits] Google AI raw response (first 300): " + Truncate(text, 300));
 
                 try
                 {
-                    // Response: {"predictions":[{"bytesBase64Encoded":"...","mimeType":"image/png"}]}
-                    int keyIdx = text.IndexOf("\"bytesBase64Encoded\"");
-                    if (keyIdx == -1)
+                    if (isGeminiImageModel)
                     {
-                        callback(null, null, null, "Could not find 'bytesBase64Encoded' in response. Full response: " + Truncate(text, 400));
-                        yield break;
-                    }
+                        // Response has: "inlineData":{"mimeType":"image/png","data":"..."}
+                        int inlineDataIdx = text.IndexOf("\"inlineData\"");
+                        if (inlineDataIdx == -1)
+                        {
+                            callback(null, null, null, "Could not find 'inlineData' in Gemini response. Full response: " + Truncate(text, 400));
+                            yield break;
+                        }
 
-                    int colonIdx = text.IndexOf(':', keyIdx);
-                    int openQuote = text.IndexOf('"', colonIdx + 1);
-                    int closeQuote = text.IndexOf('"', openQuote + 1);
-                    if (openQuote == -1 || closeQuote == -1)
+                        int dataKeyIdx = text.IndexOf("\"data\"", inlineDataIdx);
+                        if (dataKeyIdx == -1)
+                        {
+                            callback(null, null, null, "Could not find 'data' field inside inlineData. Full response: " + Truncate(text, 400));
+                            yield break;
+                        }
+
+                        int colonIdx = text.IndexOf(':', dataKeyIdx);
+                        int openQuote = text.IndexOf('"', colonIdx + 1);
+                        int closeQuote = text.IndexOf('"', openQuote + 1);
+                        if (openQuote == -1 || closeQuote == -1)
+                        {
+                            callback(null, null, null, "Malformed data value inside inlineData.");
+                            yield break;
+                        }
+
+                        string base64 = text.Substring(openQuote + 1, closeQuote - openQuote - 1);
+                        byte[] imgBytes = Convert.FromBase64String(base64);
+
+                        DeliverImage(imgBytes, prompt, model, state, settings, callback);
+                    }
+                    else
                     {
-                        callback(null, null, null, "Malformed bytesBase64Encoded value.");
-                        yield break;
+                        // Response: {"predictions":[{"bytesBase64Encoded":"...","mimeType":"image/png"}]}
+                        int keyIdx = text.IndexOf("\"bytesBase64Encoded\"");
+                        if (keyIdx == -1)
+                        {
+                            callback(null, null, null, "Could not find 'bytesBase64Encoded' in response. Full response: " + Truncate(text, 400));
+                            yield break;
+                        }
+
+                        int colonIdx = text.IndexOf(':', keyIdx);
+                        int openQuote = text.IndexOf('"', colonIdx + 1);
+                        int closeQuote = text.IndexOf('"', openQuote + 1);
+                        if (openQuote == -1 || closeQuote == -1)
+                        {
+                            callback(null, null, null, "Malformed bytesBase64Encoded value.");
+                            yield break;
+                        }
+
+                        string base64 = text.Substring(openQuote + 1, closeQuote - openQuote - 1);
+                        byte[] imgBytes = Convert.FromBase64String(base64);
+
+                        DeliverImage(imgBytes, prompt, model, state, settings, callback);
                     }
-
-                    string base64 = text.Substring(openQuote + 1, closeQuote - openQuote - 1);
-                    byte[] imgBytes = Convert.FromBase64String(base64);
-
-                    DeliverImage(imgBytes, prompt, "Google Imagen", state, callback);
                 }
                 catch (Exception ex)
                 {
-                    callback(null, null, null, "Google Imagen parse exception: " + ex.Message);
+                    callback(null, null, null, "Google AI parse exception: " + ex.Message);
                 }
             }
         }
@@ -363,7 +514,7 @@ namespace AIPortraits
         // ── Cloudflare Workers AI (FLUX.1 Schnell + others) ─────────────────────────
         private static IEnumerator GenerateCloudflare(string prompt, string negativePrompt, AIPortraitsSettings settings, PawnState state, PortraitCallback callback)
         {
-            string combined = (settings.apiKey ?? "").Trim();
+            string combined = (settings.CurrentApiKey ?? "").Trim();
             int colonIdx = combined.IndexOf(':');
             if (colonIdx <= 0 || colonIdx >= combined.Length - 1)
             {
@@ -373,15 +524,25 @@ namespace AIPortraits
             string accountId = combined.Substring(0, colonIdx).Trim();
             string apiToken  = combined.Substring(colonIdx + 1).Trim();
 
-            string model = string.IsNullOrEmpty(settings.modelName)
+            string model = string.IsNullOrEmpty(settings.CurrentModelName)
                 ? "@cf/black-forest-labs/flux-1-schnell"
-                : settings.modelName;
+                : settings.CurrentModelName;
             string url = "https://api.cloudflare.com/client/v4/accounts/" + accountId + "/ai/run/" + model;
+
+            int width = 512;
+            int height = 512;
+            if (state != null)
+            {
+                if (state.framing == "bodyshot") { width = 512; height = 768; }
+                else if (state.framing == "special") { width = 768; height = 512; }
+            }
 
             StringBuilder json = new StringBuilder();
             json.Append("{");
             json.Append("\"prompt\":\"").Append(EscapeJson(prompt)).Append("\",");
-            json.Append("\"steps\":4");
+            json.Append("\"steps\":4,");
+            json.Append("\"width\":").Append(width).Append(",");
+            json.Append("\"height\":").Append(height);
             json.Append("}");
 
             byte[] jsonBytes = Encoding.UTF8.GetBytes(json.ToString());
@@ -438,7 +599,7 @@ namespace AIPortraits
                 }
 
                 if (parseErr != null) { callback(null, null, null, parseErr); yield break; }
-                DeliverImage(imgBytes, prompt, "Cloudflare", state, callback);
+                DeliverImage(imgBytes, prompt, "Cloudflare", state, settings, callback);
             }
         }
 
@@ -447,19 +608,19 @@ namespace AIPortraits
         // POST /v1/inference/<model> with prompt + dimensions, response has base64 PNGs.
         private static IEnumerator GenerateDeepInfra(string prompt, string negativePrompt, AIPortraitsSettings settings, PawnState state, PortraitCallback callback)
         {
-            string apiToken = (settings.apiKey ?? "").Trim();
+            string apiToken = (settings.CurrentApiKey ?? "").Trim();
             if (string.IsNullOrEmpty(apiToken))
             {
                 callback(null, null, null, "DeepInfra requires an API token. Sign up free at deepinfra.com.");
                 yield break;
             }
 
-            string model = string.IsNullOrEmpty(settings.modelName)
+            string model = string.IsNullOrEmpty(settings.CurrentModelName)
                 ? "black-forest-labs/FLUX-1-schnell"
-                : settings.modelName;
-            string baseUrl = string.IsNullOrEmpty(settings.apiUrl)
+                : settings.CurrentModelName;
+            string baseUrl = string.IsNullOrEmpty(settings.CurrentApiUrl)
                 ? "https://api.deepinfra.com"
-                : settings.apiUrl.TrimEnd('/');
+                : settings.CurrentApiUrl.TrimEnd('/');
             string url = baseUrl + "/v1/inference/" + model;
 
             // FLUX Schnell wants num_inference_steps=4; SDXL wants ~20-30
@@ -467,11 +628,19 @@ namespace AIPortraits
                 ? 4
                 : System.Math.Max(20, System.Math.Min(30, settings.steps));
 
+            int width = 512;
+            int height = 512;
+            if (state != null)
+            {
+                if (state.framing == "bodyshot") { width = 512; height = 768; }
+                else if (state.framing == "special") { width = 768; height = 512; }
+            }
+
             StringBuilder json = new StringBuilder();
             json.Append("{");
             json.Append("\"prompt\":\"").Append(EscapeJson(prompt)).Append("\",");
-            json.Append("\"width\":512,");
-            json.Append("\"height\":512,");
+            json.Append("\"width\":").Append(width).Append(",");
+            json.Append("\"height\":").Append(height).Append(",");
             json.Append("\"num_inference_steps\":").Append(steps);
             json.Append("}");
 
@@ -523,30 +692,38 @@ namespace AIPortraits
                     yield break;
                 }
 
-                DeliverImage(imgBytes, prompt, "DeepInfra", state, callback);
+                DeliverImage(imgBytes, prompt, "DeepInfra", state, settings, callback);
             }
         }
 
         // ── Local A1111 (AUTOMATIC1111 / Forge / SD.Next / ComfyUI A1111-compat) ───
         private static IEnumerator GenerateLocalA1111(string prompt, string negativePrompt, AIPortraitsSettings settings, PawnState state, PortraitCallback callback)
         {
-            string baseUrl = string.IsNullOrEmpty(settings.apiUrl) ? "http://127.0.0.1:7860" : settings.apiUrl.TrimEnd('/');
+            string baseUrl = string.IsNullOrEmpty(settings.CurrentApiUrl) ? "http://127.0.0.1:7860" : settings.CurrentApiUrl.TrimEnd('/');
             string url = baseUrl + "/sdapi/v1/txt2img";
+
+            int width = 512;
+            int height = 512;
+            if (state != null)
+            {
+                if (state.framing == "bodyshot") { width = 512; height = 768; }
+                else if (state.framing == "special") { width = 768; height = 512; }
+            }
 
             StringBuilder json = new StringBuilder();
             json.Append("{");
             json.Append("\"prompt\":\"").Append(EscapeJson(prompt)).Append("\",");
             json.Append("\"negative_prompt\":\"").Append(EscapeJson(negativePrompt)).Append("\",");
             json.Append("\"steps\":").Append(settings.steps).Append(",");
-            json.Append("\"width\":512,");
-            json.Append("\"height\":512,");
+            json.Append("\"width\":").Append(width).Append(",");
+            json.Append("\"height\":").Append(height).Append(",");
             json.Append("\"cfg_scale\":").Append(settings.cfgScale.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)).Append(",");
             json.Append("\"sampler_name\":\"DPM++ 2M Karras\",");
             json.Append("\"seed\":-1");
-            if (!string.IsNullOrEmpty(settings.modelName))
+            if (!string.IsNullOrEmpty(settings.CurrentModelName))
             {
-                json.Append(",\"override_settings\":{\"sd_model_checkpoint\":\"")
-                    .Append(EscapeJson(settings.modelName)).Append("\"}");
+                json.Append(",\"override_settings\": {\"sd_model_checkpoint\": \"")
+                    .Append(EscapeJson(settings.CurrentModelName)).Append("\"}");
             }
             json.Append("}");
 
@@ -612,7 +789,7 @@ namespace AIPortraits
                     yield break;
                 }
 
-                DeliverImage(imgBytes, prompt, "Local A1111", state, callback);
+                DeliverImage(imgBytes, prompt, "Local A1111", state, settings, callback);
             }
         }
 
@@ -623,7 +800,73 @@ namespace AIPortraits
         // the image had an opaque background), the original decode is destroyed and
         // the new texture + re-encoded PNG bytes are returned so the cache + disk
         // save reflect the cleaned image.
-        private static void DeliverImage(byte[] imgBytes, string promptUsed, string backendName, PawnState state, PortraitCallback callback)
+        private static string GetCFBgRemovalKey(AIPortraitsSettings settings)
+        {
+            if (!string.IsNullOrEmpty(settings.cfBgRemovalKey)) return settings.cfBgRemovalKey;
+            if (!string.IsNullOrEmpty(settings.cfApiKey) && settings.cfApiKey.Contains(":")) return settings.cfApiKey;
+            return null;
+        }
+
+        private static IEnumerator GenerateCloudflareBackgroundRemoval(byte[] imgBytes, string promptUsed, string backendName, PawnState state, AIPortraitsSettings settings, PortraitCallback callback)
+        {
+            string key = GetCFBgRemovalKey(settings);
+            if (string.IsNullOrEmpty(key) || !key.Contains(":"))
+            {
+                Log.Warning("[Dynamic AI Portraits] AI Background Removal enabled but no valid Cloudflare key found (format accountId:token). Falling back to local flood-fill.");
+                DeliverImageLocal(imgBytes, promptUsed, backendName, state, callback);
+                yield break;
+            }
+
+            int colonIdx = key.IndexOf(':');
+            string accountId = key.Substring(0, colonIdx).Trim();
+            string apiToken  = key.Substring(colonIdx + 1).Trim();
+
+            string url = "https://api.cloudflare.com/client/v4/accounts/" + accountId + "/ai/run/@cf/bria-ai/bria-rmbg-1.4";
+
+            string base64 = Convert.ToBase64String(imgBytes);
+            string jsonBody = "{\"image\":\"" + base64 + "\"}";
+            byte[] jsonBytes = Encoding.UTF8.GetBytes(jsonBody);
+
+            using (UnityWebRequest request = new UnityWebRequest(url, "POST"))
+            {
+                request.uploadHandler = new UploadHandlerRaw(jsonBytes);
+                request.downloadHandler = new DownloadHandlerBuffer();
+                request.SetRequestHeader("Content-Type", "application/json");
+                request.SetRequestHeader("Authorization", "Bearer " + apiToken);
+                request.timeout = RequestTimeoutSeconds;
+
+                Log.Message("[Dynamic AI Portraits] Calling Cloudflare bria-rmbg-1.4 for background removal...");
+                yield return request.SendWebRequest();
+
+                if (!IsSuccess(request))
+                {
+                    Log.Warning("[Dynamic AI Portraits] Cloudflare BG Removal failed: " + request.error + " | " + Truncate(request.downloadHandler.text, 200) + ". Falling back to local flood-fill.");
+                    DeliverImageLocal(imgBytes, promptUsed, backendName, state, callback);
+                    yield break;
+                }
+
+                byte[] transparentBytes = request.downloadHandler.data;
+                if (transparentBytes == null || transparentBytes.Length == 0)
+                {
+                    Log.Warning("[Dynamic AI Portraits] Cloudflare BG Removal returned empty bytes. Falling back to local.");
+                    DeliverImageLocal(imgBytes, promptUsed, backendName, state, callback);
+                    yield break;
+                }
+
+                Texture2D tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                if (!ImageConversion.LoadImage(tex, transparentBytes))
+                {
+                    UnityEngine.Object.Destroy(tex);
+                    Log.Warning("[Dynamic AI Portraits] Cloudflare BG Removal returned invalid image data. Falling back to local.");
+                    DeliverImageLocal(imgBytes, promptUsed, backendName, state, callback);
+                    yield break;
+                }
+
+                callback(tex, transparentBytes, promptUsed, null);
+            }
+        }
+
+        private static void DeliverImage(byte[] imgBytes, string promptUsed, string backendName, PawnState state, AIPortraitsSettings settings, PortraitCallback callback)
         {
             if (imgBytes == null || imgBytes.Length == 0)
             {
@@ -631,6 +874,18 @@ namespace AIPortraits
                 return;
             }
 
+            if (settings.useAIBgRemoval && state != null && (state.framing == "portrait" || state.framing == "bodyshot"))
+            {
+                CoroutineRunner.Instance.StartCoroutine(GenerateCloudflareBackgroundRemoval(imgBytes, promptUsed, backendName, state, settings, callback));
+            }
+            else
+            {
+                DeliverImageLocal(imgBytes, promptUsed, backendName, state, callback);
+            }
+        }
+
+        private static void DeliverImageLocal(byte[] imgBytes, string promptUsed, string backendName, PawnState state, PortraitCallback callback)
+        {
             Texture2D raw = new Texture2D(2, 2, TextureFormat.RGBA32, false);
             if (!ImageConversion.LoadImage(raw, imgBytes))
             {
@@ -643,12 +898,7 @@ namespace AIPortraits
             byte[] finalBytes;
             try
             {
-                if (state != null && state.framing == "special")
-                {
-                    processed = raw;
-                    finalBytes = imgBytes;
-                }
-                else
+                if (state != null && (state.framing == "portrait" || state.framing == "bodyshot"))
                 {
                     processed = BackgroundRemover.Process(raw);
                     if (processed != raw)
@@ -664,6 +914,11 @@ namespace AIPortraits
                         finalBytes = imgBytes;
                     }
                 }
+                else
+                {
+                    processed = raw;
+                    finalBytes = imgBytes;
+                }
             }
             catch (Exception ex)
             {
@@ -678,7 +933,9 @@ namespace AIPortraits
 
         private static bool IsSuccess(UnityWebRequest request)
         {
-            return request.result == UnityWebRequest.Result.Success;
+#pragma warning disable 618
+            return !(request.isNetworkError || request.isHttpError);
+#pragma warning restore 618
         }
 
         private static string Truncate(string s, int max)
@@ -712,6 +969,469 @@ namespace AIPortraits
                 }
             }
             return sb.ToString();
+        }
+
+        private static string NormalizeGearName(string input)
+        {
+            if (string.IsNullOrEmpty(input)) return "";
+            StringBuilder sb = new StringBuilder();
+            foreach (char c in input.ToLowerInvariant())
+            {
+                if (char.IsLetterOrDigit(c))
+                {
+                    sb.Append(c);
+                }
+            }
+            return sb.ToString();
+        }
+
+        public static byte[] BuildReferenceSheet(PawnState state)
+        {
+            if (state == null) return null;
+            try
+            {
+                if (AIPortraitsMod.Instance == null || AIPortraitsMod.Instance.Content == null)
+                {
+                    return null;
+                }
+                string spritesDir = System.IO.Path.Combine(AIPortraitsMod.Instance.Content.RootDir, "Sprites");
+                if (!System.IO.Directory.Exists(spritesDir))
+                {
+                    Log.Warning("[Dynamic AI Portraits] Sprites directory not found: " + spritesDir);
+                    return null;
+                }
+
+                string[] files = System.IO.Directory.GetFiles(spritesDir, "*.png");
+                if (files == null || files.Length == 0) return null;
+
+                Dictionary<string, string> spriteMap = new Dictionary<string, string>();
+                foreach (string file in files)
+                {
+                    string filename = System.IO.Path.GetFileNameWithoutExtension(file);
+                    string norm = NormalizeGearName(filename);
+                    if (!string.IsNullOrEmpty(norm) && !spriteMap.ContainsKey(norm))
+                    {
+                        spriteMap[norm] = file;
+                    }
+                }
+
+                List<string> gearItems = new List<string>();
+                if (!string.IsNullOrEmpty(state.primaryWeapon))
+                {
+                    gearItems.Add(state.primaryWeapon);
+                }
+                if (state.apparel != null)
+                {
+                    foreach (string app in state.apparel)
+                    {
+                        if (!string.IsNullOrEmpty(app))
+                        {
+                            gearItems.Add(app);
+                        }
+                    }
+                }
+
+                if (gearItems.Count == 0) return null;
+
+                List<Texture2D> texturesToCombine = new List<Texture2D>();
+
+                foreach (string gear in gearItems)
+                {
+                    string normGear = NormalizeGearName(gear);
+                    if (string.IsNullOrEmpty(normGear)) continue;
+
+                    string bestMatchPath = null;
+                    int bestMatchLength = 0;
+
+                    foreach (KeyValuePair<string, string> kvp in spriteMap)
+                    {
+                        if (normGear.Contains(kvp.Key))
+                        {
+                            if (kvp.Key.Length > bestMatchLength)
+                            {
+                                bestMatchLength = kvp.Key.Length;
+                                bestMatchPath = kvp.Value;
+                            }
+                        }
+                    }
+
+                    if (bestMatchPath != null)
+                    {
+                        try
+                        {
+                            byte[] data = System.IO.File.ReadAllBytes(bestMatchPath);
+                            if (data != null && data.Length > 0)
+                            {
+                                Texture2D tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                                if (ImageConversion.LoadImage(tex, data))
+                                {
+                                    texturesToCombine.Add(tex);
+                                }
+                                else
+                                {
+                                    UnityEngine.Object.Destroy(tex);
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.Warning("[Dynamic AI Portraits] Failed to load sprite texture from " + bestMatchPath + ": " + ex.Message);
+                        }
+                    }
+                }
+
+                if (texturesToCombine.Count == 0) return null;
+
+                int padding = 16;
+                int totalWidth = padding;
+                int maxHeight = 0;
+
+                foreach (Texture2D tex in texturesToCombine)
+                {
+                    totalWidth += tex.width + padding;
+                    if (tex.height > maxHeight) maxHeight = tex.height;
+                }
+                maxHeight += padding * 2;
+
+                Color[] destPixels = new Color[totalWidth * maxHeight];
+                for (int i = 0; i < destPixels.Length; i++)
+                {
+                    destPixels[i] = new Color(1f, 1f, 1f, 1f);
+                }
+
+                int currentX = padding;
+                foreach (Texture2D tex in texturesToCombine)
+                {
+                    int startY = padding + (maxHeight - padding * 2 - tex.height) / 2;
+                    for (int y = 0; y < tex.height; y++)
+                    {
+                        for (int x = 0; x < tex.width; x++)
+                        {
+                            Color pixel = tex.GetPixel(x, y);
+                            int destX = currentX + x;
+                            int destY = startY + y;
+                            if (pixel.a > 0.01f)
+                            {
+                                Color blended = Color.Lerp(new Color(1f, 1f, 1f, 1f), pixel, pixel.a);
+                                blended.a = 1f;
+                                destPixels[destY * totalWidth + destX] = blended;
+                            }
+                        }
+                    }
+                    currentX += tex.width + padding;
+                }
+
+                Texture2D combined = new Texture2D(totalWidth, maxHeight, TextureFormat.RGBA32, false);
+                combined.SetPixels(destPixels);
+                combined.Apply();
+                byte[] pngBytes = ImageConversion.EncodeToPNG(combined);
+
+                UnityEngine.Object.Destroy(combined);
+                foreach (Texture2D tex in texturesToCombine)
+                {
+                    UnityEngine.Object.Destroy(tex);
+                }
+
+                return pngBytes;
+            }
+            catch (Exception ex)
+            {
+                Log.Warning("[Dynamic AI Portraits] Error building combined reference sheet: " + ex.Message);
+                return null;
+            }
+        }
+
+        // ── Google Veo 3.1 Lite Video generation ─────────────────────────────────────
+        public static void QueueVideoGeneration(Pawn pawn, PawnState state, byte[] initImageBytes, string apiKey, Action<string, string> callback)
+        {
+            if (string.IsNullOrEmpty(apiKey))
+            {
+                callback(null, "Google API Key is not configured. Please set the Google Imagen API Key in Mod Settings.");
+                return;
+            }
+
+            if (initImageBytes == null || initImageBytes.Length == 0)
+            {
+                callback(null, "No static portrait image is available to animate.");
+                return;
+            }
+
+            CoroutineRunner.Instance.StartCoroutine(GenerateVeoVideoCoroutine(pawn, state, initImageBytes, apiKey, callback));
+        }
+
+        private static IEnumerator GenerateVeoVideoCoroutine(Pawn pawn, PawnState state, byte[] initImageBytes, string apiKey, Action<string, string> callback)
+        {
+            string url = "https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-lite-generate-preview:predictLongRunning?key=" + apiKey;
+
+            string basePrompt = PromptCompiler.CompilePositivePrompt(state, AIPortraitsMod.settings, null);
+            string prompt = basePrompt + ", cinematic, masterpiece, character comes alive, breathing, blinking, looking at camera, subtle movement, high quality";
+
+            // Match aspect ratio to framing:
+            // portrait / bodyshot → 9:16 (vertical, matches tall portrait images)
+            // special             → 16:9 (landscape)
+            // Veo 3.1 Lite only supports 9:16 and 16:9; 1:1 is not supported.
+            string framing = (state != null && !string.IsNullOrEmpty(state.framing)) ? state.framing : "portrait";
+            string aspectRatio = (framing == "special") ? "16:9" : "9:16";
+
+            string base64Image = Convert.ToBase64String(initImageBytes);
+
+            // Correct image-to-video payload: 'image' key lives directly inside instance,
+            // NOT inside a 'reference_images' array. mimeType is camelCase.
+            StringBuilder json = new StringBuilder();
+            json.Append("{");
+            json.Append("\"instances\":[{");
+            json.Append("\"prompt\":\"").Append(EscapeJson(prompt)).Append("\",");
+            json.Append("\"image\":{");
+            json.Append("\"bytesBase64Encoded\":\"").Append(base64Image).Append("\",");
+            json.Append("\"mimeType\":\"image/png\"");
+            json.Append("}");
+            json.Append("}],");
+            json.Append("\"parameters\":{");
+            json.Append("\"sampleCount\":1,");
+            json.Append("\"aspectRatio\":\"").Append(aspectRatio).Append("\",");
+            json.Append("\"durationSeconds\":4,");
+            json.Append("\"resolution\":\"720p\"");
+            json.Append("}");
+            json.Append("}");
+
+            byte[] jsonBytes = Encoding.UTF8.GetBytes(json.ToString());
+
+            using (UnityWebRequest request = new UnityWebRequest(url, "POST"))
+            {
+                request.uploadHandler   = new UploadHandlerRaw(jsonBytes);
+                request.downloadHandler = new DownloadHandlerBuffer();
+                request.SetRequestHeader("Content-Type", "application/json");
+                request.timeout = 60;
+
+                Log.Message("[Dynamic AI Portraits] Initiating Veo Video for " + pawn.LabelShortCap + "...");
+                yield return request.SendWebRequest();
+
+                if (!IsSuccess(request))
+                {
+                    callback(null, "Veo long-running start error: " + request.error + " | " + Truncate(request.downloadHandler.text, 400));
+                    yield break;
+                }
+
+                string text = request.downloadHandler.text;
+                int nameIdx = text.IndexOf("\"name\"");
+                if (nameIdx == -1)
+                {
+                    callback(null, "Could not find operation 'name' in Veo response. Response: " + text);
+                    yield break;
+                }
+
+                int colonIdx = text.IndexOf(':', nameIdx);
+                int openQuote = text.IndexOf('"', colonIdx + 1);
+                int closeQuote = text.IndexOf('"', openQuote + 1);
+                if (openQuote == -1 || closeQuote == -1)
+                {
+                    callback(null, "Malformed operation name in Veo response. Response: " + text);
+                    yield break;
+                }
+
+                string operationName = text.Substring(openQuote + 1, closeQuote - openQuote - 1);
+                Log.Message("[Dynamic AI Portraits] Veo operation started: " + operationName + ". Polling status...");
+
+                yield return CoroutineRunner.Instance.StartCoroutine(PollVeoOperation(operationName, apiKey, delegate(string videoUri, string pollErr)
+                {
+                    if (pollErr != null)
+                    {
+                        callback(null, pollErr);
+                    }
+                    else if (videoUri != null)
+                    {
+                        string downloadUrl = videoUri.Contains("?") ? (videoUri + "&key=" + apiKey) : (videoUri + "?key=" + apiKey);
+                        CoroutineRunner.Instance.StartCoroutine(DownloadVideoBytes(downloadUrl, delegate(byte[] videoBytes, string dlErr)
+                        {
+                            if (dlErr != null)
+                            {
+                                callback(null, dlErr);
+                            }
+                            else if (videoBytes != null)
+                            {
+                                string diskKey = AIPortraitsManager.GetActiveKey(pawn);
+                                string videoPath = System.IO.Path.Combine(CacheManager.GetCacheDirectory(), diskKey + ".mp4");
+                                try
+                                {
+                                    System.IO.File.WriteAllBytes(videoPath, videoBytes);
+                                    Log.Message("[Dynamic AI Portraits] Saved generated Veo video to: " + videoPath);
+
+                                    string dir = CacheManager.GetPortraitSaveDirectory(pawn.LabelShortCap);
+                                    string ts = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+                                    string styleName = AIPortraitsMod.settings.portraitStyle.ToString();
+                                    string safeFraming = state != null ? state.framing : "portrait";
+                                    string file = pawn.LabelShortCap + "_" + styleName + "_" + safeFraming + "_" + ts + ".mp4";
+                                    string userPath = System.IO.Path.Combine(dir, file);
+                                    System.IO.File.WriteAllBytes(userPath, videoBytes);
+
+                                    callback(videoPath, null);
+                                }
+                                catch (Exception ex)
+                                {
+                                    callback(null, "Failed to save downloaded video to file: " + ex.Message);
+                                }
+                            }
+                        }));
+                    }
+                }));
+            }
+        }
+
+        private static IEnumerator PollVeoOperation(string operationName, string apiKey, Action<string, string> callback)
+        {
+            string url = "https://generativelanguage.googleapis.com/v1beta/" + operationName + "?key=" + apiKey;
+            int attempts = 0;
+            const int maxAttempts = 30; // 10 seconds * 30 = 300 seconds (5 minutes) max polling time
+
+            while (attempts < maxAttempts)
+            {
+                yield return new WaitForSeconds(10f);
+                attempts++;
+                Log.Message("[Dynamic AI Portraits] Veo poll attempt " + attempts + "/" + maxAttempts + "...");
+
+                using (UnityWebRequest request = UnityWebRequest.Get(url))
+                {
+                    request.timeout = 30;
+                    yield return request.SendWebRequest();
+
+                    if (!IsSuccess(request))
+                    {
+                        Log.Warning("[Dynamic AI Portraits] Veo polling error: " + request.error);
+                        continue;
+                    }
+
+                    string text = request.downloadHandler.text;
+                    if (text.Contains("\"error\""))
+                    {
+                        string err = ParseVeoError(text);
+                        callback(null, "Veo generation failed: " + (err ?? "unknown error"));
+                        yield break;
+                    }
+
+                    if (ParseVeoDone(text))
+                    {
+                        string videoUri = ParseVeoVideoUri(text);
+                        if (!string.IsNullOrEmpty(videoUri))
+                        {
+                            callback(videoUri, null);
+                            yield break;
+                        }
+                        else
+                        {
+                            // Check for RAI (safety) filter rejection
+                            string raiReason = ParseVeoRaiReason(text);
+                            if (!string.IsNullOrEmpty(raiReason))
+                            {
+                                callback(null, "Veo safety filter: " + raiReason);
+                            }
+                            else
+                            {
+                                callback(null, "Veo: operation finished but no video was produced. Response: " + Truncate(text, 300));
+                            }
+                            yield break;
+                        }
+                    }
+                }
+            }
+
+            callback(null, "Veo video generation timed out after " + (maxAttempts * 5) + " seconds.");
+        }
+
+        private static IEnumerator DownloadVideoBytes(string downloadUrl, Action<byte[], string> callback)
+        {
+            using (UnityWebRequest request = UnityWebRequest.Get(downloadUrl))
+            {
+                request.timeout = 60;
+                yield return request.SendWebRequest();
+
+                if (!IsSuccess(request))
+                {
+                    callback(null, "Failed to download video file: " + request.error);
+                    yield break;
+                }
+
+                byte[] data = request.downloadHandler.data;
+                if (data == null || data.Length == 0)
+                {
+                    callback(null, "Downloaded video file was empty.");
+                    yield break;
+                }
+
+                callback(data, null);
+            }
+        }
+
+        private static bool ParseVeoDone(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return false;
+            int idx = json.IndexOf("\"done\"");
+            if (idx < 0) return false;
+            int colon = json.IndexOf(':', idx);
+            if (colon < 0) return false;
+            int i = colon + 1;
+            while (i < json.Length && char.IsWhiteSpace(json[i])) i++;
+            if (i < json.Length && json.Substring(i).StartsWith("true"))
+            {
+                return true;
+            }
+            return false;
+        }
+
+        private static string ParseVeoVideoUri(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return null;
+            int generatedSamplesIdx = json.IndexOf("\"generatedSamples\"");
+            if (generatedSamplesIdx < 0) generatedSamplesIdx = 0;
+
+            int videoIdx = json.IndexOf("\"video\"", generatedSamplesIdx);
+            if (videoIdx < 0) videoIdx = json.IndexOf("\"uri\"");
+            if (videoIdx < 0) return null;
+
+            int uriIdx = json.IndexOf("\"uri\"", videoIdx);
+            if (uriIdx < 0) return null;
+
+            int colonIdx = json.IndexOf(':', uriIdx);
+            if (colonIdx < 0) return null;
+
+            int openQuote = json.IndexOf('"', colonIdx + 1);
+            if (openQuote == -1) return null;
+
+            int closeQuote = json.IndexOf('"', openQuote + 1);
+            if (closeQuote == -1) return null;
+
+            return json.Substring(openQuote + 1, closeQuote - openQuote - 1);
+        }
+
+        private static string ParseVeoError(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return null;
+            int errorIdx = json.IndexOf("\"error\"");
+            if (errorIdx < 0) return null;
+            int messageIdx = json.IndexOf("\"message\"", errorIdx);
+            if (messageIdx < 0) return "Unknown operation error";
+            int colonIdx = json.IndexOf(':', messageIdx);
+            if (colonIdx < 0) return "Unknown operation error";
+            int openQuote = json.IndexOf('"', colonIdx + 1);
+            if (openQuote == -1) return "Unknown operation error";
+            int closeQuote = json.IndexOf('"', openQuote + 1);
+            if (closeQuote == -1) return "Unknown operation error";
+            return json.Substring(openQuote + 1, closeQuote - openQuote - 1);
+        }
+
+        /// <summary>Extracts the first raiMediaFilteredReasons message, if present.</summary>
+        private static string ParseVeoRaiReason(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return null;
+            int idx = json.IndexOf("\"raiMediaFilteredReasons\"");
+            if (idx < 0) return null;
+            // Advance past the array open bracket
+            int bracket = json.IndexOf('[', idx);
+            if (bracket < 0) return null;
+            int openQuote = json.IndexOf('"', bracket + 1);
+            if (openQuote < 0) return null;
+            int closeQuote = json.IndexOf('"', openQuote + 1);
+            if (closeQuote < 0) return null;
+            return json.Substring(openQuote + 1, closeQuote - openQuote - 1);
         }
     }
 }

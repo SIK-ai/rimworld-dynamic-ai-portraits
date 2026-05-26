@@ -16,18 +16,35 @@ namespace AIPortraits
         public static void Postfix(MainTabWindow_Inspect __instance)
         {
             Pawn pawn = Find.Selector.SingleSelectedThing as Pawn;
-            if (pawn == null || pawn.Destroyed) return;
+            if (pawn == null || pawn.Destroyed)
+            {
+                VideoPlaybackManager.StopPlayback();
+                return;
+            }
 
             IInspectPane activePane = __instance as IInspectPane;
-            if (activePane == null) return;
+            if (activePane == null)
+            {
+                VideoPlaybackManager.StopPlayback();
+                return;
+            }
 
             // Only draw when no inspect tab is open.
-            if (activePane.OpenTabType != null) return;
+            if (activePane.OpenTabType != null)
+            {
+                VideoPlaybackManager.StopPlayback();
+                return;
+            }
 
-            // Only draw when there is an actual portrait to show — no placeholder box.
+            // Only draw for valid pawns (colonists/prisoners)
+            if (!AIPortraitsManager.ShouldGenerateFor(pawn))
+            {
+                VideoPlaybackManager.StopPlayback();
+                return;
+            }
+
             GenerationStatus status; string error;
             Texture2D portrait = AIPortraitsManager.GetPortraitTexture(pawn, out status, out error);
-            if (portrait == null) return;
 
             Rect paneRect = __instance.windowRect;
 
@@ -42,7 +59,115 @@ namespace AIPortraits
             float y = paneRect.y - side - TabStripClearance;
             Rect portraitRect = new Rect(x, y, side, side);
 
-            GUI.DrawTexture(portraitRect, portrait, ScaleMode.ScaleToFit);
+            bool videoEnabled = false;
+            if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.pawnVideoToggles != null)
+            {
+                AIPortraitsMod.settings.pawnVideoToggles.TryGetValue(pawn.ThingID, out videoEnabled);
+            }
+
+            if (videoEnabled)
+            {
+                string diskKey = AIPortraitsManager.GetActiveKey(pawn);
+                string videoPath = System.IO.Path.Combine(CacheManager.GetCacheDirectory(), diskKey + ".mp4");
+
+                if (System.IO.File.Exists(videoPath))
+                {
+                    VideoPlaybackManager.StartPlayback(pawn.ThingID, videoPath);
+                    RenderTexture videoTex = VideoPlaybackManager.GetActiveTexture();
+                    if (videoTex != null)
+                    {
+                        GUI.DrawTexture(portraitRect, videoTex, ScaleMode.ScaleToFit);
+                    }
+                    else if (portrait != null)
+                    {
+                        GUI.DrawTexture(portraitRect, portrait, ScaleMode.ScaleToFit);
+                    }
+                }
+                else
+                {
+                    GenerationStatus vStatus; string vError;
+                    AIPortraitsManager.GetVideoStatus(pawn, out vStatus, out vError);
+
+                    if (vStatus == GenerationStatus.Idle)
+                    {
+                        byte[] imgBytes = AIPortraitsManager.GetActivePortraitBytes(pawn);
+                        if (imgBytes != null && imgBytes.Length > 0)
+                        {
+                            AIPortraitsManager.TriggerVideoGeneration(pawn, imgBytes);
+                        }
+                    }
+
+                    if (portrait != null)
+                    {
+                        GUI.DrawTexture(portraitRect, portrait, ScaleMode.ScaleToFit);
+                    }
+                    else
+                    {
+                        Widgets.DrawBoxSolid(portraitRect, new Color(0.06f, 0.06f, 0.06f, 0.8f));
+                        GUI.color = new Color(1f, 1f, 1f, 0.15f);
+                        Widgets.DrawBox(portraitRect, 1);
+                        GUI.color = Color.white;
+                    }
+
+                    if (vStatus == GenerationStatus.Generating)
+                    {
+                        Widgets.DrawBoxSolid(portraitRect, new Color(0f, 0f, 0f, 0.4f));
+                        Text.Anchor = TextAnchor.MiddleCenter;
+                        GUI.color = new Color(0.6f, 0.85f, 1f);
+                        Widgets.Label(portraitRect, "Making alive...");
+                        GUI.color = Color.white;
+                        Text.Anchor = TextAnchor.UpperLeft;
+                    }
+                    else if (vStatus == GenerationStatus.Error)
+                    {
+                        Widgets.DrawBoxSolid(portraitRect, new Color(0f, 0f, 0f, 0.4f));
+                        Text.Anchor = TextAnchor.MiddleCenter;
+                        GUI.color = Color.red;
+                        Text.Font = GameFont.Tiny;
+                        Widgets.Label(portraitRect, "\u2716 " + (vError ?? "Veo Error"));
+                        GUI.color = Color.white;
+                        Text.Anchor = TextAnchor.UpperLeft;
+                        Text.Font = GameFont.Small;
+                    }
+                }
+            }
+            else
+            {
+                if (portrait != null)
+                {
+                    GUI.DrawTexture(portraitRect, portrait, ScaleMode.ScaleToFit);
+                }
+                else
+                {
+                    Widgets.DrawBoxSolid(portraitRect, new Color(0.06f, 0.06f, 0.06f, 0.8f));
+                    GUI.color = new Color(1f, 1f, 1f, 0.15f);
+                    Widgets.DrawBox(portraitRect, 1);
+                    GUI.color = Color.white;
+                    
+                    Text.Anchor = TextAnchor.MiddleCenter;
+                    Text.Font = GameFont.Small;
+                    if (status == GenerationStatus.Generating)
+                    {
+                        GUI.color = new Color(0.6f, 0.85f, 1f);
+                        Widgets.Label(portraitRect, "Painting...");
+                    }
+                    else if (status == GenerationStatus.Error)
+                    {
+                        GUI.color = Color.red;
+                        Text.Font = GameFont.Tiny;
+                        Widgets.Label(portraitRect, "\u2716 " + (error ?? "Error"));
+                    }
+                    else
+                    {
+                        GUI.color = new Color(0.45f, 0.45f, 0.45f);
+                        Widgets.Label(portraitRect, "No portrait\nClick \u21BB to generate");
+                    }
+                    GUI.color = Color.white;
+                    Text.Anchor = TextAnchor.UpperLeft;
+                    Text.Font = GameFont.Small;
+                }
+                VideoPlaybackManager.StopPlayback();
+            }
 
             // Refresh button overlaid at the bottom-right of the portrait. Clicking
             // re-extracts pawn state and triggers a fresh generation (clearing the
@@ -55,7 +180,8 @@ namespace AIPortraits
                 portraitRect.yMax - BtnSize - BtnMargin,
                 BtnSize, BtnSize);
 
-            Rect specRect = new Rect(refreshRect.x - BtnSize - 4f, refreshRect.y, BtnSize, BtnSize);
+            Rect veoRect = new Rect(refreshRect.x - BtnSize - 4f, refreshRect.y, BtnSize, BtnSize);
+            Rect specRect = new Rect(veoRect.x - BtnSize - 4f, refreshRect.y, BtnSize, BtnSize);
             Rect bodyRect = new Rect(specRect.x - BtnSize - 4f, refreshRect.y, BtnSize, BtnSize);
             Rect portRect = new Rect(bodyRect.x - BtnSize - 4f, refreshRect.y, BtnSize, BtnSize);
 
@@ -71,6 +197,7 @@ namespace AIPortraits
             DrawFramingButton(bodyRect, "B", "bodyshot", currentFraming, pawn, "Set framing style to full-length bodyshot.");
             DrawFramingButton(specRect, "S", "special", currentFraming, pawn, "Set framing style to special selfie / thematic scene.");
 
+            DrawVeoButton(veoRect, pawn);
             DrawRefreshButton(refreshRect, pawn);
         }
 
@@ -104,11 +231,13 @@ namespace AIPortraits
 
             if (Widgets.ButtonInvisible(rect))
             {
-                if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.pawnFraming != null)
+                if (AIPortraitsMod.settings != null)
                 {
+                    if (AIPortraitsMod.settings.pawnFraming == null) AIPortraitsMod.settings.pawnFraming = new System.Collections.Generic.Dictionary<string, string>();
                     AIPortraitsMod.settings.pawnFraming[pawn.ThingID] = framingName;
                     AIPortraitsMod.Instance.WriteSettings();
                     SoundDefOf.Click.PlayOneShotOnCamera(null);
+                    VideoPlaybackManager.StopPlayback();
                 }
             }
         }
@@ -132,20 +261,102 @@ namespace AIPortraits
             Text.Font = GameFont.Small;
             Text.Anchor = TextAnchor.UpperLeft;
 
-            TooltipHandler.TipRegion(rect, "Refresh portrait using selected framing");
+            bool videoActive = false;
+            if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.pawnVideoToggles != null)
+                AIPortraitsMod.settings.pawnVideoToggles.TryGetValue(pawn.ThingID, out videoActive);
+
+            string tip = videoActive ? "Regenerate video for this pawn" : "Refresh portrait using selected framing";
+            TooltipHandler.TipRegion(rect, tip);
 
             if (Widgets.ButtonInvisible(rect))
             {
-                AIPortraitsManager.TriggerNewPortraitWithContinuity(pawn);
-                Messages.Message("Regenerating portrait for " + pawn.LabelShortCap + "...",
-                                 MessageTypeDefOf.NeutralEvent, false);
+                if (videoActive)
+                {
+                    byte[] imgBytes = AIPortraitsManager.GetActivePortraitBytes(pawn);
+                    if (imgBytes != null && imgBytes.Length > 0)
+                    {
+                        AIPortraitsManager.TriggerVideoGeneration(pawn, imgBytes);
+                        Messages.Message("Regenerating video for " + pawn.LabelShortCap + "...",
+                                         MessageTypeDefOf.NeutralEvent, false);
+                    }
+                    else
+                    {
+                        Messages.Message("No portrait image available to animate.", MessageTypeDefOf.RejectInput, false);
+                    }
+                }
+                else
+                {
+                    AIPortraitsManager.TriggerNewPortraitWithContinuity(pawn);
+                    Messages.Message("Regenerating portrait for " + pawn.LabelShortCap + "...",
+                                     MessageTypeDefOf.NeutralEvent, false);
+                }
+            }
+        }
+
+        private static void DrawVeoButton(Rect rect, Pawn pawn)
+        {
+            bool active = false;
+            if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.pawnVideoToggles != null)
+            {
+                AIPortraitsMod.settings.pawnVideoToggles.TryGetValue(pawn.ThingID, out active);
+            }
+
+            bool hovered = Mouse.IsOver(rect);
+
+            // Highlight background if active (running veo/video mode)
+            if (active)
+            {
+                GUI.color = hovered ? new Color(0.2f, 0.65f, 0.45f, 0.95f) : new Color(0.15f, 0.5f, 0.35f, 0.85f);
+            }
+            else
+            {
+                GUI.color = hovered ? new Color(0.35f, 0.35f, 0.35f, 0.95f) : new Color(0f, 0f, 0f, 0.65f);
+            }
+
+            GUI.DrawTexture(rect, BaseContent.WhiteTex);
+            GUI.color = new Color(1f, 1f, 1f, 0.35f);
+            Widgets.DrawBox(rect, 1);
+            GUI.color = Color.white;
+
+            // Display "V"
+            Text.Anchor = TextAnchor.MiddleCenter;
+            Text.Font = GameFont.Small;
+            Widgets.Label(rect, "V");
+            Text.Anchor = TextAnchor.UpperLeft;
+
+            TooltipHandler.TipRegion(rect, active ? "Toggle Video Mode OFF (Show static portrait)" : "Toggle Video Mode ON (Run Veo 3.1 Lite to animate portrait)");
+
+            if (Widgets.ButtonInvisible(rect))
+            {
+                bool newState = !active;
+                if (AIPortraitsMod.settings != null)
+                {
+                    if (AIPortraitsMod.settings.pawnVideoToggles == null)
+                        AIPortraitsMod.settings.pawnVideoToggles = new System.Collections.Generic.Dictionary<string, bool>();
+
+                    AIPortraitsMod.settings.pawnVideoToggles[pawn.ThingID] = newState;
+                    AIPortraitsMod.Instance.WriteSettings();
+                    SoundDefOf.Click.PlayOneShotOnCamera(null);
+
+                    if (!newState)
+                    {
+                        VideoPlaybackManager.StopPlayback();
+                    }
+                }
             }
         }
     }
 
-    // NOTE: The PortraitsCache.Get patch was removed. It was blitting our square
-    // 1:1 AI portrait into RimWorld's vertical pawn-render textures (colonist bar,
-    // Bio tab, etc.), which stretched faces and produced distorted portraits in
-    // every UI element that uses PortraitsCache. The AI portrait now only appears
-    // as the clean overlay above the inspect pane.
+    [HarmonyPatch(typeof(Window), "PostClose")]
+    public static class Patch_Window_PostClose
+    {
+        [HarmonyPostfix]
+        public static void Postfix(Window __instance)
+        {
+            if (__instance is MainTabWindow_Inspect)
+            {
+                VideoPlaybackManager.StopPlayback();
+            }
+        }
+    }
 }
