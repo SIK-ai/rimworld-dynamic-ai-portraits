@@ -386,7 +386,7 @@ namespace AIPortraits
             string pawnKey = pawn.ThingID + "_" + framing;
             if (!portraitData.TryGetValue(pawnKey, out data)) return null;
             if (data.rawBytes == null || data.rawBytes.Length == 0) return null;
-            return CacheManager.SavePortraitToDisk(pawn.LabelShortCap, data.style, framing, data.rawBytes);
+            return CacheManager.SavePortraitToDisk(pawn, data.style, framing, data.rawBytes);
         }
 
         public static GenerationStatus GetStatus(Pawn pawn)
@@ -443,8 +443,8 @@ namespace AIPortraits
                     // Disk cache (per-save, single file per pawn — overwrites previous)
                     CacheManager.SaveToCache(diskCacheKey, bytes);
 
-                    // User-visible gallery save (Documents/RimWorld Portraits/<name>/, timestamped)
-                    string savedPath = CacheManager.SavePortraitToDisk(pawn.LabelShortCap, currentStyle, framing, bytes);
+                    // User-visible gallery save (Documents/RimWorld Portraits/<name>_<id>/, timestamped)
+                    string savedPath = CacheManager.SavePortraitToDisk(pawn, currentStyle, framing, bytes);
                     if (savedPath != null)
                     {
                         try
@@ -557,8 +557,8 @@ namespace AIPortraits
                     // Disk cache (per-save, single file per pawn — overwrites previous)
                     CacheManager.SaveToCache(diskKey, bytes);
 
-                    // User-visible gallery save (Documents/RimWorld Portraits/<name>/, timestamped)
-                    string savedPath = CacheManager.SavePortraitToDisk(pawn.LabelShortCap, currentStyle, framing, bytes);
+                    // User-visible gallery save (Documents/RimWorld Portraits/<name>_<id>/, timestamped)
+                    string savedPath = CacheManager.SavePortraitToDisk(pawn, currentStyle, framing, bytes);
                     if (savedPath != null)
                     {
                         try
@@ -1042,7 +1042,7 @@ namespace AIPortraits
         public Dialog_PawnGallery(Pawn pawn)
         {
             this.pawn  = pawn;
-            galleryDir = CacheManager.GetPortraitSaveDirectory(pawn.LabelShortCap);
+            galleryDir = CacheManager.GetPortraitSaveDirectory(pawn);
             doCloseX   = true;
             doWindowBackground     = true;
             absorbInputAroundWindow = false;
@@ -1088,7 +1088,7 @@ namespace AIPortraits
             Rect btnStop    = new Rect(footer.xMax - fBtnW, footer.y + 3f, fBtnW, footer.height - 6f);
 
             if (Widgets.ButtonText(btnRefresh, "\u21bb Refresh")) RefreshEntries();
-            if (Widgets.ButtonText(btnFolder,  "\ud83d\udcc1 Open Folder")) CacheManager.OpenPortraitFolder(pawn.LabelShortCap);
+            if (Widgets.ButtonText(btnFolder,  "\ud83d\udcc1 Open Folder")) CacheManager.OpenPortraitFolder(pawn);
             if (!string.IsNullOrEmpty(playingVideoPath) && Widgets.ButtonText(btnStop, "\u23f9 Stop Video")) StopGalleryVideo();
 
             // Scroll area

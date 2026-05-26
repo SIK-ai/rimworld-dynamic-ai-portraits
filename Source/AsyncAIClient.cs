@@ -154,7 +154,11 @@ namespace AIPortraits
         {
             string llmKey    = GetLLMApiKey(settings);
             string pawnDesc  = PromptCompiler.CompilePawnStateDescription(state, settings);
-            string sysPrompt = PromptCompiler.GetLLMSystemPrompt(settings.portraitStyle, settings, state.framing);
+            // Defensive null check on state.framing — every other call site in this file
+            // already does the (state != null ? state.framing : "portrait") dance, this one
+            // didn't and would NPE if a caller passed a half-built state.
+            string framingForLLM = (state != null && !string.IsNullOrEmpty(state.framing)) ? state.framing : "portrait";
+            string sysPrompt = PromptCompiler.GetLLMSystemPrompt(settings.portraitStyle, settings, framingForLLM);
 
             // gemini-3.1-flash-lite is free-tier and very fast (~1 s round-trip).
             string llmUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=" + llmKey;
@@ -1228,32 +1232,40 @@ namespace AIPortraits
                 }
                 maxHeight += padding * 2;
 
+                // White background — cache the color once
+                Color white = new Color(1f, 1f, 1f, 1f);
                 Color[] destPixels = new Color[totalWidth * maxHeight];
                 for (int i = 0; i < destPixels.Length; i++)
                 {
-                    destPixels[i] = new Color(1f, 1f, 1f, 1f);
+                    destPixels[i] = white;
                 }
 
                 int currentX = padding;
                 foreach (Texture2D tex in texturesToCombine)
                 {
-                    int startY = padding + (maxHeight - padding * 2 - tex.height) / 2;
-                    for (int y = 0; y < tex.height; y++)
+                    // Bulk-fetch the entire source pixel array once (much faster than per-pixel
+                    // GetPixel, which marshals every call across the managed/native boundary).
+                    int sw = tex.width;
+                    int sh = tex.height;
+                    Color[] src = tex.GetPixels();
+
+                    int startY = padding + (maxHeight - padding * 2 - sh) / 2;
+                    for (int y = 0; y < sh; y++)
                     {
-                        for (int x = 0; x < tex.width; x++)
+                        int destRow = (startY + y) * totalWidth + currentX;
+                        int srcRow  = y * sw;
+                        for (int x = 0; x < sw; x++)
                         {
-                            Color pixel = tex.GetPixel(x, y);
-                            int destX = currentX + x;
-                            int destY = startY + y;
+                            Color pixel = src[srcRow + x];
                             if (pixel.a > 0.01f)
                             {
-                                Color blended = Color.Lerp(new Color(1f, 1f, 1f, 1f), pixel, pixel.a);
+                                Color blended = Color.Lerp(white, pixel, pixel.a);
                                 blended.a = 1f;
-                                destPixels[destY * totalWidth + destX] = blended;
+                                destPixels[destRow + x] = blended;
                             }
                         }
                     }
-                    currentX += tex.width + padding;
+                    currentX += sw + padding;
                 }
 
                 Texture2D combined = new Texture2D(totalWidth, maxHeight, TextureFormat.RGBA32, false);
@@ -1396,7 +1408,7 @@ namespace AIPortraits
                                     System.IO.File.WriteAllBytes(videoPath, videoBytes);
                                     Log.Message("[Dynamic AI Portraits] Saved generated Veo video to: " + videoPath);
 
-                                    string dir = CacheManager.GetPortraitSaveDirectory(pawn.LabelShortCap);
+                                    string dir = CacheManager.GetPortraitSaveDirectory(pawn);
                                     string ts = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
                                     string styleName = AIPortraitsMod.settings.portraitStyle.ToString();
                                     string file = pawn.LabelShortCap + "_" + styleName + "_" + framing + "_" + ts + ".mp4";
