@@ -151,6 +151,10 @@ namespace AIPortraits
         public float cfgScale = 7f;
         public int steps = 20;
 
+        public float portraitScale = 260f;
+        public float portraitOffsetX = 0f;
+        public float portraitOffsetY = 0f;
+
         public bool includeIdeology = true;
         public bool includeRimLighting = true;
         public bool useGearReferenceSheet = true;
@@ -224,6 +228,9 @@ namespace AIPortraits
             Scribe_Values.Look(ref baseNegativePrompt, "baseNegativePrompt", "generic fantasy art, cartoon style, bright cheerful lighting, flat lighting, blurry textures, generic features, messy brushstrokes, standard clean weapon, generic clothing, missing face tattoos, missing horns, missing cybernetic eyes, missing scars, photorealistic photograph, 3d render, chibi, flat shading, low quality, watermark, extra limbs, deformed face, bad anatomy, multiple people, text, signature, anti-aliased pixels, jagged irregular lines, muddied unclear character design, illegible text, generic UI, inconsistency between sprite and portrait");
             Scribe_Values.Look(ref cfgScale, "cfgScale", 7f);
             Scribe_Values.Look(ref steps, "steps", 20);
+            Scribe_Values.Look(ref portraitScale, "portraitScale", 260f);
+            Scribe_Values.Look(ref portraitOffsetX, "portraitOffsetX", 0f);
+            Scribe_Values.Look(ref portraitOffsetY, "portraitOffsetY", 0f);
             Scribe_Values.Look(ref includeIdeology,    "includeIdeology",  true);
             Scribe_Values.Look(ref includeRimLighting, "includeRimLighting", true);
             Scribe_Values.Look(ref useGearReferenceSheet, "useGearReferenceSheet", true);
@@ -303,7 +310,7 @@ namespace AIPortraits
             }
 
             lastCachedPawn = pawn;
-            string dir = CacheManager.GetPortraitSaveDirectory(pawn.LabelShortCap);
+            string dir = CacheManager.GetPortraitSaveDirectory(pawn);
             if (Directory.Exists(dir))
             {
                 string[] files = Directory.GetFiles(dir, "*.png");
@@ -577,7 +584,7 @@ namespace AIPortraits
 
         private void DrawApiSettings(Rect inRect)
         {
-            float viewHeight = 650f;
+            float viewHeight = 830f;
             if (useLLMPrompt) viewHeight += 60f;
             if (useAIBgRemoval) viewHeight += 60f;
             if (showAdvanced) viewHeight += 320f;
@@ -736,6 +743,23 @@ namespace AIPortraits
             listing.CheckboxLabeled("Include Ideology details", ref includeIdeology, "Include pawn's ideology role (e.g. Moral Guide) and follower description/iconography.");
             listing.CheckboxLabeled("Include Ideology Rim Lighting", ref includeRimLighting, "Separate the character silhouette from the background using a rim light styled with their favorite/ideoligion color.");
             listing.CheckboxLabeled("Use Gear Reference Sheet (Gemini)", ref useGearReferenceSheet, "Stitch matched weapon/apparel sprites into a single reference image for Gemini models. Helps retain equipment designs across generations.");
+            listing.Gap(8f);
+
+            // ── PORTRAIT POSITION & SCALE ──────────────────────────────────────────
+            listing.Label("Portrait Display Size & Location (Inspect Pane)");
+            listing.Gap(4f);
+            
+            // Portrait Scale
+            listing.Label("Display Size (Scale): " + portraitScale.ToString("F0") + " px  (Default: 260)");
+            portraitScale = listing.Slider(portraitScale, 100f, 500f);
+            
+            // Horizontal Offset
+            listing.Label("Horizontal Offset: " + portraitOffsetX.ToString("F0") + " px  (Default: 0)");
+            portraitOffsetX = listing.Slider(portraitOffsetX, -300f, 300f);
+            
+            // Vertical Offset
+            listing.Label("Vertical Offset: " + portraitOffsetY.ToString("F0") + " px  (Default: 0)");
+            portraitOffsetY = listing.Slider(portraitOffsetY, -300f, 300f);
             listing.Gap(8f);
 
             listing.GapLine();
@@ -1014,9 +1038,19 @@ namespace AIPortraits
             }
             else
             {
-                // Check if file count changed on disk to auto-refresh
-                string dir = CacheManager.GetPortraitSaveDirectory(selectedPawn.LabelShortCap);
-                int diskCount = Directory.Exists(dir) ? Directory.GetFiles(dir, "*.png").Length : 0;
+                // Check if file count changed on disk to auto-refresh (excluding reference images)
+                string dir = CacheManager.GetPortraitSaveDirectory(selectedPawn);
+                int diskCount = 0;
+                if (Directory.Exists(dir))
+                {
+                    foreach (string file in Directory.GetFiles(dir, "*.png"))
+                    {
+                        if (!file.EndsWith("_ref_gear.png") && !file.EndsWith("_ref_portrait.png"))
+                        {
+                            diskCount++;
+                        }
+                    }
+                }
                 if (diskCount != cachedSavedPortraits.Count)
                 {
                     RefreshPawnPortraitsCache(selectedPawn);
@@ -1623,7 +1657,7 @@ namespace AIPortraits
             string lastActualFile   = null;
             try
             {
-                string dir = CacheManager.GetPortraitSaveDirectory(promptTabSelectedPawn.LabelShortCap);
+                string dir = CacheManager.GetPortraitSaveDirectory(promptTabSelectedPawn);
                 if (Directory.Exists(dir))
                 {
                     string[] txts = Directory.GetFiles(dir, "*.txt");

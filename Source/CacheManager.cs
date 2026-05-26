@@ -60,30 +60,59 @@ namespace AIPortraits
         }
 
         // ── LOCAL PORTRAIT SAVE (user-visible, named files) ───────────────────────
-        // Saves to: Documents/RimWorld Portraits/{PawnName}/
-        // Named:    {PawnName}_{Style}_{Timestamp}.png
+        // Saves to: Documents/RimWorld Portraits/{PawnName}_{PawnID}/
+        // Named:    {PawnName}_{Style}_{Framing}_{Timestamp}.png
 
-        public static string GetPortraitSaveDirectory(string pawnName)
+        public static string GetPortraitSaveDirectory(Pawn pawn)
         {
-            // Sanitize pawn name for use as folder name
-            string safeName = SanitizeFileName(pawnName);
+            if (pawn == null)
+            {
+                string docsFallback = System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments);
+                string pathFallback = Path.Combine(docsFallback, "RimWorld Portraits", "Unknown");
+                if (!Directory.Exists(pathFallback))
+                    Directory.CreateDirectory(pathFallback);
+                return pathFallback;
+            }
 
-            // Use Documents folder
+            string safeName = SanitizeFileName(pawn.LabelShortCap);
+            string safeId = SanitizeFileName(pawn.ThingID);
+            string newFolderName = safeName + "_" + safeId;
+
             string docs = System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments);
-            string path = Path.Combine(docs, "RimWorld Portraits", safeName);
+            string newPath = Path.Combine(docs, "RimWorld Portraits", newFolderName);
+            string oldPath = Path.Combine(docs, "RimWorld Portraits", safeName);
 
-            if (!Directory.Exists(path))
-                Directory.CreateDirectory(path);
+            // Migrate old-style directory if it exists and the new one doesn't
+            if (!Directory.Exists(newPath) && Directory.Exists(oldPath))
+            {
+                try
+                {
+                    Directory.Move(oldPath, newPath);
+                    Log.Message("[Dynamic AI Portraits] Migrated portrait directory from " + oldPath + " to " + newPath);
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning("[Dynamic AI Portraits] Failed to migrate directory from " + oldPath + " to " + newPath + ": " + ex.Message);
+                }
+            }
 
-            return path;
+            if (!Directory.Exists(newPath))
+                Directory.CreateDirectory(newPath);
+
+            return newPath;
         }
 
         /// <summary>
-        /// Saves the portrait PNG to Documents/RimWorld Portraits/{pawnName}/.
+        /// Saves the portrait PNG to Documents/RimWorld Portraits/{pawnName}_{pawnId}/.
         /// Returns the full file path on success, null on failure.
         /// </summary>
-        public static string SavePortraitToDisk(string pawnName, PortraitStyle style, string framing, byte[] bytes)
+        public static string SavePortraitToDisk(Pawn pawn, PortraitStyle style, string framing, byte[] bytes)
         {
+            if (pawn == null)
+            {
+                Log.Warning("[Dynamic AI Portraits] SavePortraitToDisk: pawn is null.");
+                return null;
+            }
             if (bytes == null || bytes.Length == 0)
             {
                 Log.Warning("[Dynamic AI Portraits] SavePortraitToDisk: bytes are null or empty.");
@@ -92,10 +121,11 @@ namespace AIPortraits
 
             try
             {
-                string dir  = GetPortraitSaveDirectory(pawnName);
+                string dir  = GetPortraitSaveDirectory(pawn);
                 string ts   = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
                 string suf  = style.ToString();
                 string safeFraming = SanitizeFileName(framing ?? "portrait");
+                string pawnName = pawn.LabelShortCap;
                 string file = SanitizeFileName(pawnName) + "_" + suf + "_" + safeFraming + "_" + ts + ".png";
                 string path = Path.Combine(dir, file);
 
@@ -113,11 +143,11 @@ namespace AIPortraits
         /// <summary>
         /// Opens the portrait folder for this pawn in the OS file browser.
         /// </summary>
-        public static void OpenPortraitFolder(string pawnName)
+        public static void OpenPortraitFolder(Pawn pawn)
         {
             try
             {
-                OpenInFileExplorer(GetPortraitSaveDirectory(pawnName));
+                OpenInFileExplorer(GetPortraitSaveDirectory(pawn));
             }
             catch (Exception ex)
             {
