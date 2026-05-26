@@ -318,7 +318,6 @@ namespace AIPortraits
         private static IEnumerator GeneratePollinations(string prompt, AIPortraitsSettings settings, PawnState state, PortraitCallback callback)
         {
             string baseUrl = string.IsNullOrEmpty(settings.CurrentApiUrl) ? "https://image.pollinations.ai" : settings.CurrentApiUrl.TrimEnd('/');
-            string url = baseUrl + "/prompt/" + Uri.EscapeDataString(prompt);
             string model = string.IsNullOrEmpty(settings.CurrentModelName) ? "sana" : settings.CurrentModelName;
 
             // Pollinations puts the prompt in the URL path. URLs much over ~4KB get rejected, so
@@ -334,7 +333,10 @@ namespace AIPortraits
                 else if (state.framing == "special") { width = 768; height = 512; }
             }
 
-            url = baseUrl + "/prompt/" + encodedPrompt + "?width=" + width + "&height=" + height + "&model=" + Uri.EscapeDataString(model) + "&nologo=true&private=true";
+            string url = baseUrl + "/prompt/" + encodedPrompt
+                       + "?width=" + width + "&height=" + height
+                       + "&model=" + Uri.EscapeDataString(model)
+                       + "&nologo=true&private=true";
 
             using (UnityWebRequest request = UnityWebRequest.Get(url))
             {
@@ -495,7 +497,7 @@ namespace AIPortraits
                 }
                 request.timeout = RequestTimeoutSeconds;
 
-                Log.Message("[Dynamic AI Portraits] Google AI URL: " + url);
+                Log.Message(SanitizeLog("[Dynamic AI Portraits] Google AI URL: " + url, settings));
 
                 yield return request.SendWebRequest();
 
@@ -1343,7 +1345,11 @@ namespace AIPortraits
 
                 if (!IsSuccess(request))
                 {
-                    callback(null, "Veo long-running start error: " + request.error + " | " + Truncate(request.downloadHandler.text, 400));
+                    // Inline scrub (apiKey is a coroutine param, not on settings)
+                    string errMsg = "Veo long-running start error: " + request.error + " | " + Truncate(request.downloadHandler.text, 400);
+                    if (!string.IsNullOrEmpty(apiKey))
+                        errMsg = errMsg.Replace(apiKey, "[REDACTED]");
+                    callback(null, errMsg);
                     yield break;
                 }
 
@@ -1429,7 +1435,12 @@ namespace AIPortraits
 
                     if (!IsSuccess(request))
                     {
-                        Log.Warning("[Dynamic AI Portraits] Veo polling error: " + request.error);
+                        // request.error may contain the URL (with ?key=) on certain HTTP failures.
+                        // Inline scrub since this coroutine takes apiKey as a parameter, not settings.
+                        string errMsg = "[Dynamic AI Portraits] Veo polling error: " + request.error;
+                        if (!string.IsNullOrEmpty(apiKey))
+                            errMsg = errMsg.Replace(apiKey, "[REDACTED]");
+                        Log.Warning(errMsg);
                         continue;
                     }
 
@@ -1467,7 +1478,8 @@ namespace AIPortraits
                 }
             }
 
-            callback(null, "Veo video generation timed out after " + (maxAttempts * 5) + " seconds.");
+            // Wait interval is 10s (WaitForSeconds(10f)), not 5s — bug fixed during audit
+            callback(null, "Veo video generation timed out after " + (maxAttempts * 10) + " seconds.");
         }
 
         private static IEnumerator DownloadVideoBytes(string downloadUrl, Action<byte[], string> callback)
