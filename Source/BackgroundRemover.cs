@@ -315,15 +315,20 @@ namespace AIPortraits
             }
         }
 
+        // Tolerance multipliers — applied uniformly across the whole image (an earlier
+        // position-dependent variant was scrapped; the params are gone but the global
+        // tightening factors are retained because they noticeably reduce subject erosion).
+        private const float ChromaToleranceMultiplier = 0.7f;
+        private const float LumaToleranceMultiplier   = 0.75f;
+
         private static void TrySeedStrict(Color32[] pixels, bool[] visited, Queue<int> queue, int x, int y, int w, int h, List<YCbCrColor> bgColors)
         {
             int idx = y * w + x;
             if (visited[idx]) return;
 
-            float chromaTol, lumaTol;
-            GetLocalTolerances(x, y, w, h, ChromaStrict, LumaStrict, out chromaTol, out lumaTol);
-
-            if (EvaluatePixel(pixels[idx], bgColors, chromaTol, lumaTol))
+            if (EvaluatePixel(pixels[idx], bgColors,
+                              ChromaStrict * ChromaToleranceMultiplier,
+                              LumaStrict   * LumaToleranceMultiplier))
             {
                 visited[idx] = true;
                 queue.Enqueue(idx);
@@ -335,10 +340,9 @@ namespace AIPortraits
             int idx = y * w + x;
             if (visited[idx]) return;
 
-            float chromaTol, lumaTol;
-            GetLocalTolerances(x, y, w, h, ChromaLoose, LumaLoose, out chromaTol, out lumaTol);
-
-            if (EvaluatePixel(pixels[idx], bgColors, chromaTol, lumaTol))
+            if (EvaluatePixel(pixels[idx], bgColors,
+                              ChromaLoose * ChromaToleranceMultiplier,
+                              LumaLoose   * LumaToleranceMultiplier))
             {
                 visited[idx] = true;
                 queue.Enqueue(idx);
@@ -397,13 +401,5 @@ namespace AIPortraits
             return false;
         }
 
-        private static void GetLocalTolerances(int x, int y, int w, int h, float baseChroma, float baseLuma, out float chromaTol, out float lumaTol)
-        {
-            // Instead of assuming the face is dead-center (which breaks for bodyshots),
-            // we apply a slight global tightening to base tolerances to prevent
-            // aggressive bleeding into the character anywhere on the screen.
-            chromaTol = baseChroma * 0.7f;
-            lumaTol   = baseLuma * 0.75f;
-        }
     }
 }

@@ -1001,8 +1001,12 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             if (state.apparel.Count > 0)
                 sb.AppendLine("Apparel: " + string.Join(", ", state.apparel.ToArray()));
 
+            if (!string.IsNullOrEmpty(state.childhoodTitle))
+                sb.AppendLine("Childhood: " + state.childhoodTitle);
             if (!string.IsNullOrEmpty(state.adulthoodTitle))
                 sb.AppendLine("Pawn Biography: " + state.adulthoodTitle);
+            if (state.abilityGenes != null && state.abilityGenes.Count > 0)
+                sb.AppendLine("Ability genes: " + string.Join(", ", state.abilityGenes.ToArray()));
 
             if (settings.includeIdeology)
             {

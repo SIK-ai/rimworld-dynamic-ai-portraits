@@ -33,8 +33,7 @@ namespace AIPortraits
         public string       xenotype;               // base xenotype label
         public string       xenotypeName;           // custom xenotype name if player-named
         public List<string> cosmeticGenes  = new List<string>(); // visual genes (horns, tail, ears, skin, etc.)
-        public List<string> abilityGenes   = new List<string>(); // deathrest, hemogen, etc.
-        public List<string> passionGenes   = new List<string>(); // not shown in portrait but useful
+        public List<string> abilityGenes   = new List<string>(); // deathrest, hemogen, regen — surfaced to LLM prompt only
         public bool         isHemogenic;            // sanguophage-class bloodfeeder
         public bool         hasTail;
         public bool         hasHorns;
@@ -57,7 +56,6 @@ namespace AIPortraits
         public bool         isSleeping;
         public bool         isBloodloss;
         public bool         isBurning;
-        public bool         isOnFire;
 
         // ── Mind / Mood ───────────────────────────────────────────────────────────
         public string mentalState;
