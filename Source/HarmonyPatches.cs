@@ -15,29 +15,19 @@ namespace AIPortraits
         [HarmonyPostfix]
         public static void Postfix(MainTabWindow_Inspect __instance)
         {
+            // Centralised early-return guard: if any of these conditions fail, we both
+            // stop any active video playback AND skip overlay drawing. Collapsed from
+            // four near-identical early-return blocks.
             Pawn pawn = Find.Selector.SingleSelectedThing as Pawn;
-            if (pawn == null || pawn.Destroyed)
-            {
-                VideoPlaybackManager.StopPlayback();
-                return;
-            }
-
             IInspectPane activePane = __instance as IInspectPane;
-            if (activePane == null)
-            {
-                VideoPlaybackManager.StopPlayback();
-                return;
-            }
+            bool shouldDraw =
+                pawn != null &&
+                !pawn.Destroyed &&
+                activePane != null &&
+                activePane.OpenTabType == null &&
+                AIPortraitsManager.ShouldGenerateFor(pawn);
 
-            // Only draw when no inspect tab is open.
-            if (activePane.OpenTabType != null)
-            {
-                VideoPlaybackManager.StopPlayback();
-                return;
-            }
-
-            // Only draw for valid pawns (colonists/prisoners)
-            if (!AIPortraitsManager.ShouldGenerateFor(pawn))
+            if (!shouldDraw)
             {
                 VideoPlaybackManager.StopPlayback();
                 return;
@@ -48,15 +38,22 @@ namespace AIPortraits
 
             Rect paneRect = __instance.windowRect;
 
-            // Cap the overlay so it doesn't dominate the screen.
-            float side = Mathf.Min(paneRect.width, 260f);
+            float side = 260f;
+            float offsetX = 0f;
+            float offsetY = 0f;
+            if (AIPortraitsMod.settings != null)
+            {
+                side = AIPortraitsMod.settings.portraitScale;
+                offsetX = AIPortraitsMod.settings.portraitOffsetX;
+                offsetY = AIPortraitsMod.settings.portraitOffsetY;
+            }
 
             // Leave clearance for the inspect-pane tab strip (Log, Health, etc.) which
             // sits in the space just above paneRect.y.
             const float TabStripClearance = 36f;
 
-            float x = paneRect.x + (paneRect.width - side) * 0.5f;
-            float y = paneRect.y - side - TabStripClearance;
+            float x = paneRect.x + (paneRect.width - side) * 0.5f + offsetX;
+            float y = paneRect.y - side - TabStripClearance + offsetY;
             Rect portraitRect = new Rect(x, y, side, side);
 
             bool videoEnabled = false;
