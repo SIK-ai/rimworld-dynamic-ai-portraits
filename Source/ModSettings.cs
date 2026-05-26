@@ -1263,6 +1263,11 @@ namespace AIPortraits
                         // Tooltip and Click Action for Selection
                         TooltipHandler.TipRegion(imgRect, "Click to select this image and view/edit its prompt.\n\nPrompt:\n" + sp.prompt);
 
+                        if (Mouse.IsOver(imgRect))
+                        {
+                            Widgets.DrawHighlight(imgRect);
+                        }
+
                         if (Widgets.ButtonInvisible(imgRect))
                         {
                             selectedSavedPortrait = sp;
