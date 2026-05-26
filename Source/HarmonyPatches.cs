@@ -111,7 +111,7 @@ namespace AIPortraits
                         Widgets.DrawBoxSolid(portraitRect, new Color(0f, 0f, 0f, 0.4f));
                         Text.Anchor = TextAnchor.MiddleCenter;
                         GUI.color = new Color(0.6f, 0.85f, 1f);
-                        Widgets.Label(portraitRect, "Making alive...");
+                        Widgets.Label(portraitRect, "AIPortraits_MakingAlive".Translate());
                         GUI.color = Color.white;
                         Text.Anchor = TextAnchor.UpperLeft;
                     }
@@ -146,7 +146,7 @@ namespace AIPortraits
                     if (status == GenerationStatus.Generating)
                     {
                         GUI.color = new Color(0.6f, 0.85f, 1f);
-                        Widgets.Label(portraitRect, "Painting...");
+                        Widgets.Label(portraitRect, "AIPortraits_Painting".Translate());
                     }
                     else if (status == GenerationStatus.Error)
                     {
@@ -157,7 +157,7 @@ namespace AIPortraits
                     else
                     {
                         GUI.color = new Color(0.45f, 0.45f, 0.45f);
-                        Widgets.Label(portraitRect, "No portrait\nClick \u21BB to generate");
+                        Widgets.Label(portraitRect, "AIPortraits_NoPortrait".Translate());
                     }
                     GUI.color = Color.white;
                     Text.Anchor = TextAnchor.UpperLeft;
@@ -190,9 +190,9 @@ namespace AIPortraits
                 currentFraming = f;
             }
 
-            DrawFramingButton(portRect, "P", "portrait", currentFraming, pawn, "Set framing style to standard bust-up portrait.");
-            DrawFramingButton(bodyRect, "B", "bodyshot", currentFraming, pawn, "Set framing style to full-length bodyshot.");
-            DrawFramingButton(specRect, "S", "special", currentFraming, pawn, "Set framing style to special selfie / thematic scene.");
+            DrawFramingButton(portRect, "P", "portrait", currentFraming, pawn, "AIPortraits_FramingPortraitTooltip".Translate());
+            DrawFramingButton(bodyRect, "B", "bodyshot", currentFraming, pawn, "AIPortraits_FramingBodyshotTooltip".Translate());
+            DrawFramingButton(specRect, "S", "special", currentFraming, pawn, "AIPortraits_FramingSpecialTooltip".Translate());
 
             DrawVeoButton(veoRect, pawn);
             DrawRefreshButton(refreshRect, pawn);
@@ -262,7 +262,7 @@ namespace AIPortraits
             if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.pawnVideoToggles != null)
                 AIPortraitsMod.settings.pawnVideoToggles.TryGetValue(pawn.ThingID, out videoActive);
 
-            string tip = videoActive ? "Regenerate video for this pawn" : "Refresh portrait using selected framing";
+            string tip = videoActive ? "AIPortraits_RegenVideoTooltip".Translate() : "AIPortraits_RefreshPortraitTooltip".Translate();
             TooltipHandler.TipRegion(rect, tip);
 
             if (Widgets.ButtonInvisible(rect))
@@ -273,18 +273,18 @@ namespace AIPortraits
                     if (imgBytes != null && imgBytes.Length > 0)
                     {
                         AIPortraitsManager.TriggerVideoGeneration(pawn, imgBytes);
-                        Messages.Message("Regenerating video for " + pawn.LabelShortCap + "...",
+                        Messages.Message("AIPortraits_RegeneratingVideoMsg".Translate(pawn.LabelShortCap),
                                          MessageTypeDefOf.NeutralEvent, false);
                     }
                     else
                     {
-                        Messages.Message("No portrait image available to animate.", MessageTypeDefOf.RejectInput, false);
+                        Messages.Message("AIPortraits_NoPortraitToAnimateMsg".Translate(), MessageTypeDefOf.RejectInput, false);
                     }
                 }
                 else
                 {
                     AIPortraitsManager.TriggerNewPortraitWithContinuity(pawn);
-                    Messages.Message("Regenerating portrait for " + pawn.LabelShortCap + "...",
+                    Messages.Message("AIPortraits_RegeneratingPortraitMsg".Translate(pawn.LabelShortCap),
                                      MessageTypeDefOf.NeutralEvent, false);
                 }
             }
@@ -321,7 +321,7 @@ namespace AIPortraits
             Widgets.Label(rect, "V");
             Text.Anchor = TextAnchor.UpperLeft;
 
-            TooltipHandler.TipRegion(rect, active ? "Toggle Video Mode OFF (Show static portrait)" : "Toggle Video Mode ON (Run Veo 3.1 Lite to animate portrait)");
+            TooltipHandler.TipRegion(rect, active ? "AIPortraits_ToggleVideoOffTooltip".Translate() : "AIPortraits_ToggleVideoOnTooltip".Translate());
 
             if (Widgets.ButtonInvisible(rect))
             {

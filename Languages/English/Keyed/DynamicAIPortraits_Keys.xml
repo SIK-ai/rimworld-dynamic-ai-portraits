@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<LanguageData>
+  <AIPortraits_MakingAlive>Making alive...</AIPortraits_MakingAlive>
+  <AIPortraits_Painting>Painting...</AIPortraits_Painting>
+  <AIPortraits_NoPortrait>No portrait&#xA;Click ↻ to generate</AIPortraits_NoPortrait>
+  <AIPortraits_FramingPortraitTooltip>Set framing style to standard bust-up portrait.</AIPortraits_FramingPortraitTooltip>
+  <AIPortraits_FramingBodyshotTooltip>Set framing style to full-length bodyshot.</AIPortraits_FramingBodyshotTooltip>
+  <AIPortraits_FramingSpecialTooltip>Set framing style to special selfie / thematic scene.</AIPortraits_FramingSpecialTooltip>
+  <AIPortraits_RegenVideoTooltip>Regenerate video for this pawn</AIPortraits_RegenVideoTooltip>
+  <AIPortraits_RefreshPortraitTooltip>Refresh portrait using selected framing</AIPortraits_RefreshPortraitTooltip>
+  <AIPortraits_ToggleVideoOffTooltip>Toggle Video Mode OFF (Show static portrait)</AIPortraits_ToggleVideoOffTooltip>
+  <AIPortraits_ToggleVideoOnTooltip>Toggle Video Mode ON (Run Veo 3.1 Lite to animate portrait)</AIPortraits_ToggleVideoOnTooltip>
+  <AIPortraits_RegeneratingVideoMsg>Regenerating video for {0}...</AIPortraits_RegeneratingVideoMsg>
+  <AIPortraits_NoPortraitToAnimateMsg>No portrait image available to animate.</AIPortraits_NoPortraitToAnimateMsg>
+  <AIPortraits_RegeneratingPortraitMsg>Regenerating portrait for {0}...</AIPortraits_RegeneratingPortraitMsg>
+</LanguageData>
