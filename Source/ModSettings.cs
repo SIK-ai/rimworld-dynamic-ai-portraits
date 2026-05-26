@@ -684,10 +684,14 @@ namespace AIPortraits
             listing.Gap(6f);
 
             // ─── API KEY FIELD (single field; format varies per provider) ─────────
+            // Masked with password-field stars so the key isn't visible during screen sharing
+            // (originally proposed by Jules-bot sentinel/mask-api-key).
             if (ProviderNeedsApiKey(backendType))
             {
                 listing.Label(ApiKeyLabel(backendType));
-                CurrentApiKey = listing.TextEntry(CurrentApiKey);
+                Rect apiKeyRect = listing.GetRect(24f);
+                CurrentApiKey = UnityEngine.GUI.PasswordField(apiKeyRect, CurrentApiKey, '*');
+                listing.Gap(listing.verticalSpacing);
                 listing.Gap(2f);
                 Text.Font = GameFont.Tiny;
                 GUI.color = new Color(0.6f, 0.6f, 0.6f);
@@ -784,7 +788,9 @@ namespace AIPortraits
                 else
                 {
                     listing.Label("Gemini Flash API Key  (Google AI Studio):");
-                    llmApiKey = listing.TextEntry(llmApiKey);
+                    Rect llmKeyRect = listing.GetRect(24f);
+                    llmApiKey = UnityEngine.GUI.PasswordField(llmKeyRect, llmApiKey, '*');
+                    listing.Gap(listing.verticalSpacing);
                     listing.Gap(2f);
                     Rect hintRect = listing.GetRect(20f);
                     Text.Font = GameFont.Tiny;
@@ -823,7 +829,9 @@ namespace AIPortraits
                 else
                 {
                     listing.Label("Cloudflare API Key (account_id:token):");
-                    cfBgRemovalKey = listing.TextEntry(cfBgRemovalKey);
+                    Rect cfBgRect = listing.GetRect(24f);
+                    cfBgRemovalKey = UnityEngine.GUI.PasswordField(cfBgRect, cfBgRemovalKey, '*');
+                    listing.Gap(listing.verticalSpacing);
                     listing.Gap(2f);
                     Rect hintRect = listing.GetRect(20f);
                     Text.Font = GameFont.Tiny;

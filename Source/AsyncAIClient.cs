@@ -99,6 +99,51 @@ namespace AIPortraits
         }
 
         /// <summary>
+        /// Scrubs API keys / tokens from a string before it gets logged or returned in
+        /// an error callback. RimWorld's Player.log is plaintext on disk and routinely
+        /// shared by users when reporting bugs — without this scrub, anyone who posts a
+        /// failed-generation log would also be publishing their API keys.
+        ///
+        /// Originally proposed by Jules-bot (sentinel-fix-api-key-leak); adapted here to
+        /// cover the per-provider credential fields the user added in WIP.
+        /// </summary>
+        private static string SanitizeLog(string message, AIPortraitsSettings settings)
+        {
+            if (string.IsNullOrEmpty(message) || settings == null) return message;
+            string s = message;
+
+            // Per-provider keys
+            if (!string.IsNullOrEmpty(settings.cfApiKey)) s = s.Replace(settings.cfApiKey, "[REDACTED]");
+            if (!string.IsNullOrEmpty(settings.giApiKey)) s = s.Replace(settings.giApiKey, "[REDACTED]");
+            if (!string.IsNullOrEmpty(settings.diApiKey)) s = s.Replace(settings.diApiKey, "[REDACTED]");
+            if (!string.IsNullOrEmpty(settings.hfApiKey)) s = s.Replace(settings.hfApiKey, "[REDACTED]");
+
+            // Legacy single apiKey (back-compat)
+            if (!string.IsNullOrEmpty(settings.apiKey)) s = s.Replace(settings.apiKey, "[REDACTED]");
+
+            // LLM key — separate field, may differ from any provider's key
+            if (!string.IsNullOrEmpty(settings.llmApiKey)) s = s.Replace(settings.llmApiKey, "[REDACTED]");
+
+            // Cloudflare uses account_id:token format — if cfApiKey is set we already redacted
+            // it above, but the token portion alone might still appear in URL paths. Defensive
+            // extra pass on each key after splitting on a colon (catches token-only leakage).
+            string[] possibleCombined = { settings.cfApiKey };
+            foreach (string combo in possibleCombined)
+            {
+                if (string.IsNullOrEmpty(combo)) continue;
+                int colon = combo.IndexOf(':');
+                if (colon > 0 && colon < combo.Length - 1)
+                {
+                    string accountId = combo.Substring(0, colon).Trim();
+                    string token     = combo.Substring(colon + 1).Trim();
+                    if (!string.IsNullOrEmpty(token))     s = s.Replace(token, "[REDACTED]");
+                    if (!string.IsNullOrEmpty(accountId)) s = s.Replace(accountId, "[REDACTED_ACCT]");
+                }
+            }
+            return s;
+        }
+
+        /// <summary>
         /// Calls Gemini Flash to generate the image prompt from pawn metadata, then
         /// dispatches to the configured image backend with the result.
         /// Falls back to the compiled template on any failure so portrait generation
@@ -142,13 +187,13 @@ namespace AIPortraits
                     if (!string.IsNullOrEmpty(generatedPrompt))
                         Log.Message("[Dynamic AI Portraits] LLM prompt: " + generatedPrompt);
                     else
-                        Log.Warning("[Dynamic AI Portraits] Gemini returned empty text. Raw: " +
-                                    Truncate(request.downloadHandler.text, 400));
+                        Log.Warning(SanitizeLog("[Dynamic AI Portraits] Gemini returned empty text. Raw: " +
+                                    Truncate(request.downloadHandler.text, 400), settings));
                 }
                 else
                 {
-                    Log.Warning("[Dynamic AI Portraits] Gemini Flash error: " + request.error +
-                                " | " + Truncate(request.downloadHandler.text, 200));
+                    Log.Warning(SanitizeLog("[Dynamic AI Portraits] Gemini Flash error: " + request.error +
+                                " | " + Truncate(request.downloadHandler.text, 200), settings));
                 }
             }
 
@@ -254,7 +299,7 @@ namespace AIPortraits
 
                 if (!IsSuccess(request))
                 {
-                    callback(null, null, null, "HuggingFace API Error: " + request.error + " - " + Truncate(request.downloadHandler.text, 400));
+                    callback(null, null, null, SanitizeLog("HuggingFace API Error: " + request.error + " - " + Truncate(request.downloadHandler.text, 400), settings));
                     yield break;
                 }
 
@@ -439,12 +484,12 @@ namespace AIPortraits
 
                 if (!IsSuccess(request))
                 {
-                    callback(null, null, null, "Google AI API Error: " + request.error + " | " + Truncate(request.downloadHandler.text, 400));
+                    callback(null, null, null, SanitizeLog("Google AI API Error: " + request.error + " | " + Truncate(request.downloadHandler.text, 400), settings));
                     yield break;
                 }
 
                 string text = request.downloadHandler.text;
-                Log.Message("[Dynamic AI Portraits] Google AI raw response (first 300): " + Truncate(text, 300));
+                Log.Message(SanitizeLog("[Dynamic AI Portraits] Google AI raw response (first 300): " + Truncate(text, 300), settings));
 
                 try
                 {
@@ -559,7 +604,7 @@ namespace AIPortraits
 
                 if (!IsSuccess(request))
                 {
-                    callback(null, null, null, "Cloudflare API Error: " + request.error + " - " + Truncate(request.downloadHandler.text, 400));
+                    callback(null, null, null, SanitizeLog("Cloudflare API Error: " + request.error + " - " + Truncate(request.downloadHandler.text, 400), settings));
                     yield break;
                 }
 
@@ -659,8 +704,8 @@ namespace AIPortraits
 
                 if (!IsSuccess(request))
                 {
-                    callback(null, null, null, "DeepInfra API Error: " + request.error +
-                                               " | " + Truncate(request.downloadHandler.text, 400));
+                    callback(null, null, null, SanitizeLog("DeepInfra API Error: " + request.error +
+                                               " | " + Truncate(request.downloadHandler.text, 400), settings));
                     yield break;
                 }
 
@@ -745,8 +790,8 @@ namespace AIPortraits
                 {
                     string hint = " | Is your local server running at " + baseUrl + "? " +
                                   "Start AUTOMATIC1111/Forge with --api flag before generating.";
-                    callback(null, null, null, "Local A1111 API Error: " + request.error + hint +
-                                         " | " + Truncate(request.downloadHandler.text, 200));
+                    callback(null, null, null, SanitizeLog("Local A1111 API Error: " + request.error + hint +
+                                         " | " + Truncate(request.downloadHandler.text, 200), settings));
                     yield break;
                 }
 
@@ -840,7 +885,7 @@ namespace AIPortraits
 
                 if (!IsSuccess(request))
                 {
-                    Log.Warning("[Dynamic AI Portraits] Cloudflare BG Removal failed: " + request.error + " | " + Truncate(request.downloadHandler.text, 200) + ". Falling back to local flood-fill.");
+                    Log.Warning(SanitizeLog("[Dynamic AI Portraits] Cloudflare BG Removal failed: " + request.error + " | " + Truncate(request.downloadHandler.text, 200) + ". Falling back to local flood-fill.", settings));
                     DeliverImageLocal(imgBytes, promptUsed, backendName, state, callback);
                     yield break;
                 }
