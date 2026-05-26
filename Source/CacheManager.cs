@@ -88,7 +88,8 @@ namespace AIPortraits
                 try
                 {
                     Directory.Move(oldPath, newPath);
-                    Log.Message("[Dynamic AI Portraits] Migrated portrait directory from " + oldPath + " to " + newPath);
+                    if (Prefs.DevMode)
+                        Log.Message("[Dynamic AI Portraits] Migrated portrait directory from " + oldPath + " to " + newPath);
                 }
                 catch (Exception ex)
                 {
@@ -130,7 +131,8 @@ namespace AIPortraits
                 string path = Path.Combine(dir, file);
 
                 File.WriteAllBytes(path, bytes);
-                Log.Message("[Dynamic AI Portraits] Portrait saved to: " + path);
+                if (Prefs.DevMode)
+                    Log.Message("[Dynamic AI Portraits] Portrait saved to: " + path);
                 return path;
             }
             catch (Exception ex)

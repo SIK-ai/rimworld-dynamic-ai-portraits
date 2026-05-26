@@ -1693,7 +1693,10 @@ namespace AIPortraits
                         lastActualPrompt = File.ReadAllText(lastActualFile);
                 }
             }
-            catch (Exception) { /* ignore — just show "none recorded" */ }
+            catch (Exception ex)
+            {
+                if (Prefs.DevMode) Log.Warning("[Dynamic AI Portraits] Failed to read last actual prompt: " + ex.Message);
+            }
 
             float viewW = content.width - 18f;
             float descH    = Text.CalcHeight(structuredDesc, viewW - 12f);

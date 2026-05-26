@@ -44,14 +44,14 @@ namespace AIPortraits
             // Standard compiled-template path
             string positivePrompt = PromptCompiler.CompilePositivePrompt(state, settings, continuityToken);
             string negativePrompt = PromptCompiler.CompileNegativePrompt(settings, state != null ? state.framing : "portrait");
-            Log.Message("[Dynamic AI Portraits] Prompt: " + positivePrompt);
+            if (Prefs.DevMode) Log.Message("[Dynamic AI Portraits] Prompt: " + positivePrompt);
             DispatchImageBackend(positivePrompt, negativePrompt, settings, state, portraitBytes, callback);
         }
 
         public static void QueueCustomGeneration(string customPrompt, AIPortraitsSettings settings, PawnState state, byte[] portraitBytes, PortraitCallback callback)
         {
             string negativePrompt = PromptCompiler.CompileNegativePrompt(settings, state != null ? state.framing : "portrait");
-            Log.Message("[Dynamic AI Portraits] Custom Prompt: " + customPrompt);
+            if (Prefs.DevMode) Log.Message("[Dynamic AI Portraits] Custom Prompt: " + customPrompt);
             DispatchImageBackend(customPrompt, negativePrompt, settings, state, portraitBytes, callback);
         }
 
@@ -182,17 +182,21 @@ namespace AIPortraits
                 request.SetRequestHeader("Content-Type", "application/json");
                 request.timeout = 30;
 
-                Log.Message("[Dynamic AI Portraits] Calling Gemini Flash for " + (state.name ?? "pawn") + "...");
+                if (Prefs.DevMode) Log.Message("[Dynamic AI Portraits] Calling Gemini Flash for " + (state.name ?? "pawn") + "...");
                 yield return request.SendWebRequest();
 
                 if (IsSuccess(request))
                 {
                     generatedPrompt = ExtractGeminiText(request.downloadHandler.text);
                     if (!string.IsNullOrEmpty(generatedPrompt))
-                        Log.Message("[Dynamic AI Portraits] LLM prompt: " + generatedPrompt);
+                    {
+                        if (Prefs.DevMode) Log.Message("[Dynamic AI Portraits] LLM prompt: " + generatedPrompt);
+                    }
                     else
+                    {
                         Log.Warning(SanitizeLog("[Dynamic AI Portraits] Gemini returned empty text. Raw: " +
                                     Truncate(request.downloadHandler.text, 400), settings));
+                    }
                 }
                 else
                 {
@@ -501,7 +505,7 @@ namespace AIPortraits
                 }
                 request.timeout = RequestTimeoutSeconds;
 
-                Log.Message(SanitizeLog("[Dynamic AI Portraits] Google AI URL: " + url, settings));
+                if (Prefs.DevMode) Log.Message(SanitizeLog("[Dynamic AI Portraits] Google AI URL: " + url, settings));
 
                 yield return request.SendWebRequest();
 
@@ -512,7 +516,7 @@ namespace AIPortraits
                 }
 
                 string text = request.downloadHandler.text;
-                Log.Message(SanitizeLog("[Dynamic AI Portraits] Google AI raw response (first 300): " + Truncate(text, 300), settings));
+                if (Prefs.DevMode) Log.Message(SanitizeLog("[Dynamic AI Portraits] Google AI raw response (first 300): " + Truncate(text, 300), settings));
 
                 try
                 {
@@ -722,7 +726,7 @@ namespace AIPortraits
                 request.SetRequestHeader("Authorization", "Bearer " + apiToken);
                 request.timeout = RequestTimeoutSeconds;
 
-                Log.Message("[Dynamic AI Portraits] DeepInfra URL: " + url);
+                if (Prefs.DevMode) Log.Message("[Dynamic AI Portraits] DeepInfra URL: " + url);
                 yield return request.SendWebRequest();
 
                 if (!IsSuccess(request))
@@ -805,7 +809,7 @@ namespace AIPortraits
                 // Local server can be slow on first generation (model load). Allow 5 min.
                 request.timeout = 300;
 
-                Log.Message("[Dynamic AI Portraits] Local A1111 URL: " + url);
+                if (Prefs.DevMode) Log.Message("[Dynamic AI Portraits] Local A1111 URL: " + url);
 
                 yield return request.SendWebRequest();
 
@@ -903,7 +907,7 @@ namespace AIPortraits
                 request.SetRequestHeader("Authorization", "Bearer " + apiToken);
                 request.timeout = RequestTimeoutSeconds;
 
-                Log.Message("[Dynamic AI Portraits] Calling Cloudflare bria-rmbg-1.4 for background removal...");
+                if (Prefs.DevMode) Log.Message("[Dynamic AI Portraits] Calling Cloudflare bria-rmbg-1.4 for background removal...");
                 yield return request.SendWebRequest();
 
                 if (!IsSuccess(request))
@@ -1352,7 +1356,7 @@ namespace AIPortraits
                 request.SetRequestHeader("Content-Type", "application/json");
                 request.timeout = 60;
 
-                Log.Message("[Dynamic AI Portraits] Initiating Veo Video for " + pawn.LabelShortCap + " (" + framing + ")...");
+                if (Prefs.DevMode) Log.Message("[Dynamic AI Portraits] Initiating Veo Video for " + pawn.LabelShortCap + " (" + framing + ")...");
                 yield return request.SendWebRequest();
 
                 if (!IsSuccess(request))
@@ -1383,7 +1387,7 @@ namespace AIPortraits
                 }
 
                 string operationName = text.Substring(openQuote + 1, closeQuote - openQuote - 1);
-                Log.Message("[Dynamic AI Portraits] Veo operation started: " + operationName + ". Polling status...");
+                if (Prefs.DevMode) Log.Message("[Dynamic AI Portraits] Veo operation started: " + operationName + ". Polling status...");
 
                 yield return CoroutineRunner.Instance.StartCoroutine(PollVeoOperation(operationName, apiKey, delegate(string videoUri, string pollErr)
                 {
@@ -1406,7 +1410,7 @@ namespace AIPortraits
                                 try
                                 {
                                     System.IO.File.WriteAllBytes(videoPath, videoBytes);
-                                    Log.Message("[Dynamic AI Portraits] Saved generated Veo video to: " + videoPath);
+                                    if (Prefs.DevMode) Log.Message("[Dynamic AI Portraits] Saved generated Veo video to: " + videoPath);
 
                                     string dir = CacheManager.GetPortraitSaveDirectory(pawn);
                                     string ts = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
@@ -1438,7 +1442,7 @@ namespace AIPortraits
             {
                 yield return new WaitForSeconds(10f);
                 attempts++;
-                Log.Message("[Dynamic AI Portraits] Veo poll attempt " + attempts + "/" + maxAttempts + "...");
+                if (Prefs.DevMode) Log.Message("[Dynamic AI Portraits] Veo poll attempt " + attempts + "/" + maxAttempts + "...");
 
                 using (UnityWebRequest request = UnityWebRequest.Get(url))
                 {

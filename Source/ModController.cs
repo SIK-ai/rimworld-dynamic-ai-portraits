@@ -18,7 +18,8 @@ namespace AIPortraits
             var harmony = new Harmony("antigravity.aiportraits");
             harmony.PatchAll();
             
-            Log.Message("[Dynamic AI Portraits] Initialized successfully. Harmony patches applied.");
+            if (Prefs.DevMode)
+                Log.Message("[Dynamic AI Portraits] Initialized successfully. Harmony patches applied.");
         }
 
         public override void DoSettingsWindowContents(Rect inRect)

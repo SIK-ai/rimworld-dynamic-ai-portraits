@@ -180,7 +180,10 @@ namespace AIPortraits
                 if (!string.IsNullOrEmpty(fallbackPath) && System.IO.File.Exists(fallbackPath))
                 {
                     try { return System.IO.File.ReadAllBytes(fallbackPath); }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        if (Prefs.DevMode) Log.Warning("[Dynamic AI Portraits] Failed to read fallback portrait: " + ex.Message);
+                    }
                 }
             }
             return null;
@@ -450,7 +453,8 @@ namespace AIPortraits
             requestError[pawnKey]   = null;
 
             string positivePrompt = PromptCompiler.CompilePositivePrompt(state, AIPortraitsMod.settings, continuityToken);
-            Log.Message("[Dynamic AI Portraits] PROMPT for " + pawn.LabelShortCap + " (" + framing + "):\n" + positivePrompt);
+            if (Prefs.DevMode)
+                Log.Message("[Dynamic AI Portraits] PROMPT for " + pawn.LabelShortCap + " (" + framing + "):\n" + positivePrompt);
 
             // Portrait generates fresh (no continuity image).
             // Bodyshot and special anchor to the latest portrait image for consistency.
@@ -564,7 +568,8 @@ namespace AIPortraits
                 state.framing = framing;
             }
 
-            Log.Message("[Dynamic AI Portraits] CUSTOM PROMPT for " + pawn.LabelShortCap + " (" + framing + "):\n" + customPrompt);
+            if (Prefs.DevMode)
+                Log.Message("[Dynamic AI Portraits] CUSTOM PROMPT for " + pawn.LabelShortCap + " (" + framing + "):\n" + customPrompt);
 
             // Portrait generates fresh (no continuity image).
             // Bodyshot and special anchor to the latest portrait image for consistency.
@@ -708,7 +713,8 @@ namespace AIPortraits
                 {
                     videoStatus.Remove(key);
                     videoError.Remove(key);
-                    Log.Message("[Dynamic AI Portraits] Veo Video Generation Succeeded for " + pawn.LabelShortCap);
+                    if (Prefs.DevMode)
+                        Log.Message("[Dynamic AI Portraits] Veo Video Generation Succeeded for " + pawn.LabelShortCap);
                 }
             });
         }
@@ -1213,7 +1219,10 @@ namespace AIPortraits
                         Texture2D t = new Texture2D(2, 2, TextureFormat.RGBA32, false);
                         if (ImageConversion.LoadImage(t, bytes)) e.thumb = t;
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        if (Prefs.DevMode) Log.Warning("[Dynamic AI Portraits] Failed to load history thumbnail: " + ex.Message);
+                    }
                     e.thumbLoaded = true;
                     entries[idx] = e;
                 }
