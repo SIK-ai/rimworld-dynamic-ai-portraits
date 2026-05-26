@@ -584,10 +584,10 @@ namespace AIPortraits
 
         private void DrawApiSettings(Rect inRect)
         {
-            float viewHeight = 830f;
-            if (useLLMPrompt) viewHeight += 60f;
-            if (useAIBgRemoval) viewHeight += 60f;
-            if (showAdvanced) viewHeight += 320f;
+            float viewHeight = 850f;
+            if (useLLMPrompt) viewHeight += 100f;
+            if (useAIBgRemoval) viewHeight += 100f;
+            if (showAdvanced) viewHeight += 480f;
 
             Rect viewRect = new Rect(0f, 0f, inRect.width - 18f, viewHeight);
             Widgets.BeginScrollView(inRect, ref scrollPosition, viewRect);
@@ -892,6 +892,23 @@ namespace AIPortraits
             if (showAdvanced)
             {
                 listing.Gap(6f);
+                if (listing.ButtonText("Reset to Default Prompts & Settings"))
+                {
+                    baseStylePrompt = "";
+                    manhwaStylePrompt = "highly detailed digital illustration, professional webtoon manhwa key visual, sharp dynamic clean inked outlines, deep volumetric shading, dramatic cinematic lighting with rich chiaroscuro contrast, subtle rim lighting to define the silhouette, vibrant saturated colors, cinematic composition, exquisite detailed expressive eyes with realistic reflections, beautifully styled glossy hair flows, pristine smooth skin rendering, masterpiece anime art, aesthetic design";
+                    cartoonStylePrompt = "Rick and Morty Adult Swim cartoon character, Justin Roiland animation style, thick consistent black outlines, flat 2D color fills, no gradients, no painterly shading, bulging round cartoon eyes with tiny black dot pupils, exaggerated wonky proportions, oversized head, hand-drawn animation cel look, bright primary color palette";
+                    pixelStylePrompt = "high-quality 16-bit retro JRPG character sprite, Tactics Ogre and Final Fantasy Tactics style, clean pixel-art grid, zero anti-aliasing, sharp deliberate pixel edges, thin consistent dark outlines, clean flat cel-shading, limited color palette, anime-style cute facial features, detailed hair";
+                    baseNegativePrompt = "generic fantasy art, cartoon style, bright cheerful lighting, flat lighting, blurry textures, generic features, messy brushstrokes, standard clean weapon, generic clothing, missing face tattoos, missing horns, missing cybernetic eyes, missing scars, photorealistic photograph, 3d render, chibi, flat shading, low quality, watermark, extra limbs, deformed face, bad anatomy, multiple people, text, signature, anti-aliased pixels, jagged irregular lines, muddied unclear character design, illegible text, generic UI, inconsistency between sprite and portrait";
+                    steps = 20;
+                    cfgScale = 7f;
+                    portraitScale = 260f;
+                    portraitOffsetX = 0f;
+                    portraitOffsetY = 0f;
+                    SoundDefOf.Click.PlayOneShotOnCamera(null);
+                    Messages.Message("Settings and prompts reset to default values.", MessageTypeDefOf.PositiveEvent, false);
+                }
+                listing.Gap(6f);
+
                 listing.Label("API URL");
                 CurrentApiUrl = listing.TextEntry(CurrentApiUrl);
 
@@ -920,10 +937,10 @@ namespace AIPortraits
                 baseNegativePrompt = listing.TextEntry(baseNegativePrompt, 2);
 
                 listing.Gap(6f);
-                listing.Label("Steps: " + steps + "  (HuggingFace only)");
+                listing.Label("Steps: " + steps + "  (HuggingFace, DeepInfra, Local)");
                 steps = (int)listing.Slider(steps, 5, 50);
 
-                listing.Label("CFG Scale: " + cfgScale.ToString("F1") + "  (HuggingFace only)");
+                listing.Label("CFG Scale: " + cfgScale.ToString("F1") + "  (HuggingFace, Local)");
                 cfgScale = listing.Slider(cfgScale, 1f, 15f);
             }
 
