@@ -38,12 +38,15 @@ namespace AIPortraits
 
         public override int GetHashCode()
         {
-            return pawnId ^ (framing?.GetHashCode() ?? 0);
+            // C# 5 (csc.exe v4.0.30319) has no null-conditional ?. operator
+            return pawnId ^ (framing != null ? framing.GetHashCode() : 0);
         }
 
         public override bool Equals(object obj)
         {
-            return obj is PawnFramingKey key && Equals(key);
+            // C# 5 (csc.exe v4.0.30319) has no `is T name` pattern matching
+            if (!(obj is PawnFramingKey)) return false;
+            return Equals((PawnFramingKey)obj);
         }
     }
 
