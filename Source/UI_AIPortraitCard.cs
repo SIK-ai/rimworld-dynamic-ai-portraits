@@ -325,12 +325,25 @@ namespace AIPortraits
             string diskKey = GetActiveKey(pawn);
             string continuityToken = PromptCompiler.GetContinuityToken(AIPortraitsMod.settings.portraitStyle);
 
-            // Drop in-memory texture (but preserve any locked one — that's user-pinned)
+            // Drop in-memory texture. The locked-cache entry MUST also be dropped because
+            // when a portrait is auto-pinned at generation time, both pawnKey and
+            // lockedCacheKey end up pointing to the same Texture2D — destroying the pawnKey
+            // entry without clearing lockedCacheKey leaves a dangling reference that the
+            // overlay would try to render between refresh + new-generation-complete.
+            string lockedCacheKey = pawnKey + LockedSuffix;
             Texture2D oldTex;
             if (loadedTextures.TryGetValue(pawnKey, out oldTex))
             {
                 if (oldTex != null) UnityEngine.Object.Destroy(oldTex);
                 loadedTextures.Remove(pawnKey);
+            }
+            Texture2D oldLockedRef;
+            if (loadedTextures.TryGetValue(lockedCacheKey, out oldLockedRef))
+            {
+                // Don't double-destroy if it's the same Texture2D we just freed above.
+                if (oldLockedRef != null && oldLockedRef != oldTex)
+                    UnityEngine.Object.Destroy(oldLockedRef);
+                loadedTextures.Remove(lockedCacheKey);
             }
 
             // Drop disk cache so the next GetPortraitTexture call won't reload the stale one
