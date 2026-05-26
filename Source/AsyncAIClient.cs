@@ -363,7 +363,6 @@ namespace AIPortraits
         {
             string baseUrl = string.IsNullOrEmpty(settings.CurrentApiUrl) ? "https://generativelanguage.googleapis.com" : settings.CurrentApiUrl.TrimEnd('/');
             string model = string.IsNullOrEmpty(settings.CurrentModelName) ? "imagen-4.0-fast-generate-001" : settings.CurrentModelName;
-
             // Map UI names to official Google Model IDs
             string apiModel = model;
             if (apiModel == "nanobanana-2") apiModel = "gemini-3.1-flash-image-preview";
@@ -380,10 +379,19 @@ namespace AIPortraits
                 url = baseUrl + "/v1beta/models/" + apiModel + ":generateContent?key=" + (settings.CurrentApiKey ?? "");
 
                 byte[] refSheetBytes = settings.useGearReferenceSheet ? BuildReferenceSheet(state) : null;
-                string fullPrompt = PromptCompiler.CompileImagenSystemPrompt(settings.portraitStyle, settings) + "\n\n" + prompt;
+                string framing = state != null ? state.framing : "portrait";
+                string fullPrompt = PromptCompiler.CompileImagenSystemPrompt(settings.portraitStyle, settings, framing) + "\n\n" + prompt;
+                if (portraitBytes != null && portraitBytes.Length > 0)
+                {
+                    fullPrompt += "\n\nalso attached is a reference portrait showing the character's face. please match the character's face, hair, and features from this portrait.";
+                    if (framing == "special")
+                    {
+                        fullPrompt += " DISREGARD the solid white background of this reference portrait entirely; you MUST generate the detailed thematic environment background described above.";
+                    }
+                }
                 if (refSheetBytes != null && refSheetBytes.Length > 0)
                 {
-                    fullPrompt += "\n\nattached is a reference sheet of the character's equipment sprites. please render the character wearing/holding these exact items.";
+                    fullPrompt += "\n\nattached is a reference sheet containing the character's native in-game portrait (leftmost thumbnail) and their equipment sprites. please render the character matching the native portrait's face, hair color, hair style, skin tone, and features, and wearing/holding these exact items.";
                 }
 
                 string aspectRatio = "1:1";
@@ -433,7 +441,16 @@ namespace AIPortraits
             else
             {
                 url = baseUrl + "/v1beta/models/" + apiModel + ":predict";
-                string fullPrompt = PromptCompiler.CompileImagenSystemPrompt(settings.portraitStyle, settings) + "\n\n" + prompt;
+                string framing = state != null ? state.framing : "portrait";
+                string fullPrompt = PromptCompiler.CompileImagenSystemPrompt(settings.portraitStyle, settings, framing) + "\n\n" + prompt;
+                if (portraitBytes != null && portraitBytes.Length > 0)
+                {
+                    fullPrompt += "\n\nalso attached is a reference portrait showing the character's face. please match the character's face, hair, and features from this portrait.";
+                    if (framing == "special")
+                    {
+                        fullPrompt += " DISREGARD the solid white background of this reference portrait entirely; you MUST generate the detailed thematic environment background described above.";
+                    }
+                }
 
                 string aspectRatio = "1:1";
                 if (state != null)
@@ -1016,6 +1033,70 @@ namespace AIPortraits
             return sb.ToString();
         }
 
+        private static Pawn FindPawnById(string thingId)
+        {
+            if (string.IsNullOrEmpty(thingId)) return null;
+
+            Pawn selected = Find.Selector.SingleSelectedThing as Pawn;
+            if (selected != null && selected.ThingID == thingId) return selected;
+
+            if (Find.Maps != null)
+            {
+                foreach (Map map in Find.Maps)
+                {
+                    if (map.mapPawns != null)
+                    {
+                        foreach (Pawn p in map.mapPawns.AllPawns)
+                        {
+                            if (p != null && p.ThingID == thingId)
+                                return p;
+                        }
+                    }
+                }
+            }
+
+            if (Find.World != null && Find.World.worldPawns != null)
+            {
+                foreach (Pawn p in Find.World.worldPawns.AllPawnsAliveOrDead)
+                {
+                    if (p != null && p.ThingID == thingId)
+                        return p;
+                }
+            }
+
+            return null;
+        }
+
+        private static Texture2D GetReadableNativePortraitTexture(Pawn pawn)
+        {
+            if (pawn == null) return null;
+            try
+            {
+                RenderTexture originalTex = RimWorld.PortraitsCache.Get(pawn, new UnityEngine.Vector2(256f, 256f), Rot4.South);
+                if (originalTex == null) return null;
+
+                RenderTexture temp = RenderTexture.GetTemporary(originalTex.width, originalTex.height, 0, RenderTextureFormat.Default, RenderTextureReadWrite.Linear);
+                Graphics.Blit(originalTex, temp);
+
+                RenderTexture prevActive = RenderTexture.active;
+                RenderTexture.active = temp;
+
+                Texture2D readableTex = new Texture2D(originalTex.width, originalTex.height, TextureFormat.RGBA32, false);
+                readableTex.ReadPixels(new Rect(0f, 0f, temp.width, temp.height), 0, 0);
+                readableTex.Apply();
+
+                RenderTexture.active = prevActive;
+                RenderTexture.ReleaseTemporary(temp);
+
+                return readableTex;
+            }
+            catch (Exception ex)
+            {
+                Log.Warning("[Dynamic AI Portraits] Failed to render readable native portrait: " + ex.Message);
+                return null;
+            }
+        }
+
         private static string NormalizeGearName(string input)
         {
             if (string.IsNullOrEmpty(input)) return "";
@@ -1040,23 +1121,34 @@ namespace AIPortraits
                     return null;
                 }
                 string spritesDir = System.IO.Path.Combine(AIPortraitsMod.Instance.Content.RootDir, "Sprites");
-                if (!System.IO.Directory.Exists(spritesDir))
+                Dictionary<string, string> spriteMap = new Dictionary<string, string>();
+                if (System.IO.Directory.Exists(spritesDir))
                 {
-                    Log.Warning("[Dynamic AI Portraits] Sprites directory not found: " + spritesDir);
-                    return null;
+                    string[] files = System.IO.Directory.GetFiles(spritesDir, "*.png");
+                    if (files != null)
+                    {
+                        foreach (string file in files)
+                        {
+                            string filename = System.IO.Path.GetFileNameWithoutExtension(file);
+                            string norm = NormalizeGearName(filename);
+                            if (!string.IsNullOrEmpty(norm) && !spriteMap.ContainsKey(norm))
+                            {
+                                spriteMap[norm] = file;
+                            }
+                        }
+                    }
                 }
 
-                string[] files = System.IO.Directory.GetFiles(spritesDir, "*.png");
-                if (files == null || files.Length == 0) return null;
+                List<Texture2D> texturesToCombine = new List<Texture2D>();
 
-                Dictionary<string, string> spriteMap = new Dictionary<string, string>();
-                foreach (string file in files)
+                // Try to find the pawn in game and prepend its native portrait rendering
+                Pawn pawn = FindPawnById(state.pawnId);
+                if (pawn != null)
                 {
-                    string filename = System.IO.Path.GetFileNameWithoutExtension(file);
-                    string norm = NormalizeGearName(filename);
-                    if (!string.IsNullOrEmpty(norm) && !spriteMap.ContainsKey(norm))
+                    Texture2D nativeTex = GetReadableNativePortraitTexture(pawn);
+                    if (nativeTex != null)
                     {
-                        spriteMap[norm] = file;
+                        texturesToCombine.Add(nativeTex);
                     }
                 }
 
@@ -1075,10 +1167,6 @@ namespace AIPortraits
                         }
                     }
                 }
-
-                if (gearItems.Count == 0) return null;
-
-                List<Texture2D> texturesToCombine = new List<Texture2D>();
 
                 foreach (string gear in gearItems)
                 {
@@ -1218,6 +1306,8 @@ namespace AIPortraits
             string framing = (state != null && !string.IsNullOrEmpty(state.framing)) ? state.framing : "portrait";
             string aspectRatio = (framing == "special") ? "16:9" : "9:16";
 
+            string diskKey = AIPortraitsManager.GetActiveKeyForFraming(pawn, framing);
+
             string base64Image = Convert.ToBase64String(initImageBytes);
 
             // Correct image-to-video payload: 'image' key lives directly inside instance,
@@ -1248,7 +1338,7 @@ namespace AIPortraits
                 request.SetRequestHeader("Content-Type", "application/json");
                 request.timeout = 60;
 
-                Log.Message("[Dynamic AI Portraits] Initiating Veo Video for " + pawn.LabelShortCap + "...");
+                Log.Message("[Dynamic AI Portraits] Initiating Veo Video for " + pawn.LabelShortCap + " (" + framing + ")...");
                 yield return request.SendWebRequest();
 
                 if (!IsSuccess(request))
@@ -1294,7 +1384,6 @@ namespace AIPortraits
                             }
                             else if (videoBytes != null)
                             {
-                                string diskKey = AIPortraitsManager.GetActiveKey(pawn);
                                 string videoPath = System.IO.Path.Combine(CacheManager.GetCacheDirectory(), diskKey + ".mp4");
                                 try
                                 {
@@ -1304,8 +1393,7 @@ namespace AIPortraits
                                     string dir = CacheManager.GetPortraitSaveDirectory(pawn.LabelShortCap);
                                     string ts = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
                                     string styleName = AIPortraitsMod.settings.portraitStyle.ToString();
-                                    string safeFraming = state != null ? state.framing : "portrait";
-                                    string file = pawn.LabelShortCap + "_" + styleName + "_" + safeFraming + "_" + ts + ".mp4";
+                                    string file = pawn.LabelShortCap + "_" + styleName + "_" + framing + "_" + ts + ".mp4";
                                     string userPath = System.IO.Path.Combine(dir, file);
                                     System.IO.File.WriteAllBytes(userPath, videoBytes);
 

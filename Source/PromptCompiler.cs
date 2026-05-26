@@ -53,23 +53,40 @@ namespace AIPortraits
 
         // Returns the Imagen system prompt for the given style.
         // Only used by AsyncAIClient for the Imagen backend — other backends use the style headers in the positive prompt.
-        public static string CompileImagenSystemPrompt(PortraitStyle style, AIPortraitsSettings settings)
+        public static string CompileImagenSystemPrompt(PortraitStyle style, AIPortraitsSettings settings, string framing)
         {
+            bool isSpecial = framing == "special";
+            string bg = isSpecial 
+                ? "Background: A detailed thematic background reflecting their role, skill, or environment (no white background, no transparent background)."
+                : "Background: Isolated on a solid white background, flat clean background, no environment, no gradients, no shadows.";
+            
+            string compKorean = isSpecial
+                ? "Composition: Dynamic scene framing and camera angle (like a dramatic backshot, wide-angle selfie, or low-angle action shot) reflecting their role or environment."
+                : "Composition: Bust or half-body shot. Single character. Subject centered. Dramatic light source from one side.";
+
+            string compWestern = isSpecial
+                ? "Composition: Dynamic scene framing and camera angle (like a dramatic backshot, wide-angle selfie, or low-angle action shot) reflecting their role or environment."
+                : "Composition: Bust or half-body shot. Single character. Subject centered.";
+
+            string compPixel = isSpecial
+                ? "Composition: Dynamic scene framing and camera angle (like a dramatic backshot, wide-angle selfie, or low-angle action shot) reflecting their role or environment."
+                : "Composition: Bust or half-body shot. Single character centered.";
+
             switch (style)
             {
                 case PortraitStyle.Realistic_Korean:
                     return @"Generate a Korean webtoon manhwa character portrait for a game UI overlay.
 Style: " + settings.manhwaStylePrompt + @"
-Composition: Bust or half-body shot. Single character. Subject centered. Dramatic light source from one side.
-Background: Isolated on a solid white background, flat clean background, no environment, no gradients, no shadows.
+" + compKorean + @"
+" + bg + @"
 Content: Render the character's appearance, expression, gear, and any special effects exactly as described in the user prompt. Do not add, remove, or override any described details.
 Eyes: The character's eyes must be OPEN and clearly visible by default. Only render closed eyes if the prompt explicitly says the character is sleeping or dead. Do not default to closed-eye expressions even when the art style traditionally uses them.";
 
                 case PortraitStyle.Realistic_Western:
                     return @"Generate an Adult Swim cartoon character portrait for a game UI overlay.
 Style: " + settings.cartoonStylePrompt + @"
-Composition: Bust or half-body shot. Single character. Subject centered.
-Background: Isolated on a solid white background, flat clean background, no environment, no gradients, no shadows.
+" + compWestern + @"
+" + bg + @"
 Content: Render the character's appearance, expression, gear, and any special effects exactly as described in the user prompt. Do not add, remove, or override any described details.
 Eyes: The character's eyes must be OPEN and clearly visible by default — bulging cartoon eyes with small dot pupils. Only render closed eyes if the prompt explicitly says the character is sleeping or dead.";
 
@@ -77,8 +94,8 @@ Eyes: The character's eyes must be OPEN and clearly visible by default — bulgi
                 default:
                     return @"Generate a high-quality 16-bit JRPG retro pixel-art character portrait for a game UI overlay.
 Style: " + settings.pixelStylePrompt + @"
-Composition: Bust or half-body shot. Single character centered.
-Background: Isolated on a solid white background, flat clean background, no environment, no gradients, no shadows.
+" + compPixel + @"
+" + bg + @"
 Content: Render the character's appearance, clean expression, and gear exactly as described in the user prompt. Keep the portrait looking clean, professional, and aesthetically pleasing. Never render closed eyes, screaming faces, or distorted facial features unless explicitly requested.";
             }
         }
@@ -628,11 +645,11 @@ Content: Render the character's appearance, clean expression, and gear exactly a
 
             if (skill.Contains("plant"))
             {
-                p.Append("holding a cute green potted seedling, ");
+                p.Append("holding a freshly harvested healroot sprig with distinctive blue-green leaves, ");
             }
             else if (skill.Contains("medicine"))
             {
-                p.Append("holding a retro red medical kit with a white cross, ");
+                p.Append("holding a glowing blue glitterworld medicine injector, ");
             }
             else if (skill.Contains("shooting"))
             {
@@ -644,35 +661,35 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             }
             else if (skill.Contains("mining"))
             {
-                p.Append("resting a heavy steel pickaxe over one shoulder, ");
+                p.Append("holding a raw chunk of glowing blue plasteel ore, ");
             }
             else if (skill.Contains("cooking"))
             {
-                p.Append("holding a wooden ladle and a bowl of hot soup, ");
+                p.Append("holding a wooden plate of lavish meal with roasted meat and wild berries, ");
             }
             else if (skill.Contains("animal"))
             {
-                p.Append("with a tiny cute brown squirrel sitting on their shoulder, ");
+                p.Append("with a cute loyal baby muffalo standing beside them, ");
             }
             else if (skill.Contains("art"))
             {
-                p.Append("holding a wooden paintbrush and a paint palette, ");
+                p.Append("holding a carving chisel and a small polished green jade sculpture, ");
             }
             else if (skill.Contains("research") || skill.Contains("intellect"))
             {
-                p.Append("holding a thick open leather-bound book, ");
+                p.Append("holding a glowing blue techprint datashard with digital circuitry lines, ");
             }
             else if (skill.Contains("construct"))
             {
-                p.Append("holding a metal hammer and a blueprint roll, ");
+                p.Append("holding a high-tech constructor tool and a metallic component, ");
             }
             else if (skill.Contains("crafting"))
             {
-                p.Append("holding a heavy blacksmith hammer, ");
+                p.Append("holding tailors shears and a roll of brilliant red devilstrand fabric, ");
             }
             else if (skill.Contains("social"))
             {
-                p.Append("holding a rolled-up treaty document with a wax seal, ");
+                p.Append("holding a royal scroll of title with a golden crown seal, ");
             }
         }
 
@@ -722,7 +739,7 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             }
 
             if (state.bodyInjuries.Count > 0)
-                p.Append("clean stylized battle scars on torso, ");
+                p.Append("clean stylized battle scars on face or neck, ");
 
             if (state.missingParts.Count > 0)
                 p.Append(string.Join(", ", state.missingParts.GetRange(0, Math.Min(state.missingParts.Count, 2)).ToArray()) + ", ");
@@ -763,7 +780,17 @@ Content: Render the character's appearance, clean expression, and gear exactly a
 
             // Permanent visible scars (frostbite, burn) — separate from active injuries
             foreach (string ps in state.permanentScars)
-                p.Append(ps + ", ");
+            {
+                string psl = ps.ToLower();
+                if (psl.Contains("torso") || psl.Contains("chest") || psl.Contains("abdomen") || psl.Contains("ribs") || psl.Contains("heart") || psl.Contains("lung") || psl.Contains("stomach") || psl.Contains("liver") || psl.Contains("kidney"))
+                {
+                    p.Append("subtle scar on neck, ");
+                }
+                else
+                {
+                    p.Append(ps + ", ");
+                }
+            }
 
             // Drug addictions — each has distinctive visual signs.
             // Skip alcohol/smokeleaf if AppendCuteProps already rendered a prop for them
@@ -817,7 +844,7 @@ Content: Render the character's appearance, clean expression, and gear exactly a
 
             // Rim light from ideology color — applies to all styles since it's on the character, not the background
             if (settings.includeRimLighting && !string.IsNullOrEmpty(state.favoriteColor))
-                p.Append("subtle " + state.favoriteColor + " rim light on the character, ");
+                p.Append("soft " + state.favoriteColor + " rim lighting, ");
 
             // ── EXTENDED FLAVOR ────────────────────────────────────────────────────
 

@@ -165,9 +165,13 @@ namespace AIPortraits
 
             CachedState cs;
             if (stateCache.TryGetValue(cacheKey, out cs) && (now - cs.tickComputed) < StateCacheLifetimeTicks)
+            {
+                if (cs.state != null) cs.state.framing = framing;
                 return cs.state;
+            }
 
             PawnState fresh = PawnStateExtractor.ExtractState(pawn);
+            if (fresh != null) fresh.framing = framing;
             stateCache[cacheKey] = new CachedState { state = fresh, tickComputed = now };
             return fresh;
         }
@@ -356,6 +360,7 @@ namespace AIPortraits
 
             PawnState state = PawnStateExtractor.ExtractState(pawn);
             if (state == null) return;
+            state.framing = framing;
             TriggerGeneration(pawn, state, diskKey, continuityToken);
         }
 
@@ -511,6 +516,10 @@ namespace AIPortraits
             {
                 state = PawnStateExtractor.ExtractState(pawn);
             }
+            if (state != null)
+            {
+                state.framing = framing;
+            }
 
             Log.Message("[Dynamic AI Portraits] CUSTOM PROMPT for " + pawn.LabelShortCap + " (" + framing + "):\n" + customPrompt);
 
@@ -638,6 +647,10 @@ namespace AIPortraits
             videoError[key] = null;
 
             PawnState state = GetCachedPawnState(pawn);
+            if (state != null)
+            {
+                state.framing = framing;
+            }
             string apiKey = AIPortraitsMod.settings.giApiKey;
 
             AsyncAIClient.QueueVideoGeneration(pawn, state, initImageBytes, apiKey, delegate(string videoPath, string err)

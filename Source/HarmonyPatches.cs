@@ -76,11 +76,11 @@ namespace AIPortraits
                     RenderTexture videoTex = VideoPlaybackManager.GetActiveTexture();
                     if (videoTex != null)
                     {
-                        GUI.DrawTexture(portraitRect, videoTex, ScaleMode.ScaleToFit);
+                        GUI.DrawTexture(portraitRect, videoTex, ScaleMode.ScaleAndCrop);
                     }
                     else if (portrait != null)
                     {
-                        GUI.DrawTexture(portraitRect, portrait, ScaleMode.ScaleToFit);
+                        GUI.DrawTexture(portraitRect, portrait, ScaleMode.ScaleAndCrop);
                     }
                 }
                 else
@@ -99,7 +99,7 @@ namespace AIPortraits
 
                     if (portrait != null)
                     {
-                        GUI.DrawTexture(portraitRect, portrait, ScaleMode.ScaleToFit);
+                        GUI.DrawTexture(portraitRect, portrait, ScaleMode.ScaleAndCrop);
                     }
                     else
                     {
