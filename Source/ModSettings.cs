@@ -694,8 +694,20 @@ namespace AIPortraits
                 listing.Gap(listing.verticalSpacing);
                 listing.Gap(2f);
                 Text.Font = GameFont.Tiny;
-                GUI.color = new Color(0.6f, 0.6f, 0.6f);
-                Widgets.Label(listing.GetRect(20f), "  " + ApiKeyHint(backendType));
+
+                // Inline validation: red warning when key is missing for a provider that needs it
+                // (originally proposed by Jules-bot palette-ux-improvements).
+                if (string.IsNullOrEmpty(CurrentApiKey))
+                {
+                    GUI.color = new Color(0.9f, 0.3f, 0.3f);
+                    Widgets.Label(listing.GetRect(20f),
+                        "  ⚠ API key required for " + ProviderLabel(backendType).Trim());
+                }
+                else
+                {
+                    GUI.color = new Color(0.6f, 0.6f, 0.6f);
+                    Widgets.Label(listing.GetRect(20f), "  " + ApiKeyHint(backendType));
+                }
                 GUI.color = Color.white;
                 Text.Font = GameFont.Small;
             }
@@ -1096,6 +1108,10 @@ namespace AIPortraits
             {
                 btnLabel = "Painting (Generating)...";
                 GUI.enabled = false;
+                // Loading-state tooltip so the user understands the button is intentionally
+                // disabled (originally proposed by Jules-bot palette-ux-improvements).
+                TooltipHandler.TipRegion(createBtnRect,
+                    "A portrait is currently being generated for this pawn. Please wait for it to finish.");
             }
             if (Widgets.ButtonText(createBtnRect, btnLabel))
             {

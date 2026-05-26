@@ -25,3 +25,16 @@ build_local.bat
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Stray .NET runtime artifacts that occasionally leak into Assemblies/
+# (we only want our own AIPortraits.dll there)
+Assemblies/ko/
+Assemblies/mscorlib.dll
+Assemblies/normidna.nlp
+Assemblies/normnfc.nlp
+Assemblies/normnfd.nlp
+Assemblies/normnfkc.nlp
+Assemblies/normnfkd.nlp
+
+# Sprites/ — uncommitted research/reference assets, kept local
+Sprites/

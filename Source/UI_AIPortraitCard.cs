@@ -776,11 +776,20 @@ namespace AIPortraits
 
         private static void DrawStyleButton(Rect btn, string label, PortraitStyle style, string tooltip)
         {
-            bool isActive = AIPortraitsMod.settings.portraitStyle == style;
+            bool isActive  = AIPortraitsMod.settings.portraitStyle == style;
+            bool isHovered = Mouse.IsOver(btn);
 
             Color bgColor = isActive
                 ? new Color(0.2f, 0.55f, 0.8f, 0.85f)
                 : new Color(0.15f, 0.15f, 0.15f, 0.7f);
+
+            // Hover brightness boost (originally proposed by Jules-bot palette/add-hover-states)
+            if (isHovered)
+            {
+                bgColor.r += 0.1f;
+                bgColor.g += 0.1f;
+                bgColor.b += 0.1f;
+            }
 
             Widgets.DrawBoxSolid(btn, bgColor);
             GUI.color = new Color(1f, 1f, 1f, 0.15f); Widgets.DrawBox(btn, 1); GUI.color = Color.white;
@@ -862,6 +871,13 @@ namespace AIPortraits
 
         private static void DrawButton(Rect rect, string label, Color bgColor, string tooltip)
         {
+            // Hover brightness boost (Jules-bot palette/add-hover-states)
+            if (Mouse.IsOver(rect))
+            {
+                bgColor.r += 0.1f;
+                bgColor.g += 0.1f;
+                bgColor.b += 0.1f;
+            }
             Widgets.DrawBoxSolid(rect, bgColor);
             GUI.color = new Color(1f, 1f, 1f, 0.15f); Widgets.DrawBox(rect, 1); GUI.color = Color.white;
             Text.Font = GameFont.Tiny; Text.Anchor = TextAnchor.MiddleCenter;
