@@ -523,7 +523,7 @@ namespace AIPortraits
                     {
                         string activeKey = GetActiveKeyForFraming(pawn, framing);
                         AIPortraitsMod.settings.activePortraits[activeKey] = savedPath;
-                        AIPortraitsMod.Instance.WriteSettings();
+                        AIPortraitsMod.instance.WriteSettings();
 
                         string lockedCacheKey = pawnKey + LockedSuffix;
                         Texture2D oldLocked;
@@ -634,7 +634,7 @@ namespace AIPortraits
                     {
                         string activeKey = GetActiveKeyForFraming(pawn, framing);
                         AIPortraitsMod.settings.activePortraits[activeKey] = savedPath;
-                        AIPortraitsMod.Instance.WriteSettings();
+                        AIPortraitsMod.instance.WriteSettings();
 
                         string lockedCacheKey = pawnKey + LockedSuffix;
                         Texture2D oldLocked;
@@ -863,7 +863,7 @@ namespace AIPortraits
             if (Widgets.ButtonInvisible(btn))
             {
                 AIPortraitsMod.settings.portraitStyle = style;
-                AIPortraitsMod.Instance.WriteSettings();
+                AIPortraitsMod.instance.WriteSettings();
             }
         }
 

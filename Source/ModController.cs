@@ -7,11 +7,11 @@ namespace AIPortraits
     public class AIPortraitsMod : Mod
     {
         public static AIPortraitsSettings settings;
-        public static AIPortraitsMod Instance;
+        public static AIPortraitsMod instance;
 
         public AIPortraitsMod(ModContentPack content) : base(content)
         {
-            Instance = this;
+            instance = this;
             settings = GetSettings<AIPortraitsSettings>();
             
             // Execute Harmony patches

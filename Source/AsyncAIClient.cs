@@ -1122,11 +1122,11 @@ namespace AIPortraits
             if (state == null) return null;
             try
             {
-                if (AIPortraitsMod.Instance == null || AIPortraitsMod.Instance.Content == null)
+                if (AIPortraitsMod.instance == null || AIPortraitsMod.instance.Content == null)
                 {
                     return null;
                 }
-                string spritesDir = System.IO.Path.Combine(AIPortraitsMod.Instance.Content.RootDir, "Sprites");
+                string spritesDir = System.IO.Path.Combine(AIPortraitsMod.instance.Content.RootDir, "Sprites");
                 Dictionary<string, string> spriteMap = new Dictionary<string, string>();
                 if (System.IO.Directory.Exists(spritesDir))
                 {

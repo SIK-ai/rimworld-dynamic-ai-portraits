@@ -232,7 +232,7 @@ namespace AIPortraits
                 {
                     if (AIPortraitsMod.settings.pawnFraming == null) AIPortraitsMod.settings.pawnFraming = new System.Collections.Generic.Dictionary<string, string>();
                     AIPortraitsMod.settings.pawnFraming[pawn.ThingID] = framingName;
-                    AIPortraitsMod.Instance.WriteSettings();
+                    AIPortraitsMod.instance.WriteSettings();
                     SoundDefOf.Click.PlayOneShotOnCamera(null);
                     VideoPlaybackManager.StopPlayback();
                 }
@@ -332,7 +332,7 @@ namespace AIPortraits
                         AIPortraitsMod.settings.pawnVideoToggles = new System.Collections.Generic.Dictionary<string, bool>();
 
                     AIPortraitsMod.settings.pawnVideoToggles[pawn.ThingID] = newState;
-                    AIPortraitsMod.Instance.WriteSettings();
+                    AIPortraitsMod.instance.WriteSettings();
                     SoundDefOf.Click.PlayOneShotOnCamera(null);
 
                     if (!newState)

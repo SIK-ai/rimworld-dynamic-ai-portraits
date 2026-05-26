@@ -27,15 +27,15 @@ namespace AIPortraits
 
         private struct YCbCrColor
         {
-            public float Y;
-            public float Cb;
-            public float Cr;
+            public float y;
+            public float cb;
+            public float cr;
 
             public YCbCrColor(Color32 color)
             {
-                Y  =  0.299f * color.r + 0.587f * color.g + 0.114f * color.b;
-                Cb = -0.168736f * color.r - 0.331264f * color.g + 0.5f * color.b + 128f;
-                Cr =  0.5f * color.r - 0.418688f * color.g - 0.081312f * color.b + 128f;
+                y  =  0.299f * color.r + 0.587f * color.g + 0.114f * color.b;
+                cb = -0.168736f * color.r - 0.331264f * color.g + 0.5f * color.b + 128f;
+                cr =  0.5f * color.r - 0.418688f * color.g - 0.081312f * color.b + 128f;
             }
         }
 
@@ -357,12 +357,12 @@ namespace AIPortraits
             YCbCrColor p = new YCbCrColor(pixel);
 
             // Skin Tone Guard: Protect warm human skin colors (face, neck, ears) from erasure
-            if (p.Cb >= 95f && p.Cb <= 126f && p.Cr >= 130f && p.Cr <= 165f)
+            if (p.cb >= 95f && p.cb <= 126f && p.cr >= 130f && p.cr <= 165f)
             {
                 bool bgIsSkinLike = false;
                 foreach (var bg in bgColors)
                 {
-                    if (bg.Cb >= 95f && bg.Cb <= 126f && bg.Cr >= 130f && bg.Cr <= 165f)
+                    if (bg.cb >= 95f && bg.cb <= 126f && bg.cr >= 130f && bg.cr <= 165f)
                     {
                         bgIsSkinLike = true;
                         break;
@@ -372,13 +372,13 @@ namespace AIPortraits
             }
 
             // Saturated/Vibrant Color Guard: Protect colored hair/clothing if background is neutral
-            float pSat = System.Math.Abs(p.Cb - 128f) + System.Math.Abs(p.Cr - 128f);
+            float pSat = System.Math.Abs(p.cb - 128f) + System.Math.Abs(p.cr - 128f);
             if (pSat > 25f)
             {
                 bool bgIsSaturated = false;
                 foreach (var bg in bgColors)
                 {
-                    float bgSat = System.Math.Abs(bg.Cb - 128f) + System.Math.Abs(bg.Cr - 128f);
+                    float bgSat = System.Math.Abs(bg.cb - 128f) + System.Math.Abs(bg.cr - 128f);
                     if (bgSat > 20f)
                     {
                         bgIsSaturated = true;
@@ -391,8 +391,8 @@ namespace AIPortraits
             // Compare against dominant background color profiles
             foreach (var bg in bgColors)
             {
-                float chromaDist = System.Math.Abs(p.Cb - bg.Cb) + System.Math.Abs(p.Cr - bg.Cr);
-                float lumaDist   = System.Math.Abs(p.Y - bg.Y);
+                float chromaDist = System.Math.Abs(p.cb - bg.cb) + System.Math.Abs(p.cr - bg.cr);
+                float lumaDist   = System.Math.Abs(p.y - bg.y);
 
                 if (chromaDist <= chromaTol && lumaDist <= lumaTol)
                     return true;

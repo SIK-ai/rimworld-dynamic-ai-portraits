@@ -1116,7 +1116,7 @@ namespace AIPortraits
                 pawnFraming[selectedPawn.ThingID] = "portrait";
                 selectedSavedPortrait = null;
                 customPromptBuffer = "";
-                AIPortraitsMod.Instance.WriteSettings();
+                AIPortraitsMod.instance.WriteSettings();
                 SoundDefOf.Click.PlayOneShotOnCamera(null);
             }
             GUI.color = Color.white;
@@ -1128,7 +1128,7 @@ namespace AIPortraits
                 pawnFraming[selectedPawn.ThingID] = "bodyshot";
                 selectedSavedPortrait = null;
                 customPromptBuffer = "";
-                AIPortraitsMod.Instance.WriteSettings();
+                AIPortraitsMod.instance.WriteSettings();
                 SoundDefOf.Click.PlayOneShotOnCamera(null);
             }
             GUI.color = Color.white;
@@ -1140,7 +1140,7 @@ namespace AIPortraits
                 pawnFraming[selectedPawn.ThingID] = "special";
                 selectedSavedPortrait = null;
                 customPromptBuffer = "";
-                AIPortraitsMod.Instance.WriteSettings();
+                AIPortraitsMod.instance.WriteSettings();
                 SoundDefOf.Click.PlayOneShotOnCamera(null);
             }
             GUI.color = Color.white;
@@ -1196,7 +1196,7 @@ namespace AIPortraits
                     }
                 }
                 AIPortraitsManager.ClearPawnActiveTextureCache(selectedPawn);
-                AIPortraitsMod.Instance.WriteSettings();
+                AIPortraitsMod.instance.WriteSettings();
             }
             GUI.color = Color.white;
 
@@ -1345,7 +1345,7 @@ namespace AIPortraits
                                 string key = selectedPawn.ThingID + "_" + sp.framingName;
                                 activePortraits[key] = sp.pngPath;
                                 AIPortraitsManager.ClearPawnActiveTextureCache(selectedPawn);
-                                AIPortraitsMod.Instance.WriteSettings();
+                                AIPortraitsMod.instance.WriteSettings();
                             }
                         }
 
@@ -1373,7 +1373,7 @@ namespace AIPortraits
                                                 activePortraits.Remove(legacyKey);
                                             }
                                             AIPortraitsManager.ClearPawnActiveTextureCache(selectedPawn);
-                                            AIPortraitsMod.Instance.WriteSettings();
+                                            AIPortraitsMod.instance.WriteSettings();
                                         }
 
                                         if (selectedSavedPortrait == sp)
