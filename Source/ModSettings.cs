@@ -672,14 +672,15 @@ namespace AIPortraits
             listing.Gap(8f);
 
             // ── PROMPT GENERATION ─────────────────────────────────────────────────
-            // Pick a model + paste a key. With a key the LLM rewrites the prompt; blank
-            // uses the in-house compiled template automatically (see QueueGeneration).
+            // One line: a narrow model dropdown with the API key field beside it. With a
+            // key the LLM rewrites the prompt; blank uses the in-house compiled template
+            // automatically (see QueueGeneration).
             listing.Label("Prompt Generation");
             listing.Gap(6f);
 
-            Rect pgModelRow = listing.GetRect(32f);
-            Widgets.Label(new Rect(pgModelRow.x, pgModelRow.y + 6f, 60f, 24f), "Model:");
-            Rect pgModelBtn = new Rect(pgModelRow.x + 60f, pgModelRow.y, pgModelRow.width - 60f, 32f);
+            Rect pgRow = listing.GetRect(30f);
+            float pgModelW = 170f;
+            Rect pgModelBtn = new Rect(pgRow.x, pgRow.y, pgModelW, 30f);
             if (Widgets.ButtonText(pgModelBtn, LLMModelLabel(llmModelType)))
             {
                 var pgOpts = new List<FloatMenuOption>();
@@ -691,12 +692,8 @@ namespace AIPortraits
                 }
                 Find.WindowStack.Add(new FloatMenu(pgOpts));
             }
-            listing.Gap(6f);
-
-            listing.Label("Prompt API Key:");
-            Rect pgKeyRect = listing.GetRect(24f);
+            Rect pgKeyRect = new Rect(pgRow.x + pgModelW + 8f, pgRow.y + 3f, pgRow.width - pgModelW - 8f, 24f);
             llmApiKey = UnityEngine.GUI.PasswordField(pgKeyRect, llmApiKey, '*');
-            listing.Gap(listing.verticalSpacing);
             listing.Gap(2f);
             Text.Font = GameFont.Tiny;
             GUI.color = new Color(0.55f, 0.55f, 0.55f);
@@ -709,26 +706,44 @@ namespace AIPortraits
             listing.Gap(8f);
 
             // ── IMAGE GENERATION ──────────────────────────────────────────────────
-            // Cloudflare when a key is set, otherwise free Pollinations. Paid sources
-            // auto-fall back to Pollinations on failure (AsyncAIClient.DispatchImageBackend).
+            // Pick a source. Free = Pollinations (no key). Paid sources auto-fall back to
+            // Pollinations on failure (AsyncAIClient.DispatchImageBackend).
             listing.Label("Image Generation");
             listing.Gap(6f);
+
+            Rect imgRow = listing.GetRect(32f);
+            float imgBtnW = imgRow.width / 4f;
+            bool freeActive = backendType == BackendType.Pollinations;
+            bool cfActive = backendType == BackendType.Cloudflare;
+            bool imagenActive = backendType == BackendType.GoogleImagen && giModelName != null && giModelName.StartsWith("imagen");
+            bool nb2Active = backendType == BackendType.GoogleImagen && giModelName == "nanobanana-2";
+
+            Rect imgFreeBtn = new Rect(imgRow.x, imgRow.y, imgBtnW, imgRow.height);
+            if (Widgets.ButtonText(imgFreeBtn, "Free")) ApplyProviderDefaults(BackendType.Pollinations);
+            if (freeActive) { Widgets.DrawBoxSolid(imgFreeBtn, new Color(0.2f, 0.35f, 0.45f, 0.35f)); Widgets.DrawBox(imgFreeBtn, 2); }
+
+            Rect imgCfBtn = new Rect(imgRow.x + imgBtnW, imgRow.y, imgBtnW, imgRow.height);
+            if (Widgets.ButtonText(imgCfBtn, "Cloudflare")) ApplyProviderDefaults(BackendType.Cloudflare);
+            if (cfActive) { Widgets.DrawBoxSolid(imgCfBtn, new Color(0.2f, 0.35f, 0.45f, 0.35f)); Widgets.DrawBox(imgCfBtn, 2); }
+
+            Rect imgImagenBtn = new Rect(imgRow.x + imgBtnW * 2f, imgRow.y, imgBtnW, imgRow.height);
+            if (Widgets.ButtonText(imgImagenBtn, "Imagen4 Fast")) { ApplyProviderDefaults(BackendType.GoogleImagen); giModelName = "imagen-4.0-fast-generate-001"; }
+            if (imagenActive) { Widgets.DrawBoxSolid(imgImagenBtn, new Color(0.2f, 0.35f, 0.45f, 0.35f)); Widgets.DrawBox(imgImagenBtn, 2); }
+
+            Rect imgNb2Btn = new Rect(imgRow.x + imgBtnW * 3f, imgRow.y, imgBtnW, imgRow.height);
+            if (Widgets.ButtonText(imgNb2Btn, "Nano Banana 2")) { ApplyProviderDefaults(BackendType.GoogleImagen); giModelName = "nanobanana-2"; }
+            if (nb2Active) { Widgets.DrawBoxSolid(imgNb2Btn, new Color(0.2f, 0.35f, 0.45f, 0.35f)); Widgets.DrawBox(imgNb2Btn, 2); }
+
+            listing.Gap(10f);
 
             listing.Label("Cloudflare API Key:");
             Rect cfKeyRect = listing.GetRect(24f);
             cfApiKey = UnityEngine.GUI.PasswordField(cfKeyRect, cfApiKey, '*');
-            listing.Gap(listing.verticalSpacing);
-            listing.Gap(2f);
-            Text.Font = GameFont.Tiny;
-            GUI.color = new Color(0.55f, 0.55f, 0.55f);
-            Widgets.Label(listing.GetRect(20f), "  Format account_id:token (dash.cloudflare.com → Workers AI).  Blank = free Pollinations.");
-            GUI.color = Color.white;
-            Text.Font = GameFont.Small;
+            listing.Gap(6f);
 
-            // Cloudflare if a key is present, else free Pollinations — unless an advanced
-            // backend was explicitly chosen under Advanced Settings.
-            if (backendType == BackendType.Pollinations || backendType == BackendType.Cloudflare)
-                backendType = string.IsNullOrEmpty(cfApiKey) ? BackendType.Pollinations : BackendType.Cloudflare;
+            listing.Label("Google (paid) API Key:");
+            Rect giKeyRect = listing.GetRect(24f);
+            giApiKey = UnityEngine.GUI.PasswordField(giKeyRect, giApiKey, '*');
 
             listing.Gap(12f);
             listing.GapLine();
