@@ -11,28 +11,28 @@ _(nothing pending)_
 ## [0.2.0] — 2026-05-26
 
 ### Added
-- **Google Veo 3.1 Lite Video Integration**: Added support for Google Veo 3.1 Lite video generation. Automatically animates static pawn portraits into 4-second looping previews. Integrates with the gallery player and cache mapping. See [AsyncAIClient.cs](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/AsyncAIClient.cs#L1365-L1499).
-- **ModSettings Scale and Offset Controls**: Surface manual controls in [ModSettings.cs](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/ModSettings.cs) to adjust horizontal offset, vertical offset, and portrait scale.
+- **Google Veo 3.1 Lite Video Integration**: Added support for Google Veo 3.1 Lite video generation. Automatically animates static pawn portraits into 4-second looping previews. Integrates with the gallery player and cache mapping. See [AsyncAIClient.cs](Source/AsyncAIClient.cs#L1365-L1499).
+- **ModSettings Scale and Offset Controls**: Surface manual controls in [ModSettings.cs](Source/ModSettings.cs) to adjust horizontal offset, vertical offset, and portrait scale.
 - **Exclude Helmets/Headgear**: Added a toggle option to exclude headgear from both the generated prompt text and native render layers.
 - **Privacy & Security (Sentinel)**: 
-  - Integrated an automated [SanitizeLog](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/AsyncAIClient.cs) method to scrub API keys, tokens, and account IDs from logs, URLs, and exception messages before logging to disk.
-  - Masked all sensitive key text fields in the Mod Options menu ([ModSettings.cs](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/ModSettings.cs)) with standard password field hides.
-  - Created a portable local build layout via [build_local.bat](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/build_local.bat) to keep local compilation paths and Windows usernames private.
+  - Integrated an automated [SanitizeLog](Source/AsyncAIClient.cs) method to scrub API keys, tokens, and account IDs from logs, URLs, and exception messages before logging to disk.
+  - Masked all sensitive key text fields in the Mod Options menu ([ModSettings.cs](Source/ModSettings.cs)) with standard password field hides.
+  - Created a portable local build layout via [build_local.bat](build_local.bat) to keep local compilation paths and Windows usernames private.
 - **Reset to Defaults**: Added a "Reset to Default Prompts & Settings" button in Mod Options to restore original prompt templates.
-- **Organized Save Folders**: Portraits are now saved in subfolders keyed to the pawn's unique ID (`Documents/RimWorld Portraits/<PawnID>_<PawnName>/`) to prevent collisions between pawns sharing identical names. Managed by [CacheManager.cs](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/CacheManager.cs).
-- **LLM Prompt Instruction Enhancements**: Enhanced rules 4 and 8 in [PromptCompiler.cs](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/PromptCompiler.cs#L1085) to instruct Gemini Flash/LLM to write richer visual descriptions (e.g., hair flows, volumetric highlights, texture detail, color accents) for higher-aesthetic portrait outcomes.
-- **Scheduled Agents Personas**: Added and expanded [SCHEDULED_AGENTS.md](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/SCHEDULED_AGENTS.md) containing 50 custom RimWorld agent personas.
+- **Organized Save Folders**: Portraits are now saved in subfolders keyed to the pawn's unique ID (`Documents/RimWorld Portraits/<PawnID>_<PawnName>/`) to prevent collisions between pawns sharing identical names. Managed by [CacheManager.cs](Source/CacheManager.cs).
+- **LLM Prompt Instruction Enhancements**: Enhanced rules 4 and 8 in [PromptCompiler.cs](Source/PromptCompiler.cs#L1085) to instruct Gemini Flash/LLM to write richer visual descriptions (e.g., hair flows, volumetric highlights, texture detail, color accents) for higher-aesthetic portrait outcomes.
+- **Scheduled Agents Personas**: Added and expanded [SCHEDULED_AGENTS.md](SCHEDULED_AGENTS.md) containing 50 custom RimWorld agent personas.
 
 ### Fixed & Optimized (Bolt)
-- **Garbage Collection Reduction**: Replaced string concatenation for cache lookup with a lightweight [PawnFramingKey](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/UI_AIPortraitCard.cs#L23) struct in the UI render loop, removing substantial per-frame GC pressure.
-- **Memoized Cache Lookups**: Memoized `GetActiveKey` lookups and implemented a `knownMissingFiles` cache inside [UI_AIPortraitCard.cs](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/UI_AIPortraitCard.cs) to avoid redundant, expensive disk I/O checks for missing assets.
-- **Reference Sheet Optimization**: Optimized `BuildReferenceSheet` texture stitching performance in [AsyncAIClient.cs](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/AsyncAIClient.cs).
+- **Garbage Collection Reduction**: Replaced string concatenation for cache lookup with a lightweight [PawnFramingKey](Source/UI_AIPortraitCard.cs#L23) struct in the UI render loop, removing substantial per-frame GC pressure.
+- **Memoized Cache Lookups**: Memoized `GetActiveKey` lookups and implemented a `knownMissingFiles` cache inside [UI_AIPortraitCard.cs](Source/UI_AIPortraitCard.cs) to avoid redundant, expensive disk I/O checks for missing assets.
+- **Reference Sheet Optimization**: Optimized `BuildReferenceSheet` texture stitching performance in [AsyncAIClient.cs](Source/AsyncAIClient.cs).
 - **UX & UI Refinement (Palette)**:
   - Added button hover highlight states to all settings buttons and Pawn Gallery thumbnails.
   - Added "API key required" status warning indicators when key fields are empty.
   - Added tooltips on generation buttons explaining in-flight states.
 - **Cleanup Passes**: 
-  - Ran five code hygiene and codebase health passes, removing unused fields and cleaning up redundant video playback routines in [UI_AIPortraitCard.cs](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/UI_AIPortraitCard.cs#L954).
+  - Ran five code hygiene and codebase health passes, removing unused fields and cleaning up redundant video playback routines in [UI_AIPortraitCard.cs](Source/UI_AIPortraitCard.cs#L954).
   - Fixed dangling `Texture2D` instances in the locked-cache dictionary, preventing memory leaks on portrait refreshes.
   - Fixed C# 5 compatibility issues in compiled outputs.
 
@@ -81,12 +81,12 @@ First tagged release. The mod is feature-complete for v0.1 across six image back
 
 ### Added — LLM prompt engineering
 - **Gemini 3.1 Flash Lite** optional prompt rewriter — receives structured pawn data sheet, returns optimized creative image prompt.
-- Per-style LLM system prompt ([PromptCompiler.cs](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/PromptCompiler.cs#L1085)).
+- Per-style LLM system prompt ([PromptCompiler.cs](Source/PromptCompiler.cs#L1085)).
 - Fallback to compiled template on LLM failure.
 - "Prompt Generation" two-button toggle in settings (No / Gemini Flash Lite).
 
 ### Added — Engine
-- **Perceptual YCbCr background remover** — multi-peak edge color profiling, human skin tone protection, vibrant color preservation, core zone face guard, depth-limited halo cleanup. Replaces RGB-Euclidean flood fill. See [BackgroundRemover.cs](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/BackgroundRemover.cs).
+- **Perceptual YCbCr background remover** — multi-peak edge color profiling, human skin tone protection, vibrant color preservation, core zone face guard, depth-limited halo cleanup. Replaces RGB-Euclidean flood fill. See [BackgroundRemover.cs](Source/BackgroundRemover.cs).
 - Faction gating — only humanlikes of player faction (colonists / prisoners / slaves) trigger generation. Raiders / animals / mechs skipped.
 - Per-pawn-per-save cache key (`worldId_pawnId_framing`) — cross-save isolation.
 - Auto-pin on refresh — newly generated portrait becomes active automatically.

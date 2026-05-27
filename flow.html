@@ -183,7 +183,7 @@ const nodes = [
   // LLM PATH
   { id:'cpd',           x:1190, y:374, w:255, h:44, type:'process',lines:['CompilePawnStateDescription(state)'], sub:'structured pawn text for LLM input' },
   { id:'gsysp',         x:1190, y:432, w:255, h:44, type:'process',lines:['GetLLMSystemPrompt(style, settings, framing)'], sub:'art-style system instructions' },
-  { id:'llm_model',     x:1190, y:490, w:255, h:44, type:'process',lines:['Select model:'], sub:'"gemini-3.1-flash-lite"\nor "gemma-2-27b-it"' },
+  { id:'llm_model',     x:1190, y:490, w:255, h:44, type:'process',lines:['Select model:'], sub:'"gemini-3.1-flash-lite"\nor "gemma-4-26b-a4b-it"' },
   { id:'post_llm',      x:1190, y:548, w:255, h:48, type:'api',    lines:['POST generativelanguage.googleapis.com', '/{model}:generateContent'], sub:'JSON: {system_instruction, contents,\ngenerationConfig{maxTokens:200, temp:0.75}}\ntimeout: 30s' },
   { id:'llm_ok',        x:1255, y:628, w:125, h:48, type:'decision',lines:['LLM\nsuccess?'], sub:'' },
   { id:'extract_g',     x:1190, y:710, w:255, h:44, type:'process',lines:['ExtractGeminiText()'], sub:'parse candidates[0].content.parts[0].text\nclean label prefixes, whitespace, commas' },
@@ -194,7 +194,7 @@ const nodes = [
   { id:'comp_pos',      x:1480, y:374, w:255, h:44, type:'process',lines:['CompilePositivePrompt(state, settings, token)'], sub:'' },
   { id:'style_sw',      x:1555, y:440, w:105, h:48, type:'decision',lines:['style?'], sub:'' },
   { id:'korean',        x:1450, y:518, w:130, h:32, type:'process',lines:['Korean Webtoon header'], sub:'Solo Leveling manhwa, ink, chiaroscuro' },
-  { id:'western',       x:1595, y:518, w:130, h:32, type:'process',lines:['Western Realistic header'], sub:'oil painting, cinematic portrait' },
+  { id:'western',       x:1595, y:518, w:130, h:32, type:'process',lines:['Cartoon header'], sub:'Rick & Morty / Adult Swim, thick outlines, flat 2D fills (enum Realistic_Western)' },
   { id:'pixel',         x:1740, y:518, w:130, h:32, type:'process',lines:['Pixel/Dot header'], sub:'16-bit JRPG sprite, Tactics Ogre' },
   { id:'app_race',      x:1480, y:574, w:255, h:40, type:'process',lines:['AppendRaceClass'], sub:'xenotype, role, captivity, anomaly, backstory' },
   { id:'app_phys',      x:1480, y:626, w:255, h:40, type:'process',lines:['AppendPhysical'], sub:'hair style+color, skin, beard, genes, tattoo, bodytype' },
@@ -221,7 +221,7 @@ const nodes = [
 
   // ── POST-PROCESSING ───────────────────────────────────────────────────────
   { id:'deliver',       x:2420, y:220, w:530, h:44, type:'process',lines:['DeliverImage(imgBytes, prompt, provider, state, settings, cb)'], sub:'AsyncAIClient.cs' },
-  { id:'bg_rem',        x:2420, y:290, w:530, h:68, type:'process',lines:['BackgroundRemover.Process(texture)'], sub:'YCbCr convert per pixel\nSample ≤3 dominant edge colors as bg seeds\nCore-zone guard protects face center\nPass 1: strict flood-fill from edge strips\nPass 2: loose halo cleanup (depth ≤1)\nα=0 on matched bg pixels  |  MaxRemovedFraction=0.95' },
+  { id:'bg_rem',        x:2420, y:290, w:530, h:68, type:'process',lines:['Background removal (portrait / bodyshot only)'], sub:'1. Cloudflare Bria RMBG 1.4 (cloud) — if "Use AI BG Removal" + key\n2. u2netp ONNX (local, offline) — default path\n3. legacy YCbCr flood-fill — if ONNX runtime/model unavailable\n"special" framing skipped (keeps scenic background)' },
   { id:'bg_api_skip',   x:2420, y:374, w:530, h:36, type:'info',   lines:['(Google Imagen returns native transparent PNG — bg removal skipped)'], sub:'' },
   { id:'cb_call',       x:2420, y:430, w:530, h:44, type:'process',lines:['callback(Texture2D, rawBytes, promptUsed, null)'], sub:'' },
 
