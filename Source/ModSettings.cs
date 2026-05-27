@@ -658,62 +658,54 @@ namespace AIPortraits
             listing.GapLine();
             listing.Gap(8f);
 
-            // ── BACKEND TOGGLE ────────────────────────────────────────────────────
-            listing.Label("AI Backend");
+            // ── IMAGE GENERATION ──────────────────────────────────────────────────
+            // Three straightforward image sources. Anything paid auto-falls back to the
+            // free, keyless Pollinations if it errors or its key is blank (see
+            // AsyncAIClient.DispatchImageBackend). Extra backends live under Advanced.
+            listing.Label("Image Generation");
             listing.Gap(6f);
 
-            // ─── PROVIDER DROPDOWN ───────────────────────────────────────────────
-            Rect providerRow = listing.GetRect(34f);
-            Widgets.Label(new Rect(providerRow.x, providerRow.y + 8f, 90f, 24f), "Provider:");
-            Rect providerBtn = new Rect(providerRow.x + 90f, providerRow.y, providerRow.width - 90f, 34f);
-            if (Widgets.ButtonText(providerBtn, ProviderLabel(backendType)))
+            Rect srcRow = listing.GetRect(34f);
+            float srcW = srcRow.width / 3f;
+            Rect btnPol = new Rect(srcRow.x,             srcRow.y, srcW - 4f, 34f);
+            Rect btnCf  = new Rect(srcRow.x + srcW,      srcRow.y, srcW - 4f, 34f);
+            Rect btnGoo = new Rect(srcRow.x + srcW * 2f, srcRow.y, srcW - 4f, 34f);
+
+            if (backendType == BackendType.Pollinations) GUI.color = new Color(0.5f, 0.9f, 1f);
+            if (Widgets.ButtonText(btnPol, "🆓 Pollinations (free)")) ApplyProviderDefaults(BackendType.Pollinations);
+            GUI.color = Color.white;
+
+            if (backendType == BackendType.Cloudflare) GUI.color = new Color(0.5f, 0.9f, 1f);
+            if (Widgets.ButtonText(btnCf, "☁ Cloudflare")) ApplyProviderDefaults(BackendType.Cloudflare);
+            GUI.color = Color.white;
+
+            if (backendType == BackendType.GoogleImagen) GUI.color = new Color(0.5f, 0.9f, 1f);
+            if (Widgets.ButtonText(btnGoo, "💎 Google (nano-banana)"))
             {
-                var opts = new List<FloatMenuOption>();
-                BackendType[] order = new[] {
-                    BackendType.Pollinations,
-                    BackendType.Cloudflare,
-                    BackendType.GoogleImagen,
-                    BackendType.DeepInfra,
-                    BackendType.HuggingFace,
-                    BackendType.LocalA1111
-                };
-                foreach (BackendType bt in order)
-                {
-                    BackendType captured = bt;
-                    opts.Add(new FloatMenuOption(ProviderLabel(bt), delegate () { ApplyProviderDefaults(captured); }));
-                }
-                Find.WindowStack.Add(new FloatMenu(opts));
+                ApplyProviderDefaults(BackendType.GoogleImagen);
+                if (string.IsNullOrEmpty(giModelName) || giModelName.StartsWith("imagen"))
+                    giModelName = "nanobanana-pro";
             }
+            GUI.color = Color.white;
             listing.Gap(6f);
 
-            // ─── MODEL DROPDOWN (provider-filtered) ──────────────────────────────
-            string[] availableModels = ModelsForProvider(backendType);
-            if (availableModels != null && availableModels.Length > 0)
-            {
-                Rect modelRow = listing.GetRect(34f);
-                Widgets.Label(new Rect(modelRow.x, modelRow.y + 8f, 90f, 24f), "Model:");
-                Rect modelBtn = new Rect(modelRow.x + 90f, modelRow.y, modelRow.width - 90f, 34f);
-                string currentModel = string.IsNullOrEmpty(CurrentModelName) ? availableModels[0] : CurrentModelName;
-                if (Widgets.ButtonText(modelBtn, currentModel))
-                {
-                    var opts = new List<FloatMenuOption>();
-                    foreach (string m in availableModels)
-                    {
-                        string captured = m;
-                        opts.Add(new FloatMenuOption(m, delegate () { CurrentModelName = captured; }));
-                    }
-                    Find.WindowStack.Add(new FloatMenu(opts));
-                }
-                listing.Gap(6f);
-            }
-
-            // ─── PROVIDER INFO BOX ───────────────────────────────────────────────
+            // Selected-source info box
             string infoText = ProviderInfo(backendType);
             float infoHeight = Text.CalcHeight(infoText, listing.ColumnWidth - 12f) + 12f;
             Rect infoBoxRect = listing.GetRect(infoHeight);
             Widgets.DrawBoxSolid(infoBoxRect, ProviderInfoColor(backendType));
             Text.Font = GameFont.Tiny;
             Widgets.Label(infoBoxRect.ContractedBy(6f), infoText);
+            Text.Font = GameFont.Small;
+            listing.Gap(4f);
+
+            // Always-visible fallback note
+            Text.Font = GameFont.Tiny;
+            GUI.color = new Color(0.55f, 0.8f, 0.95f);
+            Widgets.Label(listing.GetRect(20f), backendType == BackendType.Pollinations
+                ? "  ↳ Free, no key required — always available."
+                : "  ↳ Auto-falls back to free Pollinations if this source fails or its key is blank.");
+            GUI.color = Color.white;
             Text.Font = GameFont.Small;
             listing.Gap(6f);
 
@@ -852,15 +844,23 @@ namespace AIPortraits
 
                 listing.Gap(8f);
 
-                listing.Label("Prompt API Key (Optional fallback to Imagen Key if blank):");
+                listing.Label("Prompt Generation API Key:");
                 Rect llmKeyRect = listing.GetRect(24f);
                 llmApiKey = UnityEngine.GUI.PasswordField(llmKeyRect, llmApiKey, '*');
                 listing.Gap(listing.verticalSpacing);
                 listing.Gap(2f);
-                Rect hintRect = listing.GetRect(20f);
                 Text.Font = GameFont.Tiny;
-                GUI.color = new Color(0.55f, 0.55f, 0.55f);
-                Widgets.Label(hintRect, "  Free key at aistudio.google.com/app/apikey  •  If blank, falls back to Google Imagen key if available.");
+                bool hasPromptKey = !string.IsNullOrEmpty(llmApiKey) || !string.IsNullOrEmpty(giApiKey);
+                if (!hasPromptKey)
+                {
+                    GUI.color = new Color(0.95f, 0.8f, 0.35f);
+                    Widgets.Label(listing.GetRect(20f), "  ⚠ No key — using the in-house compiled template until you add one.");
+                }
+                else
+                {
+                    GUI.color = new Color(0.55f, 0.55f, 0.55f);
+                    Widgets.Label(listing.GetRect(20f), "  Free key at aistudio.google.com/app/apikey  •  Blank uses your Google key, else the in-house template.");
+                }
                 GUI.color = Color.white;
                 Text.Font = GameFont.Small;
                 listing.Gap(4f);
@@ -942,6 +942,29 @@ namespace AIPortraits
                     backendType = BackendType.Pollinations;
                     SoundDefOf.Click.PlayOneShotOnCamera(null);
                     Messages.Message("Settings and prompts reset to default values.", MessageTypeDefOf.PositiveEvent, false);
+                }
+                listing.Gap(6f);
+
+                // Full backend picker — includes the extra backends kept off the landing tab.
+                listing.Label("Backend Provider (incl. DeepInfra / HuggingFace / Local GPU)");
+                Rect advProvRow = listing.GetRect(32f);
+                if (Widgets.ButtonText(advProvRow, ProviderLabel(backendType)))
+                {
+                    var provOpts = new List<FloatMenuOption>();
+                    BackendType[] provOrder = new[] {
+                        BackendType.Pollinations,
+                        BackendType.Cloudflare,
+                        BackendType.GoogleImagen,
+                        BackendType.DeepInfra,
+                        BackendType.HuggingFace,
+                        BackendType.LocalA1111
+                    };
+                    foreach (BackendType bt in provOrder)
+                    {
+                        BackendType captured = bt;
+                        provOpts.Add(new FloatMenuOption(ProviderLabel(bt), delegate () { ApplyProviderDefaults(captured); }));
+                    }
+                    Find.WindowStack.Add(new FloatMenu(provOpts));
                 }
                 listing.Gap(6f);
 

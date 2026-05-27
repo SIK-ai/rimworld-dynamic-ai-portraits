@@ -57,32 +57,72 @@ namespace AIPortraits
             DispatchImageBackend(customPrompt, negativePrompt, settings, state, portraitBytes, callback);
         }
 
-        /// <summary>Routes a compiled prompt to the configured image backend.</summary>
+        /// <summary>
+        /// Routes a compiled prompt to the configured image backend, with automatic
+        /// fallback to free Pollinations: if the chosen paid source has no API key, or
+        /// if it fails at runtime (error or no image), we silently retry on Pollinations
+        /// so generation never hard-fails for lack of a key/quota.
+        /// </summary>
         private static void DispatchImageBackend(string positivePrompt, string negativePrompt,
                                                  AIPortraitsSettings settings, PawnState state, byte[] portraitBytes, PortraitCallback callback)
         {
-            switch (settings.backendType)
+            BackendType bt = settings.backendType;
+
+            // Paid/keyed source with a blank key → go straight to free Pollinations.
+            bool needsKey = (bt == BackendType.Cloudflare || bt == BackendType.GoogleImagen ||
+                             bt == BackendType.DeepInfra || bt == BackendType.HuggingFace);
+            if (needsKey && string.IsNullOrEmpty((settings.CurrentApiKey ?? "").Trim()))
+            {
+                Log.Message("[Dynamic AI Portraits] No API key for " + bt + " — using free Pollinations.");
+                CoroutineRunner.Instance.StartCoroutine(GeneratePollinations(positivePrompt, settings, state, callback));
+                return;
+            }
+
+            // For any non-Pollinations source, wrap the callback so a runtime failure
+            // (error string, or a null texture) auto-retries once on free Pollinations.
+            PortraitCallback cb = callback;
+            if (bt != BackendType.Pollinations)
+            {
+                BackendType failed = bt;
+                PortraitCallback original = callback;
+                cb = delegate(Texture2D tex, byte[] bytes, string promptUsed, string error)
+                {
+                    if (tex == null || !string.IsNullOrEmpty(error))
+                    {
+                        Log.Warning("[Dynamic AI Portraits] " + failed + " failed (" +
+                                    (string.IsNullOrEmpty(error) ? "no image returned" : error) +
+                                    ") — falling back to free Pollinations.");
+                        CoroutineRunner.Instance.StartCoroutine(GeneratePollinations(positivePrompt, settings, state, original));
+                    }
+                    else
+                    {
+                        original(tex, bytes, promptUsed, error);
+                    }
+                };
+            }
+
+            switch (bt)
             {
                 case BackendType.HuggingFace:
-                    CoroutineRunner.Instance.StartCoroutine(GenerateHuggingFace(positivePrompt, negativePrompt, settings, state, callback));
+                    CoroutineRunner.Instance.StartCoroutine(GenerateHuggingFace(positivePrompt, negativePrompt, settings, state, cb));
                     break;
                 case BackendType.Pollinations:
-                    CoroutineRunner.Instance.StartCoroutine(GeneratePollinations(positivePrompt, settings, state, callback));
+                    CoroutineRunner.Instance.StartCoroutine(GeneratePollinations(positivePrompt, settings, state, cb));
                     break;
                 case BackendType.GoogleImagen:
-                    CoroutineRunner.Instance.StartCoroutine(GenerateGoogleImagen(positivePrompt, negativePrompt, settings, state, portraitBytes, callback));
+                    CoroutineRunner.Instance.StartCoroutine(GenerateGoogleImagen(positivePrompt, negativePrompt, settings, state, portraitBytes, cb));
                     break;
                 case BackendType.LocalA1111:
-                    CoroutineRunner.Instance.StartCoroutine(GenerateLocalA1111(positivePrompt, negativePrompt, settings, state, callback));
+                    CoroutineRunner.Instance.StartCoroutine(GenerateLocalA1111(positivePrompt, negativePrompt, settings, state, cb));
                     break;
                 case BackendType.Cloudflare:
-                    CoroutineRunner.Instance.StartCoroutine(GenerateCloudflare(positivePrompt, negativePrompt, settings, state, callback));
+                    CoroutineRunner.Instance.StartCoroutine(GenerateCloudflare(positivePrompt, negativePrompt, settings, state, cb));
                     break;
                 case BackendType.DeepInfra:
-                    CoroutineRunner.Instance.StartCoroutine(GenerateDeepInfra(positivePrompt, negativePrompt, settings, state, callback));
+                    CoroutineRunner.Instance.StartCoroutine(GenerateDeepInfra(positivePrompt, negativePrompt, settings, state, cb));
                     break;
                 default:
-                    callback(null, null, null, "Backend type " + settings.backendType + " is not implemented.");
+                    callback(null, null, null, "Backend type " + bt + " is not implemented.");
                     break;
             }
         }
