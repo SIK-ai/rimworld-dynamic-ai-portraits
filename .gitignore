@@ -38,3 +38,7 @@ Assemblies/normnfkd.nlp
 
 # Sprites/ — uncommitted research/reference assets, kept local
 Sprites/
+
+# Agent tooling (skills CLI) — not part of the mod
+.agents/
+skills-lock.json

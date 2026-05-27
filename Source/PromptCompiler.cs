@@ -113,6 +113,7 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             else if (state.framing == "special") subjectType = "character dynamic scene illustration";
 
             p.Append(settings.manhwaStylePrompt + ", " + subjectType + ", " + frameText + ", " + bgText + ", ");
+            p.Append("camera setup: 85mm portrait lens, shallow depth of field, sharp focus, lighting setup: cinematic volumetric lighting, sharp side key light, dramatic rim light, ");
             if (!string.IsNullOrEmpty(continuityToken))
                 p.Append(continuityToken + ", ");
         }
@@ -126,6 +127,7 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             else if (state.framing == "special") subjectType = "character dynamic scene illustration";
 
             p.Append(settings.cartoonStylePrompt + ", " + subjectType + ", " + frameText + ", " + bgText + ", ");
+            p.Append("camera setup: 50mm standard lens, deep depth of field, sharp focus, lighting setup: flat cartoon studio lighting, minimal soft shadows, ");
             if (!string.IsNullOrEmpty(continuityToken))
                 p.Append(continuityToken + ", ");
         }
@@ -139,6 +141,7 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             else if (state.framing == "special") subjectType = "character dynamic scene illustration";
 
             p.Append(settings.pixelStylePrompt + ", " + subjectType + ", " + frameText + ", " + bgText + ", ");
+            p.Append("camera setup: retro game camera view, sharp pixel-grid focus, lighting setup: simple flat JRPG cel-shaded lighting, ");
             if (!string.IsNullOrEmpty(continuityToken))
                 p.Append(continuityToken + ", ");
         }
@@ -1129,14 +1132,22 @@ Content: Render the character's appearance, clean expression, and gear exactly a
                 "Given a character data sheet, " + framingTask + "\n\n" +
                 "TARGET ART STYLE: " + styleDesc + "\n\n" +
                 "RULES:\n" +
-                "1. Write a comma-separated descriptor list — NOT prose sentences.\n" +
+                "1. Structure the prompt into clean, distinct lines separated by newlines, with each line focusing on a specific visual dimension:\n" +
+                "   - Line 1: Core Subject & Pose (describe the character, hair flows, expression, pose, and active gestures)\n" +
+                "   - Line 2: Clothing & Gear (describe the clothing, armor materials, textures, and held/slung weapons or props)\n" +
+                "   - Line 3: Camera & Lens Settings (specify camera angle, lens focal length, focus type, and depth of field)\n" +
+                "   - Line 4: Lighting & Shadows (specify lighting conditions, light direction, and shadow details)\n" +
+                "   - Line 5: Aesthetics & Color Scheme (specify color harmonies, accent hues, composition style, and mood)\n" +
+                "   - Line 6: Style Medium & Quality Keywords (specify the art style, line art quality, shading technique, and high-end production terms)\n" +
+                "   - Line 7: Background Setting (as defined in rule 5)\n" +
+                "   Do NOT output the line labels (e.g., do not write 'Line 1:' or 'Core Subject & Pose:'), just write the visual descriptors for each section on a new line.\n" +
                 "2. Include: art style keywords, physical appearance, expression, visible weapon/apparel, personality cues.\n" +
                 "3. Resolve contradictions — when traits conflict, pick the more visually striking interpretation.\n" +
-                "4. You have full creative freedom over pose, composition, camera angle, lighting, and overall styling. Aim for a premium, visually striking portrait that captures the character's identity. Use your judgment to make the most impactful artistic decisions.\n" +
+                "4. You have full creative freedom over pose, composition, camera angle, lighting, and overall styling. Aim for a premium, visually striking, highly detailed, and creative portrait that captures the character's identity. Use your judgment to make the most impactful artistic decisions to create a stunning key visual.\n" +
                 "5. " + rule5 + "\n" +
                 "6. " + rule6 + "\n" +
                 "7. " + rule7 + "\n" +
-                "8. HIGH QUALITY VISUALS: Elevate the aesthetic by requesting dramatic lighting, strong shadow play, crisp linework, and clean color harmony tailored to the style. Avoid generic terms like 'hyperrealistic' or 'detailed'; use concrete modifiers instead (e.g. 'perfect anatomy', 'masterpiece digital art', 'crisp pixel alignment').\n" +
+                "8. HIGH QUALITY VISUALS: Elevate the aesthetic by requesting dramatic lighting, strong shadow play, crisp inked linework, and clean color harmony tailored to the style. Avoid generic terms like 'hyperrealistic' or 'detailed'; use concrete modifiers instead. For example, describe the hair flows, glossy highlights, detailed eyes, clothing textures, dynamic lighting, and background color accents in detail (e.g. 'glistening hair flows', 'sharp volumetric highlights', 'masterpiece digital art', 'crisp pixel alignment', 'iridescent fabrics').\n" +
                 "9. Keep total output under 350 words.\n" +
                 "10. Output ONLY the prompt — no explanations, no headers, no quotes.";
         }

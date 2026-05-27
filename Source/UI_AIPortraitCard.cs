@@ -825,7 +825,7 @@ namespace AIPortraits
             Rect btnWestern = new Rect(rect.x + btnW, rect.y, btnW, btnH);
             Rect btnPixel = new Rect(rect.x + btnW * 2f, rect.y, btnW, btnH);
 
-            DrawStyleButton(btnKorean, "🎨 Manhwa", PortraitStyle.Realistic_Korean, "Korean webtoon manhwa style");
+            DrawStyleButton(btnKorean, "🎨 Webtoon / Manhwa", PortraitStyle.Realistic_Korean, "Korean webtoon manhwa style");
             DrawStyleButton(btnWestern, "📺 Cartoon", PortraitStyle.Realistic_Western, "Rick and Morty / Adult Swim cartoon style");
             DrawStyleButton(btnPixel, "🟦 Pixel", PortraitStyle.DotPixel, "Retro pixel art / dot style");
         }
@@ -1087,7 +1087,8 @@ namespace AIPortraits
 
             var files = new List<string>();
             files.AddRange(System.IO.Directory.GetFiles(galleryDir, "*.png"));
-            files.AddRange(System.IO.Directory.GetFiles(galleryDir, "*.mp4"));
+            string[] mp4Files = System.IO.Directory.GetFiles(galleryDir, "*.mp4");
+            files.AddRange(mp4Files);
             // Exclude helper reference files
             files.RemoveAll(f => f.Contains("_ref_gear") || f.Contains("_ref_portrait"));
             // Newest first
@@ -1096,7 +1097,9 @@ namespace AIPortraits
             foreach (string f in files)
             {
                 bool vid = f.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase);
-                entries.Add(new GalleryEntry { path = f, isVideo = vid });
+                GalleryEntry entry = new GalleryEntry { path = f, isVideo = vid };
+                if (vid) entry.thumbLoaded = true; // Videos don't have texture thumbnails loaded via ImageConversion
+                entries.Add(entry);
             }
         }
 

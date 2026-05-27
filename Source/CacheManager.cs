@@ -82,17 +82,38 @@ namespace AIPortraits
             string newPath = Path.Combine(docs, "RimWorld Portraits", newFolderName);
             string oldPath = Path.Combine(docs, "RimWorld Portraits", safeName);
 
-            // Migrate old-style directory if it exists and the new one doesn't
-            if (!Directory.Exists(newPath) && Directory.Exists(oldPath))
+            // Migrate old-style directory if it exists
+            if (Directory.Exists(oldPath))
             {
-                try
+                if (!Directory.Exists(newPath))
                 {
-                    Directory.Move(oldPath, newPath);
-                    Log.Message("[Dynamic AI Portraits] Migrated portrait directory from " + oldPath + " to " + newPath);
+                    try
+                    {
+                        Directory.Move(oldPath, newPath);
+                        Log.Message("[Dynamic AI Portraits] Migrated portrait directory from " + oldPath + " to " + newPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Warning("[Dynamic AI Portraits] Failed to migrate directory from " + oldPath + " to " + newPath + ": " + ex.Message);
+                    }
                 }
-                catch (Exception ex)
+                else
                 {
-                    Log.Warning("[Dynamic AI Portraits] Failed to migrate directory from " + oldPath + " to " + newPath + ": " + ex.Message);
+                    // Merge files if newPath already exists
+                    try
+                    {
+                        foreach (string file in Directory.GetFiles(oldPath))
+                        {
+                            string dest = Path.Combine(newPath, Path.GetFileName(file));
+                            if (!File.Exists(dest)) File.Move(file, dest);
+                        }
+                        Directory.Delete(oldPath, true);
+                        Log.Message("[Dynamic AI Portraits] Merged old portrait directory " + oldPath + " into " + newPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Warning("[Dynamic AI Portraits] Failed to merge directory from " + oldPath + " to " + newPath + ": " + ex.Message);
+                    }
                 }
             }
 

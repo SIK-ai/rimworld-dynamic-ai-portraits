@@ -27,9 +27,16 @@ namespace AIPortraits
         DotPixel            // 16-bit pixel art / retro JRPG sprite
     }
 
+    public enum LLMModelType
+    {
+        GeminiFlashLite,
+        Gemma26B
+    }
+
     public class AIPortraitsSettings : ModSettings
     {
         public BackendType backendType = BackendType.Pollinations;
+        public LLMModelType llmModelType = LLMModelType.GeminiFlashLite;
 
         // Legacy (kept for migration but not actively used for storage)
         public string apiKey = "";
@@ -143,7 +150,7 @@ namespace AIPortraits
 
         // User-appended style suffix (overrides nothing, just appends)
         public string baseStylePrompt = "";
-        public string manhwaStylePrompt = "highly detailed digital illustration, professional webtoon manhwa key visual, sharp dynamic clean inked outlines, deep volumetric shading, dramatic cinematic lighting with rich chiaroscuro contrast, subtle rim lighting to define the silhouette, vibrant saturated colors, cinematic composition, exquisite detailed expressive eyes with realistic reflections, beautifully styled glossy hair flows, pristine smooth skin rendering, masterpiece anime art, aesthetic design";
+        public string manhwaStylePrompt = "highly detailed digital illustration, professional webtoon manhwa key visual, vibrant saturated colors, sharp dynamic clean inked outlines, deep volumetric shading, dramatic cinematic lighting with rich chiaroscuro contrast, subtle rim lighting to define the silhouette, cinematic composition, exquisite detailed expressive eyes with realistic reflections, beautifully styled glossy hair flows, pristine smooth skin rendering, masterpiece anime art, aesthetic design, high-end production art, crisp resolution";
         public string cartoonStylePrompt = "Rick and Morty Adult Swim cartoon character, Justin Roiland animation style, thick consistent black outlines, flat 2D color fills, no gradients, no painterly shading, bulging round cartoon eyes with tiny black dot pupils, exaggerated wonky proportions, oversized head, hand-drawn animation cel look, bright primary color palette";
         public string pixelStylePrompt = "high-quality 16-bit retro JRPG character sprite, Tactics Ogre and Final Fantasy Tactics style, clean pixel-art grid, zero anti-aliasing, sharp deliberate pixel edges, thin consistent dark outlines, clean flat cel-shading, limited color palette, anime-style cute facial features, detailed hair";
         public string baseNegativePrompt = "generic fantasy art, cartoon style, bright cheerful lighting, flat lighting, blurry textures, generic features, messy brushstrokes, standard clean weapon, generic clothing, missing face tattoos, missing horns, missing cybernetic eyes, missing scars, photorealistic photograph, 3d render, chibi, flat shading, low quality, watermark, extra limbs, deformed face, bad anatomy, multiple people, text, signature, anti-aliased pixels, jagged irregular lines, muddied unclear character design, illegible text, generic UI, inconsistency between sprite and portrait";
@@ -223,7 +230,7 @@ namespace AIPortraits
             }
             Scribe_Values.Look(ref portraitStyle, "portraitStyle", PortraitStyle.Realistic_Korean);
             Scribe_Values.Look(ref baseStylePrompt, "baseStylePrompt", "");
-            Scribe_Values.Look(ref manhwaStylePrompt, "manhwaStylePrompt", "highly detailed digital illustration, professional webtoon manhwa key visual, sharp dynamic clean inked outlines, deep volumetric shading, dramatic cinematic lighting with rich chiaroscuro contrast, subtle rim lighting to define the silhouette, vibrant saturated colors, cinematic composition, exquisite detailed expressive eyes with realistic reflections, beautifully styled glossy hair flows, pristine smooth skin rendering, masterpiece anime art, aesthetic design");
+            Scribe_Values.Look(ref manhwaStylePrompt, "manhwaStylePrompt", "highly detailed digital illustration, professional webtoon manhwa key visual, vibrant saturated colors, sharp dynamic clean inked outlines, deep volumetric shading, dramatic cinematic lighting with rich chiaroscuro contrast, subtle rim lighting to define the silhouette, cinematic composition, exquisite detailed expressive eyes with realistic reflections, beautifully styled glossy hair flows, pristine smooth skin rendering, masterpiece anime art, aesthetic design, high-end production art, crisp resolution");
             Scribe_Values.Look(ref cartoonStylePrompt, "cartoonStylePrompt", "Rick and Morty Adult Swim cartoon character, Justin Roiland animation style, thick consistent black outlines, flat 2D color fills, no gradients, no painterly shading, bulging round cartoon eyes with tiny black dot pupils, exaggerated wonky proportions, oversized head, hand-drawn animation cel look, bright primary color palette");
             Scribe_Values.Look(ref pixelStylePrompt, "pixelStylePrompt", "high-quality 16-bit retro JRPG character sprite, Tactics Ogre and Final Fantasy Tactics style, clean pixel-art grid, zero anti-aliasing, sharp deliberate pixel edges, thin consistent dark outlines, clean flat cel-shading, limited color palette, anime-style cute facial features, detailed hair");
             Scribe_Values.Look(ref baseNegativePrompt, "baseNegativePrompt", "generic fantasy art, cartoon style, bright cheerful lighting, flat lighting, blurry textures, generic features, messy brushstrokes, standard clean weapon, generic clothing, missing face tattoos, missing horns, missing cybernetic eyes, missing scars, photorealistic photograph, 3d render, chibi, flat shading, low quality, watermark, extra limbs, deformed face, bad anatomy, multiple people, text, signature, anti-aliased pixels, jagged irregular lines, muddied unclear character design, illegible text, generic UI, inconsistency between sprite and portrait");
@@ -237,6 +244,7 @@ namespace AIPortraits
             Scribe_Values.Look(ref useGearReferenceSheet, "useGearReferenceSheet", true);
             Scribe_Values.Look(ref excludeHelmet,      "excludeHelmet",    false);
             Scribe_Values.Look(ref useLLMPrompt,       "useLLMPrompt",     false);
+            Scribe_Values.Look(ref llmModelType,       "llmModelType",     LLMModelType.GeminiFlashLite);
             Scribe_Values.Look(ref llmApiKey,          "llmApiKey",        "");
             Scribe_Values.Look(ref useAIBgRemoval,     "useAIBgRemoval",   false);
             Scribe_Values.Look(ref cfBgRemovalKey,     "cfBgRemovalKey",   "");
@@ -381,17 +389,26 @@ namespace AIPortraits
 
                             string filename = Path.GetFileNameWithoutExtension(file);
                             string[] parts = filename.Split('_');
-                            if (parts.Length >= 5) // New format: Name_Style_Framing_Date_Time
+                            int n = parts.Length;
+                            if (n >= 5 && (parts[n - 3] == "portrait" || parts[n - 3] == "bodyshot" || parts[n - 3] == "special"))
                             {
-                                sp.styleName = parts[1];
-                                sp.framingName = parts[2];
-                                sp.timestamp = parts[3].Replace('-', ':') + " " + parts[4].Replace('-', ':');
+                                if (filename.Contains("Realistic_Korean")) sp.styleName = "Realistic_Korean";
+                                else if (filename.Contains("Realistic_Western")) sp.styleName = "Realistic_Western";
+                                else if (filename.Contains("DotPixel")) sp.styleName = "DotPixel";
+                                else sp.styleName = parts[1];
+
+                                sp.framingName = parts[n - 3];
+                                sp.timestamp = parts[n - 2].Replace('-', ':') + " " + parts[n - 1].Replace('-', ':');
                             }
-                            else if (parts.Length == 4) // Legacy format: Name_Style_Date_Time
+                            else if (n >= 4) // Name_Style_Date_Time (Legacy)
                             {
-                                sp.styleName = parts[1];
-                                sp.framingName = "portrait"; // Default to portrait
-                                sp.timestamp = parts[2].Replace('-', ':') + " " + parts[3].Replace('-', ':');
+                                if (filename.Contains("Realistic_Korean")) sp.styleName = "Realistic_Korean";
+                                else if (filename.Contains("Realistic_Western")) sp.styleName = "Realistic_Western";
+                                else if (filename.Contains("DotPixel")) sp.styleName = "DotPixel";
+                                else sp.styleName = parts[1];
+
+                                sp.framingName = "portrait";
+                                sp.timestamp = parts[n - 2].Replace('-', ':') + " " + parts[n - 1].Replace('-', ':');
                             }
                             else
                             {
@@ -587,7 +604,7 @@ namespace AIPortraits
         private void DrawApiSettings(Rect inRect)
         {
             float viewHeight = 850f;
-            if (useLLMPrompt) viewHeight += 100f;
+            if (useLLMPrompt) viewHeight += 160f;
             if (useAIBgRemoval) viewHeight += 100f;
             if (showAdvanced) viewHeight += 480f;
 
@@ -609,7 +626,7 @@ namespace AIPortraits
             Rect btnPixel   = new Rect(styleRow.x + styleW*2f, styleRow.y, styleW - 4f, 28f);
 
             if (portraitStyle == PortraitStyle.Realistic_Korean)  GUI.color = new Color(0.5f, 0.9f, 1f);
-            if (Widgets.ButtonText(btnKorean,  "🎨 Manhwa"))  portraitStyle = PortraitStyle.Realistic_Korean;
+            if (Widgets.ButtonText(btnKorean,  "🎨 Webtoon / Manhwa"))  portraitStyle = PortraitStyle.Realistic_Korean;
             GUI.color = Color.white;
 
             if (portraitStyle == PortraitStyle.Realistic_Western) GUI.color = new Color(0.5f, 0.9f, 1f);
@@ -772,11 +789,11 @@ namespace AIPortraits
             listing.Label("Prompt Generation");
             listing.Gap(6f);
 
-            // Two-button toggle: No (compiled template) vs Gemini Flash Lite
+            // Two-button toggle: No (compiled template) vs Yes (LLM Prompt Generator)
             Rect promptModeRow  = listing.GetRect(36f);
             float promptHalfW   = promptModeRow.width / 2f;
             Rect btnNoLLM       = new Rect(promptModeRow.x,                promptModeRow.y, promptHalfW - 4f, 36f);
-            Rect btnGeminiFlash = new Rect(promptModeRow.x + promptHalfW,  promptModeRow.y, promptHalfW - 4f, 36f);
+            Rect btnYesLLM      = new Rect(promptModeRow.x + promptHalfW,  promptModeRow.y, promptHalfW - 4f, 36f);
 
             if (!useLLMPrompt) GUI.color = new Color(0.5f, 0.85f, 0.5f);
             if (Widgets.ButtonText(btnNoLLM, "No — Compiled Template"))
@@ -784,7 +801,7 @@ namespace AIPortraits
             GUI.color = Color.white;
 
             if (useLLMPrompt) GUI.color = new Color(0.5f, 0.75f, 1f);
-            if (Widgets.ButtonText(btnGeminiFlash, "Gemini Flash Lite"))
+            if (Widgets.ButtonText(btnYesLLM, "Yes — LLM Prompt Generator"))
                 useLLMPrompt = true;
             GUI.color = Color.white;
 
@@ -798,46 +815,46 @@ namespace AIPortraits
             Text.Font = GameFont.Tiny;
             Widgets.Label(promptInfoRect.ContractedBy(6f),
                 useLLMPrompt
-                    ? "Gemini Flash Lite rewrites the structured pawn data into an optimized,\n" +
+                    ? "LLM Prompt Generator rewrites the structured pawn data into an optimized,\n" +
                       "creative image prompt. Requires a Google AI Studio API key (free).\n" +
                       "Falls back to the compiled template if the call fails."
                     : "Built-in template compiler builds the prompt deterministically from\n" +
-                      "pawn state. Fast, free, no extra API key. Less creative than Gemini\n" +
+                      "pawn state. Fast, free, no extra API key. Less creative than LLM\n" +
                       "but reliable and predictable.");
             Text.Font = GameFont.Small;
             listing.Gap(6f);
 
             if (useLLMPrompt)
             {
-                // If using Imagen the same key works for Gemini Flash — show a green note.
-                bool canReuseImagenKey = (!string.IsNullOrEmpty(giApiKey));
-                if (canReuseImagenKey)
-                {
-                    Rect reuseBox = listing.GetRect(30f);
-                    Widgets.DrawBoxSolid(reuseBox, new Color(0.05f, 0.18f, 0.05f, 0.8f));
-                    GUI.color = new Color(1f, 1f, 1f, 0.15f);
-                    Widgets.DrawBox(reuseBox, 1);
-                    GUI.color = Color.white;
-                    Text.Font   = GameFont.Tiny;
-                    GUI.color   = new Color(0.5f, 0.95f, 0.5f);
-                    Widgets.Label(reuseBox.ContractedBy(5f), "\u2713  Using your Imagen API key for Gemini Flash \u2014 no extra key needed.");
-                    GUI.color   = Color.white;
-                    Text.Font   = GameFont.Small;
-                }
-                else
-                {
-                    listing.Label("Gemini Flash API Key  (Google AI Studio):");
-                    Rect llmKeyRect = listing.GetRect(24f);
-                    llmApiKey = UnityEngine.GUI.PasswordField(llmKeyRect, llmApiKey, '*');
-                    listing.Gap(listing.verticalSpacing);
-                    listing.Gap(2f);
-                    Rect hintRect = listing.GetRect(20f);
-                    Text.Font = GameFont.Tiny;
-                    GUI.color = new Color(0.55f, 0.55f, 0.55f);
-                    Widgets.Label(hintRect, "  Free key at aistudio.google.com/app/apikey  \u2022  Your Imagen key also works here.");
-                    GUI.color = Color.white;
-                    Text.Font = GameFont.Small;
-                }
+                listing.Label("Prompt Generator Model:");
+                Rect modelRow = listing.GetRect(28f);
+                float modelHalfW = modelRow.width / 2f;
+                Rect btnModelFlash = new Rect(modelRow.x, modelRow.y, modelHalfW - 4f, 28f);
+                Rect btnModelGemma = new Rect(modelRow.x + modelHalfW, modelRow.y, modelHalfW - 4f, 28f);
+
+                if (llmModelType == LLMModelType.GeminiFlashLite) GUI.color = new Color(0.5f, 0.85f, 0.5f);
+                if (Widgets.ButtonText(btnModelFlash, "Gemini Flash Lite"))
+                    llmModelType = LLMModelType.GeminiFlashLite;
+                GUI.color = Color.white;
+
+                if (llmModelType == LLMModelType.Gemma26B) GUI.color = new Color(0.5f, 0.85f, 0.5f);
+                if (Widgets.ButtonText(btnModelGemma, "Gemma 4 26B"))
+                    llmModelType = LLMModelType.Gemma26B;
+                GUI.color = Color.white;
+
+                listing.Gap(8f);
+
+                listing.Label("Prompt API Key (Optional fallback to Imagen Key if blank):");
+                Rect llmKeyRect = listing.GetRect(24f);
+                llmApiKey = UnityEngine.GUI.PasswordField(llmKeyRect, llmApiKey, '*');
+                listing.Gap(listing.verticalSpacing);
+                listing.Gap(2f);
+                Rect hintRect = listing.GetRect(20f);
+                Text.Font = GameFont.Tiny;
+                GUI.color = new Color(0.55f, 0.55f, 0.55f);
+                Widgets.Label(hintRect, "  Free key at aistudio.google.com/app/apikey  •  If blank, falls back to Google Imagen key if available.");
+                GUI.color = Color.white;
+                Text.Font = GameFont.Small;
                 listing.Gap(4f);
             }
 
@@ -898,7 +915,7 @@ namespace AIPortraits
                 if (listing.ButtonText("Reset to Default Prompts & Settings"))
                 {
                     baseStylePrompt = "";
-                    manhwaStylePrompt = "highly detailed digital illustration, professional webtoon manhwa key visual, sharp dynamic clean inked outlines, deep volumetric shading, dramatic cinematic lighting with rich chiaroscuro contrast, subtle rim lighting to define the silhouette, vibrant saturated colors, cinematic composition, exquisite detailed expressive eyes with realistic reflections, beautifully styled glossy hair flows, pristine smooth skin rendering, masterpiece anime art, aesthetic design";
+                    manhwaStylePrompt = "highly detailed digital illustration, professional webtoon manhwa key visual, vibrant saturated colors, sharp dynamic clean inked outlines, deep volumetric shading, dramatic cinematic lighting with rich chiaroscuro contrast, subtle rim lighting to define the silhouette, cinematic composition, exquisite detailed expressive eyes with realistic reflections, beautifully styled glossy hair flows, pristine smooth skin rendering, masterpiece anime art, aesthetic design, high-end production art, crisp resolution";
                     cartoonStylePrompt = "Rick and Morty Adult Swim cartoon character, Justin Roiland animation style, thick consistent black outlines, flat 2D color fills, no gradients, no painterly shading, bulging round cartoon eyes with tiny black dot pupils, exaggerated wonky proportions, oversized head, hand-drawn animation cel look, bright primary color palette";
                     pixelStylePrompt = "high-quality 16-bit retro JRPG character sprite, Tactics Ogre and Final Fantasy Tactics style, clean pixel-art grid, zero anti-aliasing, sharp deliberate pixel edges, thin consistent dark outlines, clean flat cel-shading, limited color palette, anime-style cute facial features, detailed hair";
                     baseNegativePrompt = "generic fantasy art, cartoon style, bright cheerful lighting, flat lighting, blurry textures, generic features, messy brushstrokes, standard clean weapon, generic clothing, missing face tattoos, missing horns, missing cybernetic eyes, missing scars, photorealistic photograph, 3d render, chibi, flat shading, low quality, watermark, extra limbs, deformed face, bad anatomy, multiple people, text, signature, anti-aliased pixels, jagged irregular lines, muddied unclear character design, illegible text, generic UI, inconsistency between sprite and portrait";
@@ -907,6 +924,14 @@ namespace AIPortraits
                     portraitScale = 260f;
                     portraitOffsetX = 0f;
                     portraitOffsetY = 0f;
+                    excludeHelmet = false;
+                    llmModelType = LLMModelType.GeminiFlashLite;
+                    useLLMPrompt = false;
+                    useAIBgRemoval = false;
+                    includeIdeology = true;
+                    includeRimLighting = true;
+                    useGearReferenceSheet = true;
+                    backendType = BackendType.Pollinations;
                     SoundDefOf.Click.PlayOneShotOnCamera(null);
                     Messages.Message("Settings and prompts reset to default values.", MessageTypeDefOf.PositiveEvent, false);
                 }
@@ -1720,9 +1745,10 @@ namespace AIPortraits
             // Mode indicator
             Text.Font = GameFont.Tiny;
             GUI.color = useLLMPrompt ? new Color(0.4f, 0.85f, 1f) : new Color(0.7f, 0.7f, 0.7f);
+            string activeModelLabel = (llmModelType == LLMModelType.GeminiFlashLite) ? "Gemini Flash" : "Gemma 4 26B";
             Widgets.Label(new Rect(0f, y, viewW, 18f),
                           useLLMPrompt
-                            ? "Mode: Gemini Flash will rewrite the structured data below into a custom image prompt."
+                            ? "Mode: " + activeModelLabel + " will rewrite the structured data below into a custom image prompt."
                             : "Mode: Compiled template (LLM mode off — toggle in API Settings to enable).");
             GUI.color = Color.white;
             Text.Font = GameFont.Small;
@@ -1804,8 +1830,9 @@ namespace AIPortraits
             // ── 3. LLM system prompt (only when LLM mode is on)
             if (llmSystem != null)
             {
+                string modelLabel = (llmModelType == LLMModelType.GeminiFlashLite) ? "Gemini Flash" : "Gemma 4 26B";
                 Widgets.Label(new Rect(0f, y, viewW, 22f),
-                              "<b>LLM system instruction (sent to Gemini Flash):</b>");
+                              "<b>LLM system instruction (sent to " + modelLabel + "):</b>");
                 y += 24f;
                 Rect llmBox = new Rect(0f, y, viewW, llmH + 10f);
                 Widgets.DrawBoxSolid(llmBox, new Color(0.05f, 0.10f, 0.08f, 1f));

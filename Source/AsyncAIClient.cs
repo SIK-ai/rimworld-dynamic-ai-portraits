@@ -162,20 +162,36 @@ namespace AIPortraits
             string framingForLLM = (state != null && !string.IsNullOrEmpty(state.framing)) ? state.framing : "portrait";
             string sysPrompt = PromptCompiler.GetLLMSystemPrompt(settings.portraitStyle, settings, framingForLLM);
 
-            // gemini-3.1-flash-lite is free-tier and very fast (~1 s round-trip).
-            string llmUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=" + llmKey;
+            string modelName = "gemini-3.1-flash-lite";
+            if (settings.llmModelType == LLMModelType.Gemma26B)
+            {
+                modelName = "gemma-2-27b-it";
+            }
+            string llmUrl = "https://generativelanguage.googleapis.com/v1beta/models/" + modelName + ":generateContent?key=" + llmKey;
 
             StringBuilder json = new StringBuilder();
             json.Append("{");
-            json.Append("\"system_instruction\":{\"parts\":[{\"text\":\"")
-                .Append(EscapeJson(sysPrompt)).Append("\"}]},");
-            json.Append("\"contents\":[{\"parts\":[{\"text\":\"")
-                .Append(EscapeJson(pawnDesc)).Append("\"}]}],");
-            json.Append("\"generationConfig\":{\"maxOutputTokens\":400,\"temperature\":0.75}");
+            if (settings.llmModelType == LLMModelType.GeminiFlashLite)
+            {
+                json.Append("\"system_instruction\":{\"parts\":[{\"text\":\"")
+                    .Append(EscapeJson(sysPrompt)).Append("\"}]},");
+                json.Append("\"contents\":[{\"parts\":[{\"text\":\"")
+                    .Append(EscapeJson(pawnDesc)).Append("\"}]}],");
+            }
+            else
+            {
+                // Gemma doesn't support system_instruction, prepend system prompt to the user contents
+                string combinedPrompt = sysPrompt + "\n\n" + pawnDesc;
+                json.Append("\"contents\":[{\"parts\":[{\"text\":\"")
+                    .Append(EscapeJson(combinedPrompt)).Append("\"}]}],");
+            }
+            json.Append("\"generationConfig\":{\"maxOutputTokens\":200,\"temperature\":0.75}");
             json.Append("}");
 
             byte[] jsonBytes = Encoding.UTF8.GetBytes(json.ToString());
             string generatedPrompt = null;
+
+            string modelLogName = (settings.llmModelType == LLMModelType.GeminiFlashLite) ? "Gemini Flash" : "Gemma 4 26B";
 
             using (UnityWebRequest request = new UnityWebRequest(llmUrl, "POST"))
             {
@@ -184,21 +200,41 @@ namespace AIPortraits
                 request.SetRequestHeader("Content-Type", "application/json");
                 request.timeout = 30;
 
-                Log.Message("[Dynamic AI Portraits] Calling Gemini Flash for " + (state.name ?? "pawn") + "...");
+                Log.Message("[Dynamic AI Portraits] Calling " + modelLogName + " for " + (state.name ?? "pawn") + "...");
                 yield return request.SendWebRequest();
 
                 if (IsSuccess(request))
                 {
                     generatedPrompt = ExtractGeminiText(request.downloadHandler.text);
                     if (!string.IsNullOrEmpty(generatedPrompt))
+                    {
+                        string[] labelsToRemove = new string[] {
+                            "Line 1:", "Line 2:", "Line 3:", "Line 4:", "Line 5:", "Line 6:", "Line 7:",
+                            "Line 1", "Line 2", "Line 3", "Line 4", "Line 5", "Line 6", "Line 7",
+                            "Core Subject & Pose:", "Clothing & Gear:", "Camera & Lens Settings:",
+                            "Lighting & Shadows:", "Aesthetics & Color Scheme:", "Style Medium & Quality Keywords:",
+                            "Background Setting:", "Core Subject:", "Clothing:", "Camera:", "Lighting:", "Aesthetics:", "Style:", "Background:"
+                        };
+                        foreach (string label in labelsToRemove)
+                        {
+                            generatedPrompt = generatedPrompt.Replace(label, "");
+                        }
+                        while (generatedPrompt.Contains(" ,")) generatedPrompt = generatedPrompt.Replace(" ,", ",");
+                        while (generatedPrompt.Contains(",,")) generatedPrompt = generatedPrompt.Replace(",,", ",");
+                        while (generatedPrompt.Contains("  ")) generatedPrompt = generatedPrompt.Replace("  ", " ");
+                        generatedPrompt = generatedPrompt.Trim();
+
                         Log.Message("[Dynamic AI Portraits] LLM prompt: " + generatedPrompt);
+                    }
                     else
-                        Log.Warning(SanitizeLog("[Dynamic AI Portraits] Gemini returned empty text. Raw: " +
+                    {
+                        Log.Warning(SanitizeLog("[Dynamic AI Portraits] " + modelLogName + " returned empty text. Raw: " +
                                     Truncate(request.downloadHandler.text, 400), settings));
+                    }
                 }
                 else
                 {
-                    Log.Warning(SanitizeLog("[Dynamic AI Portraits] Gemini Flash error: " + request.error +
+                    Log.Warning(SanitizeLog("[Dynamic AI Portraits] " + modelLogName + " error: " + request.error +
                                 " | " + Truncate(request.downloadHandler.text, 200), settings));
                 }
             }
@@ -248,9 +284,29 @@ namespace AIPortraits
                         {
                             case '"':  sb.Append('"');  break;
                             case '\\': sb.Append('\\'); break;
-                            case 'n':  sb.Append(' ');  break; // newlines → spaces
+                            case 'n':  sb.Append(", ");  break; // newlines → comma separated
                             case 'r':                   break;
                             case 't':  sb.Append(' ');  break;
+                            case 'u':
+                                if (idx + 4 <= json.Length)
+                                {
+                                    string hex = json.Substring(idx, 4);
+                                    try
+                                    {
+                                        int code = int.Parse(hex, System.Globalization.NumberStyles.HexNumber);
+                                        sb.Append((char)code);
+                                        idx += 4;
+                                    }
+                                    catch
+                                    {
+                                        sb.Append('u');
+                                    }
+                                }
+                                else
+                                {
+                                    sb.Append('u');
+                                }
+                                break;
                             default:   sb.Append(next);  break;
                         }
                     }
@@ -1328,7 +1384,7 @@ namespace AIPortraits
             string url = "https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-lite-generate-preview:predictLongRunning?key=" + apiKey;
 
             string basePrompt = PromptCompiler.CompilePositivePrompt(state, AIPortraitsMod.settings, null);
-            string prompt = basePrompt + ", cinematic, masterpiece, character comes alive, breathing, blinking, looking at camera, subtle movement, high quality";
+            string prompt = basePrompt + ", cinematic, masterpiece, character comes alive, breathing, blinking, looking at camera, subtle movement, high quality, seamless loop, start and end frames are identical, continuous looping idle animation, steady camera";
 
             // Match aspect ratio to framing:
             // portrait / bodyshot → 9:16 (vertical, matches tall portrait images)
