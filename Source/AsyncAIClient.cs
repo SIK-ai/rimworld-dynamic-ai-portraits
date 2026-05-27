@@ -1026,7 +1026,10 @@ namespace AIPortraits
             {
                 if (state != null && (state.framing == "portrait" || state.framing == "bodyshot"))
                 {
-                    processed = BackgroundRemover.Process(raw);
+                    // u2netp ONNX remover (local, offline). Internally falls back to the legacy
+                    // YCbCr remover if the native runtime/model can't load. "special" framing is
+                    // intentionally excluded by this condition, so its scenic background is kept.
+                    processed = U2NetRemover.Process(raw);
                     if (processed != raw)
                     {
                         // Background was removed — re-encode to PNG so the saved file

@@ -69,6 +69,10 @@ namespace AIPortraits
 
                 if (System.IO.File.Exists(videoPath))
                 {
+                    // Background-remove portrait/bodyshot clips once (offline u2netp). "special"
+                    // is skipped inside EnsureMatted so its scenic background is kept. Until the
+                    // matte finishes, StartPlayback falls back to the original mp4.
+                    VideoMatteService.EnsureMatted(videoPath, AIPortraitsManager.GetActiveFraming(pawn));
                     VideoPlaybackManager.StartPlayback(pawn.ThingID, videoPath);
                     RenderTexture videoTex = VideoPlaybackManager.GetActiveTexture();
                     if (videoTex != null)
