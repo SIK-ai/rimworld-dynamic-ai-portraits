@@ -183,6 +183,13 @@ namespace AIPortraits
         public Dictionary<string, string> pawnFraming = new Dictionary<string, string>();
         public Dictionary<string, bool> pawnVideoToggles = new Dictionary<string, bool>();
 
+        private List<string> activePortraitsKeys;
+        private List<string> activePortraitsValues;
+        private List<string> pawnFramingKeys;
+        private List<string> pawnFramingValues;
+        private List<string> pawnVideoTogglesKeys;
+        private List<bool> pawnVideoTogglesValues;
+
         public override void ExposeData()
         {
             base.ExposeData();
@@ -212,24 +219,6 @@ namespace AIPortraits
             Scribe_Values.Look(ref polApiUrl, "polApiUrl", "https://image.pollinations.ai");
             Scribe_Values.Look(ref polModelName, "polModelName", "sana");
 
-            if (Scribe.mode == LoadSaveMode.PostLoadInit)
-            {
-                if (!string.IsNullOrEmpty(apiKey))
-                {
-                    CurrentApiKey = apiKey;
-                    apiKey = "";
-                }
-                if (!string.IsNullOrEmpty(apiUrl))
-                {
-                    CurrentApiUrl = apiUrl;
-                    apiUrl = "";
-                }
-                if (!string.IsNullOrEmpty(modelName))
-                {
-                    CurrentModelName = modelName;
-                    modelName = "";
-                }
-            }
             Scribe_Values.Look(ref portraitStyle, "portraitStyle", PortraitStyle.Realistic_Korean);
             Scribe_Values.Look(ref baseStylePrompt, "baseStylePrompt", "");
             Scribe_Values.Look(ref manhwaStylePrompt, "manhwaStylePrompt", "flat 2D webtoon manhwa drawing, hand-drawn digital illustration, bold clean inked outlines, flat cel-shaded color fills, hard-edged anime shadows, bright saturated CMYK print-style colors, expressive stylized anime eyes, glossy stylized hair, crisp clean line art, masterpiece webtoon key visual, strictly 2D flat art, smooth flat skin rendering, no lens blur, no depth of field");
@@ -251,19 +240,35 @@ namespace AIPortraits
             Scribe_Values.Look(ref videoApiKey,        "videoApiKey",      "");
             Scribe_Values.Look(ref useAIBgRemoval,     "useAIBgRemoval",   false);
             Scribe_Values.Look(ref cfBgRemovalKey,     "cfBgRemovalKey",   "");
-            Scribe_Collections.Look(ref activePortraits, "activePortraits", LookMode.Value, LookMode.Value);
-            Scribe_Collections.Look(ref pawnFraming, "pawnFraming", LookMode.Value, LookMode.Value);
-            Scribe_Collections.Look(ref pawnVideoToggles, "pawnVideoToggles", LookMode.Value, LookMode.Value);
-
-            if (activePortraits == null)
-                activePortraits = new Dictionary<string, string>();
-            if (pawnFraming == null)
-                pawnFraming = new Dictionary<string, string>();
-            if (pawnVideoToggles == null)
-                pawnVideoToggles = new Dictionary<string, bool>();
+            Scribe_Collections.Look(ref activePortraits, "activePortraits", LookMode.Value, LookMode.Value, ref activePortraitsKeys, ref activePortraitsValues);
+            Scribe_Collections.Look(ref pawnFraming, "pawnFraming", LookMode.Value, LookMode.Value, ref pawnFramingKeys, ref pawnFramingValues);
+            Scribe_Collections.Look(ref pawnVideoToggles, "pawnVideoToggles", LookMode.Value, LookMode.Value, ref pawnVideoTogglesKeys, ref pawnVideoTogglesValues);
 
             if (Scribe.mode == LoadSaveMode.PostLoadInit)
             {
+                if (!string.IsNullOrEmpty(apiKey))
+                {
+                    CurrentApiKey = apiKey;
+                    apiKey = "";
+                }
+                if (!string.IsNullOrEmpty(apiUrl))
+                {
+                    CurrentApiUrl = apiUrl;
+                    apiUrl = "";
+                }
+                if (!string.IsNullOrEmpty(modelName))
+                {
+                    CurrentModelName = modelName;
+                    modelName = "";
+                }
+
+                if (activePortraits == null)
+                    activePortraits = new Dictionary<string, string>();
+                if (pawnFraming == null)
+                    pawnFraming = new Dictionary<string, string>();
+                if (pawnVideoToggles == null)
+                    pawnVideoToggles = new Dictionary<string, bool>();
+
                 if (manhwaStylePrompt != null && (manhwaStylePrompt.Contains("no realistic skin texture") || manhwaStylePrompt.Contains("non-photorealistic")))
                 {
                     manhwaStylePrompt = "flat 2D webtoon manhwa drawing, hand-drawn digital illustration, bold clean inked outlines, flat cel-shaded color fills, hard-edged anime shadows, bright saturated CMYK print-style colors, expressive stylized anime eyes, glossy stylized hair, crisp clean line art, masterpiece webtoon key visual, strictly 2D flat art, smooth flat skin rendering, no lens blur, no depth of field";
