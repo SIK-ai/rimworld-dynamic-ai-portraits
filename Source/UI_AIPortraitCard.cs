@@ -352,6 +352,13 @@ namespace AIPortraits
 
             string framing = GetActiveFraming(pawn);
             string pawnKey = pawn.ThingID + "_" + framing;
+
+            // Re-entrancy guard: ignore a refresh while an image generation is already
+            // running for this pawn+framing (double-click, or racing the auto-trigger).
+            GenerationStatus inFlight;
+            if (requestStatus.TryGetValue(pawnKey, out inFlight) && inFlight == GenerationStatus.Generating)
+                return;
+
             string diskKey = GetActiveKey(pawn);
             string continuityToken = PromptCompiler.GetContinuityToken(AIPortraitsMod.settings.portraitStyle);
 
@@ -443,6 +450,13 @@ namespace AIPortraits
         {
             string framing = state.framing ?? GetActiveFraming(pawn);
             string pawnKey = pawn.ThingID + "_" + framing;
+
+            // Re-entrancy guard: never start a second image generation while one is in
+            // flight for this pawn+framing (protects the per-frame auto-trigger path).
+            GenerationStatus inFlight;
+            if (requestStatus.TryGetValue(pawnKey, out inFlight) && inFlight == GenerationStatus.Generating)
+                return;
+
             PortraitStyle currentStyle = AIPortraitsMod.settings.portraitStyle;
 
             activeRequests[pawnKey] = diskCacheKey;
@@ -548,6 +562,11 @@ namespace AIPortraits
             string pawnKey = pawn.ThingID + "_" + framing;
             string diskKey = GetActiveKey(pawn);
             PortraitStyle currentStyle = AIPortraitsMod.settings.portraitStyle;
+
+            // Re-entrancy guard: ignore a second custom generation while one is running.
+            GenerationStatus inFlight;
+            if (requestStatus.TryGetValue(pawnKey, out inFlight) && inFlight == GenerationStatus.Generating)
+                return;
 
             // Mark as generating
             activeRequests[pawnKey] = diskKey;
@@ -685,6 +704,12 @@ namespace AIPortraits
             if (pawn == null || pawn.Destroyed) return;
             string framing = GetActiveFraming(pawn);
             string key = pawn.ThingID + "_" + framing;
+
+            // Re-entrancy guard: if a video is already generating for this pawn+framing,
+            // ignore the re-fire (double-click, or manual refresh racing the auto-trigger).
+            GenerationStatus inFlight;
+            if (videoStatus.TryGetValue(key, out inFlight) && inFlight == GenerationStatus.Generating)
+                return;
 
             videoStatus[key] = GenerationStatus.Generating;
             videoError[key] = null;

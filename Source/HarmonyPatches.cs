@@ -295,23 +295,45 @@ namespace AIPortraits
             {
                 if (videoActive)
                 {
-                    byte[] imgBytes = AIPortraitsManager.GetActivePortraitBytes(pawn);
-                    if (imgBytes != null && imgBytes.Length > 0)
+                    // Video mode: regenerate ONLY the video, reusing the existing portrait
+                    // image. If a video is already in flight, surface that instead of firing
+                    // a second Veo request.
+                    GenerationStatus vStat; string vErr;
+                    AIPortraitsManager.GetVideoStatus(pawn, out vStat, out vErr);
+                    if (vStat == GenerationStatus.Generating)
                     {
-                        AIPortraitsManager.TriggerVideoGeneration(pawn, imgBytes);
-                        Messages.Message("Regenerating video for " + pawn.LabelShortCap + "...",
-                                         MessageTypeDefOf.NeutralEvent, false);
+                        Messages.Message(pawn.LabelShortCap + "'s video is already generating...",
+                                         MessageTypeDefOf.RejectInput, false);
                     }
                     else
                     {
-                        Messages.Message("No portrait image available to animate.", MessageTypeDefOf.RejectInput, false);
+                        byte[] imgBytes = AIPortraitsManager.GetActivePortraitBytes(pawn);
+                        if (imgBytes != null && imgBytes.Length > 0)
+                        {
+                            AIPortraitsManager.TriggerVideoGeneration(pawn, imgBytes);
+                            Messages.Message("Regenerating video for " + pawn.LabelShortCap + "...",
+                                             MessageTypeDefOf.NeutralEvent, false);
+                        }
+                        else
+                        {
+                            Messages.Message("No portrait image available to animate.", MessageTypeDefOf.RejectInput, false);
+                        }
                     }
                 }
                 else
                 {
-                    AIPortraitsManager.TriggerNewPortraitWithContinuity(pawn);
-                    Messages.Message("Regenerating portrait for " + pawn.LabelShortCap + "...",
-                                     MessageTypeDefOf.NeutralEvent, false);
+                    // Static mode: regenerate the portrait image. Skip if one is running.
+                    if (AIPortraitsManager.GetStatus(pawn) == GenerationStatus.Generating)
+                    {
+                        Messages.Message(pawn.LabelShortCap + "'s portrait is already generating...",
+                                         MessageTypeDefOf.RejectInput, false);
+                    }
+                    else
+                    {
+                        AIPortraitsManager.TriggerNewPortraitWithContinuity(pawn);
+                        Messages.Message("Regenerating portrait for " + pawn.LabelShortCap + "...",
+                                         MessageTypeDefOf.NeutralEvent, false);
+                    }
                 }
             }
         }
