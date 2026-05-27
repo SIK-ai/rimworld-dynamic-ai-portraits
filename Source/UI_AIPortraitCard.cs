@@ -73,6 +73,8 @@ namespace AIPortraits
         // strings on every paint. knownMissingFiles avoids hammering File.Exists on locked-portrait
         // paths the user has deleted.
         private static Dictionary<PawnFramingKey, string> activeKeyCache    = new Dictionary<PawnFramingKey, string>();
+        private static Dictionary<PawnFramingKey, string> pawnKeyCache      = new Dictionary<PawnFramingKey, string>();
+        private static Dictionary<PawnFramingKey, string> lockedKeyCache    = new Dictionary<PawnFramingKey, string>();
         private static HashSet<string>            knownMissingFiles = new HashSet<string>();
         private static int                        lastWorldId       = -1;
         private static string                     lastWorldIdString = "global";
@@ -99,6 +101,8 @@ namespace AIPortraits
                 lastWorldId = currentWorldId;
                 lastWorldIdString = currentWorldId == -1 ? "global" : currentWorldId.ToString();
                 activeKeyCache.Clear();
+                pawnKeyCache.Clear();
+                lockedKeyCache.Clear();
                 knownMissingFiles.Clear();
             }
 
@@ -110,6 +114,34 @@ namespace AIPortraits
 
             string built = lastWorldIdString + "_" + pawn.ThingID + "_" + framing;
             activeKeyCache[cacheLookup] = built;
+            return built;
+        }
+
+        // Optimization: Cache dynamically generated strings like "1234_portrait" to prevent
+        // continuous string allocation and GC pressure during per-frame UI rendering.
+        public static string GetPawnKey(Pawn pawn, string framing)
+        {
+            PawnFramingKey cacheLookup = new PawnFramingKey(pawn.thingIDNumber, framing);
+            string cached;
+            if (pawnKeyCache.TryGetValue(cacheLookup, out cached))
+                return cached;
+
+            string built = pawn.ThingID + "_" + framing;
+            pawnKeyCache[cacheLookup] = built;
+            return built;
+        }
+
+        // Optimization: Cache dynamically generated strings with suffixes to prevent
+        // continuous string allocation and GC pressure during per-frame UI rendering.
+        public static string GetLockedCacheKey(Pawn pawn, string framing)
+        {
+            PawnFramingKey cacheLookup = new PawnFramingKey(pawn.thingIDNumber, framing);
+            string cached;
+            if (lockedKeyCache.TryGetValue(cacheLookup, out cached))
+                return cached;
+
+            string built = pawn.ThingID + "_" + framing + LockedSuffix;
+            lockedKeyCache[cacheLookup] = built;
             return built;
         }
 
@@ -217,7 +249,7 @@ namespace AIPortraits
             if (pawn == null) return null;
             int now = (Find.TickManager != null) ? Find.TickManager.TicksGame : 0;
             string framing = GetActiveFraming(pawn);
-            string cacheKey = pawn.ThingID + "_" + framing;
+            string cacheKey = GetPawnKey(pawn, framing);
 
             CachedState cs;
             if (stateCache.TryGetValue(cacheKey, out cs) && (now - cs.tickComputed) < StateCacheLifetimeTicks)
@@ -260,7 +292,7 @@ namespace AIPortraits
             string lockedPath = GetActivePortraitPath(pawn, GetActiveFraming(pawn));
             if (!string.IsNullOrEmpty(lockedPath))
             {
-                string lockedCacheKey = pawn.ThingID + "_" + GetActiveFraming(pawn) + LockedSuffix;
+                string lockedCacheKey = GetLockedCacheKey(pawn, GetActiveFraming(pawn));
 
                 // Memory fast-path (no I/O)
                 Texture2D lockedTex;
@@ -299,7 +331,7 @@ namespace AIPortraits
             if (!ShouldGenerateFor(pawn)) return null;
 
             string framing = GetActiveFraming(pawn);
-            string pawnKey = pawn.ThingID + "_" + framing;
+            string pawnKey = GetPawnKey(pawn, framing);
             string diskKey = GetActiveKey(pawn); // "worldId_pawnId_framing"
 
             // In-memory hit
@@ -324,11 +356,12 @@ namespace AIPortraits
             foreach (string f in allFramings)
             {
                 if (f == framing) continue;
-                string fPawnKey = pawn.ThingID + "_" + f;
+                string fPawnKey = GetPawnKey(pawn, f);
+                string fLockedCacheKey = GetLockedCacheKey(pawn, f);
                 string fDiskKey = GetActiveKeyForFraming(pawn, f);
                 string fLockedPath = GetActivePortraitPath(pawn, f);
 
-                if (loadedTextures.ContainsKey(fPawnKey) || loadedTextures.ContainsKey(fPawnKey + LockedSuffix)) { hasAnyPortrait = true; break; }
+                if (loadedTextures.ContainsKey(fPawnKey) || loadedTextures.ContainsKey(fLockedCacheKey)) { hasAnyPortrait = true; break; }
                 if (CacheManager.IsCached(fDiskKey)) { hasAnyPortrait = true; break; }
                 if (!string.IsNullOrEmpty(fLockedPath)) { hasAnyPortrait = true; break; }
             }
@@ -377,7 +410,7 @@ namespace AIPortraits
             if (!ShouldGenerateFor(pawn)) return;
 
             string framing = GetActiveFraming(pawn);
-            string pawnKey = pawn.ThingID + "_" + framing;
+            string pawnKey = GetPawnKey(pawn, framing);
 
             // Re-entrancy guard: ignore a refresh while an image generation is already
             // running for this pawn+framing (double-click, or racing the auto-trigger).
@@ -393,7 +426,7 @@ namespace AIPortraits
             // lockedCacheKey end up pointing to the same Texture2D — destroying the pawnKey
             // entry without clearing lockedCacheKey leaves a dangling reference that the
             // overlay would try to render between refresh + new-generation-complete.
-            string lockedCacheKey = pawnKey + LockedSuffix;
+            string lockedCacheKey = GetLockedCacheKey(pawn, framing);
             Texture2D oldTex;
             if (loadedTextures.TryGetValue(pawnKey, out oldTex))
             {
@@ -425,14 +458,14 @@ namespace AIPortraits
             }
             catch (Exception ex) { Log.Warning("[Dynamic AI Portraits] Could not clear video cache: " + ex.Message); }
 
-            string videoKey = pawn.ThingID + "_" + framing;
+            string videoKey = GetPawnKey(pawn, framing);
             videoStatus.Remove(videoKey);
             videoError.Remove(videoKey);
             VideoPlaybackManager.StopPlayback();
 
             // Reset request bookkeeping + force fresh state extraction
             activeRequests.Remove(pawnKey); requestStatus.Remove(pawnKey); requestError.Remove(pawnKey);
-            stateCache.Remove(pawn.ThingID + "_" + framing);
+            stateCache.Remove(videoKey);
 
             PawnState state = PawnStateExtractor.ExtractState(pawn);
             if (state == null) return;
@@ -446,7 +479,7 @@ namespace AIPortraits
             if (pawn == null) return null;
             PawnPortraitData data;
             string framing = GetActiveFraming(pawn);
-            string pawnKey = pawn.ThingID + "_" + framing;
+            string pawnKey = GetPawnKey(pawn, framing);
             if (!portraitData.TryGetValue(pawnKey, out data)) return null;
             if (data.rawBytes == null || data.rawBytes.Length == 0) return null;
             return CacheManager.SavePortraitToDisk(pawn, data.style, framing, data.rawBytes);
@@ -457,7 +490,7 @@ namespace AIPortraits
             if (pawn == null) return GenerationStatus.Idle;
             GenerationStatus s;
             string framing = GetActiveFraming(pawn);
-            string pawnKey = pawn.ThingID + "_" + framing;
+            string pawnKey = GetPawnKey(pawn, framing);
             return requestStatus.TryGetValue(pawnKey, out s) ? s : GenerationStatus.Idle;
         }
 
@@ -466,16 +499,16 @@ namespace AIPortraits
             if (pawn == null) return null;
             string e;
             string framing = GetActiveFraming(pawn);
-            string pawnKey = pawn.ThingID + "_" + framing;
+            string pawnKey = GetPawnKey(pawn, framing);
             return requestError.TryGetValue(pawnKey, out e) ? e : null;
         }
 
         // `diskCacheKey` is the stable per-pawn-per-save key (worldId_pawnId_framing).
-        // The texture is stored in loadedTextures under pawn.ThingID + "_" + framing, and on disk under diskCacheKey.
+        // The texture is stored in loadedTextures under pawnKey, and on disk under diskCacheKey.
         private static void TriggerGeneration(Pawn pawn, PawnState state, string diskCacheKey, string continuityToken)
         {
             string framing = state.framing ?? GetActiveFraming(pawn);
-            string pawnKey = pawn.ThingID + "_" + framing;
+            string pawnKey = GetPawnKey(pawn, framing);
 
             // Re-entrancy guard: never start a second image generation while one is in
             // flight for this pawn+framing (protects the per-frame auto-trigger path).
@@ -565,7 +598,7 @@ namespace AIPortraits
                         AIPortraitsMod.settings.activePortraits[activeKey] = savedPath;
                         AIPortraitsMod.Instance.WriteSettings();
 
-                        string lockedCacheKey = pawnKey + LockedSuffix;
+                        string lockedCacheKey = GetLockedCacheKey(pawn, framing);
                         Texture2D oldLocked;
                         if (loadedTextures.TryGetValue(lockedCacheKey, out oldLocked))
                         {
@@ -585,7 +618,7 @@ namespace AIPortraits
             if (!ShouldGenerateFor(pawn)) return;
 
             string framing = GetActiveFraming(pawn);
-            string pawnKey = pawn.ThingID + "_" + framing;
+            string pawnKey = GetPawnKey(pawn, framing);
             string diskKey = GetActiveKey(pawn);
             PortraitStyle currentStyle = AIPortraitsMod.settings.portraitStyle;
 
@@ -681,7 +714,7 @@ namespace AIPortraits
                         AIPortraitsMod.settings.activePortraits[activeKey] = savedPath;
                         AIPortraitsMod.Instance.WriteSettings();
 
-                        string lockedCacheKey = pawnKey + LockedSuffix;
+                        string lockedCacheKey = GetLockedCacheKey(pawn, framing);
                         Texture2D oldLocked;
                         if (loadedTextures.TryGetValue(lockedCacheKey, out oldLocked))
                         {
@@ -699,7 +732,14 @@ namespace AIPortraits
         {
             if (pawn == null) return;
             string framing = GetActiveFraming(pawn);
-            string cacheKey = pawn.ThingID + "_" + framing + LockedSuffix;
+
+
+            // Note: We deliberately do NOT remove entries from pawnKeyCache or lockedKeyCache here.
+            // Those caches simply map a (pawn ID, framing) pair to a static string, which is immutable
+            // and never becomes invalid during a game session. Removing them would just force
+            // unnecessary string reallocations on the next lookup.
+
+            string cacheKey = GetLockedCacheKey(pawn, framing);
             Texture2D tex;
             if (loadedTextures.TryGetValue(cacheKey, out tex))
             {
@@ -729,7 +769,7 @@ namespace AIPortraits
         {
             if (pawn == null || pawn.Destroyed) return;
             string framing = GetActiveFraming(pawn);
-            string key = pawn.ThingID + "_" + framing;
+            string key = GetPawnKey(pawn, framing);
 
             // Re-entrancy guard: if a video is already generating for this pawn+framing,
             // ignore the re-fire (double-click, or manual refresh racing the auto-trigger).
