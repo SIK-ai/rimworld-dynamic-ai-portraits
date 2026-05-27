@@ -53,22 +53,24 @@ namespace AIPortraits
             if (!U2NetRemover.Available) return;          // ONNX not loaded -> leave video as-is
             if (IsMatted(mp4Path)) return;
 
-            // A matte dir without a manifest is an interrupted/incomplete run. Clear it so
-            // we always start from a clean slate (no stale partial frames left behind).
-            string staleDir = MatteDir(mp4Path);
-            if (Directory.Exists(staleDir))
-            {
-                try { Directory.Delete(staleDir, true); }
-                catch (Exception ex) { Log.Warning("[Dynamic AI Portraits] Could not clear stale matte dir: " + ex.Message); }
-            }
-
             lock (inProgress)
             {
-                if (inProgress.Contains(mp4Path)) return;
+                if (inProgress.Contains(mp4Path)) return;   // a matte is already running for this clip
                 inProgress.Add(mp4Path);
             }
             try
             {
+                // Now that we own this clip, clear any stale/incomplete matte dir (no manifest)
+                // left by a prior interrupted run. This MUST happen after the in-progress guard
+                // so a concurrent EnsureMatted call (e.g. the per-frame draw trigger) can never
+                // delete the folder out from under an actively-running matte.
+                string staleDir = MatteDir(mp4Path);
+                if (Directory.Exists(staleDir))
+                {
+                    try { Directory.Delete(staleDir, true); }
+                    catch (Exception ex) { Log.Warning("[Dynamic AI Portraits] Could not clear stale matte dir: " + ex.Message); }
+                }
+
                 GameObject go = new GameObject("AIPortraits_VideoMatte");
                 UnityEngine.Object.DontDestroyOnLoad(go);
                 VideoMatteProcessor proc = go.AddComponent<VideoMatteProcessor>();
