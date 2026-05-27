@@ -356,4 +356,21 @@ namespace AIPortraits
             }
         }
     }
+
+    [HarmonyPatch(typeof(Verse.PawnRenderNode_Apparel), "AppendRequests")]
+    public static class Patch_PawnRenderNode_Apparel_AppendRequests
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(Verse.PawnRenderNode_Apparel __instance, RimWorld.Apparel ___apparel)
+        {
+            if (AsyncAIClient.isGeneratingRefPortrait && ___apparel != null)
+            {
+                if (PromptCompiler.IsHeadgear(___apparel))
+                {
+                    return false; // Skip appending draw requests!
+                }
+            }
+            return true;
+        }
+    }
 }

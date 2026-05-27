@@ -556,7 +556,14 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             {
                 if (IsHeadgearLabel(app))
                 {
-                    helmet = app;
+                    if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.excludeHelmet)
+                    {
+                        // Exclude headgear entirely
+                    }
+                    else
+                    {
+                        helmet = app;
+                    }
                 }
                 else
                 {
@@ -582,7 +589,24 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             return "wearing " + apparelDesc;
         }
 
-        private static bool IsHeadgearLabel(string label)
+        public static bool IsHeadgear(RimWorld.Apparel item)
+        {
+            if (item == null || item.def == null || item.def.apparel == null) return false;
+            var groups = item.def.apparel.bodyPartGroups;
+            if (groups != null)
+            {
+                foreach (var g in groups)
+                {
+                    if (g == RimWorld.BodyPartGroupDefOf.FullHead || g == RimWorld.BodyPartGroupDefOf.UpperHead)
+                    {
+                        return true;
+                    }
+                }
+            }
+            return IsHeadgearLabel(item.def.label);
+        }
+
+        public static bool IsHeadgearLabel(string label)
         {
             if (string.IsNullOrEmpty(label)) return false;
             string l = label.ToLower();
@@ -1094,6 +1118,12 @@ Content: Render the character's appearance, clean expression, and gear exactly a
                 rule7 = "FACE COVERS & SPECIALS: If a face-covering mask is listed, describe it worn on the face, hiding any beard. If framing is 'special', design a highly expressive and interesting shot (like a selfie, a low-angle action pose, or a backshot looking over their shoulder at the background) reflecting their mood, traits, or primary skill (e.g. medical bay for doctor, science lab for researcher, workshop for crafter, battlefield for soldier, psychic storm for active mental states) instead of a transparent background.";
             }
 
+            string rule6 = "HEADGEAR/HELMET MANDATE: If a helmet, hat, hood, cap, cowl, or mask is in the apparel list, you ABSOLUTELY MUST include it in the prompt. Describe it prominently as worn on their head/face, or held under one arm.";
+            if (settings != null && settings.excludeHelmet)
+            {
+                rule6 = "HEADGEAR/HELMET EXCLUSION: Do NOT include any helmet, hat, hood, cap, cowl, or mask in the prompt. Ensure the character's hair, hair style, face, and head are fully visible and not covered.";
+            }
+
             return
                 "You are an expert AI image prompt engineer for a RimWorld character portrait generator.\n" +
                 "Given a character data sheet, " + framingTask + "\n\n" +
@@ -1104,7 +1134,7 @@ Content: Render the character's appearance, clean expression, and gear exactly a
                 "3. Resolve contradictions — when traits conflict, pick the more visually striking interpretation.\n" +
                 "4. You have full creative freedom over pose, composition, camera angle, lighting, and overall styling. Aim for a premium, visually striking portrait that captures the character's identity. Use your judgment to make the most impactful artistic decisions.\n" +
                 "5. " + rule5 + "\n" +
-                "6. HEADGEAR/HELMET MANDATE: If a helmet, hat, hood, cap, cowl, or mask is in the apparel list, you ABSOLUTELY MUST include it in the prompt. Describe it prominently as worn on their head/face, or held under one arm.\n" +
+                "6. " + rule6 + "\n" +
                 "7. " + rule7 + "\n" +
                 "8. HIGH QUALITY VISUALS: Elevate the aesthetic by requesting dramatic lighting, strong shadow play, crisp linework, and clean color harmony tailored to the style. Avoid generic terms like 'hyperrealistic' or 'detailed'; use concrete modifiers instead (e.g. 'perfect anatomy', 'masterpiece digital art', 'crisp pixel alignment').\n" +
                 "9. Keep total output under 350 words.\n" +

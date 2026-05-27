@@ -30,6 +30,8 @@ namespace AIPortraits
     {
         public delegate void PortraitCallback(Texture2D texture, byte[] rawBytes, string promptUsed, string error);
 
+        public static bool isGeneratingRefPortrait = false;
+
         private const int RequestTimeoutSeconds = 120;
 
         public static void QueueGeneration(PawnState state, AIPortraitsSettings settings, string continuityToken, byte[] portraitBytes, PortraitCallback callback)
@@ -1076,8 +1078,15 @@ namespace AIPortraits
         private static Texture2D GetReadableNativePortraitTexture(Pawn pawn)
         {
             if (pawn == null) return null;
+            bool wasGenerating = isGeneratingRefPortrait;
             try
             {
+                if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.excludeHelmet)
+                {
+                    isGeneratingRefPortrait = true;
+                    RimWorld.PortraitsCache.SetDirty(pawn);
+                }
+
                 RenderTexture originalTex = RimWorld.PortraitsCache.Get(pawn, new UnityEngine.Vector2(256f, 256f), Rot4.South);
                 if (originalTex == null) return null;
 
@@ -1100,6 +1109,14 @@ namespace AIPortraits
             {
                 Log.Warning("[Dynamic AI Portraits] Failed to render readable native portrait: " + ex.Message);
                 return null;
+            }
+            finally
+            {
+                if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.excludeHelmet)
+                {
+                    isGeneratingRefPortrait = wasGenerating;
+                    RimWorld.PortraitsCache.SetDirty(pawn);
+                }
             }
         }
 

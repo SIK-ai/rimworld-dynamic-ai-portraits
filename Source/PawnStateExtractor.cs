@@ -406,7 +406,15 @@ namespace AIPortraits
                                           (string.IsNullOrEmpty(colorDesc) ? "" : colorDesc + " ") +
                                           itemLabel + damageSuffix).Trim();
 
-                    s.apparel.Add(apparelDesc);
+                    bool isHelmet = PromptCompiler.IsHeadgear(item);
+                    if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.excludeHelmet && isHelmet)
+                    {
+                        // Exclude headgear from being listed
+                    }
+                    else
+                    {
+                        s.apparel.Add(apparelDesc);
+                    }
 
                     if (defLc.Contains("armor") || defLc.Contains("plate") || defLc.Contains("marine"))
                         armorCount++;

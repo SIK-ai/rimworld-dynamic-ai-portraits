@@ -158,6 +158,7 @@ namespace AIPortraits
         public bool includeIdeology = true;
         public bool includeRimLighting = true;
         public bool useGearReferenceSheet = true;
+        public bool excludeHelmet = false;
 
         // LLM-assisted prompt generation (Gemini Flash)
         public bool   useLLMPrompt = false;
@@ -234,6 +235,7 @@ namespace AIPortraits
             Scribe_Values.Look(ref includeIdeology,    "includeIdeology",  true);
             Scribe_Values.Look(ref includeRimLighting, "includeRimLighting", true);
             Scribe_Values.Look(ref useGearReferenceSheet, "useGearReferenceSheet", true);
+            Scribe_Values.Look(ref excludeHelmet,      "excludeHelmet",    false);
             Scribe_Values.Look(ref useLLMPrompt,       "useLLMPrompt",     false);
             Scribe_Values.Look(ref llmApiKey,          "llmApiKey",        "");
             Scribe_Values.Look(ref useAIBgRemoval,     "useAIBgRemoval",   false);
@@ -743,6 +745,7 @@ namespace AIPortraits
             listing.CheckboxLabeled("Include Ideology details", ref includeIdeology, "Include pawn's ideology role (e.g. Moral Guide) and follower description/iconography.");
             listing.CheckboxLabeled("Include Ideology Rim Lighting", ref includeRimLighting, "Separate the character silhouette from the background using a rim light styled with their favorite/ideoligion color.");
             listing.CheckboxLabeled("Use Gear Reference Sheet (Gemini)", ref useGearReferenceSheet, "Stitch matched weapon/apparel sprites into a single reference image for Gemini models. Helps retain equipment designs across generations.");
+            listing.CheckboxLabeled("Exclude Helmets/Headgear", ref excludeHelmet, "Excludes helmets, hats, hoods, caps, and masks from the generated portraits and reference sheets.");
             listing.Gap(8f);
 
             // ── PORTRAIT POSITION & SCALE ──────────────────────────────────────────
