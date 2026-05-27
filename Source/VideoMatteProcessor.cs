@@ -52,6 +52,16 @@ namespace AIPortraits
             if (framing == "special") return;            // keep background for special shots
             if (!U2NetRemover.Available) return;          // ONNX not loaded -> leave video as-is
             if (IsMatted(mp4Path)) return;
+
+            // A matte dir without a manifest is an interrupted/incomplete run. Clear it so
+            // we always start from a clean slate (no stale partial frames left behind).
+            string staleDir = MatteDir(mp4Path);
+            if (Directory.Exists(staleDir))
+            {
+                try { Directory.Delete(staleDir, true); }
+                catch (Exception ex) { Log.Warning("[Dynamic AI Portraits] Could not clear stale matte dir: " + ex.Message); }
+            }
+
             lock (inProgress)
             {
                 if (inProgress.Contains(mp4Path)) return;
@@ -63,6 +73,7 @@ namespace AIPortraits
                 UnityEngine.Object.DontDestroyOnLoad(go);
                 VideoMatteProcessor proc = go.AddComponent<VideoMatteProcessor>();
                 proc.Begin(mp4Path, delegate { lock (inProgress) { inProgress.Remove(mp4Path); } });
+                Log.Message("[Dynamic AI Portraits] Video matte queued (" + framing + "): " + Path.GetFileName(mp4Path));
             }
             catch (Exception ex)
             {
@@ -166,8 +177,16 @@ namespace AIPortraits
             // so the union is tight (minimal ghosting).
             int wpx = width, hpx = height;
             byte[] unionAlpha = new byte[npix];
+            // Near-static idle clips: matte every Nth frame (plus the last) and union them,
+            // instead of running u2netp on all ~96 frames. Cuts the (invisible) matte time
+            // ~3x so it is far likelier to finish before the game closes, with negligible
+            // loss in union coverage — fewer samples also means a tighter, less-ghosted union.
+            const int SampleStride = 3;
+            Log.Message("[Dynamic AI Portraits] Video matte START: " + n + " frames, sampling every " + SampleStride + " -> " + outDir);
             for (int i = 0; i < n; i++)
             {
+                if ((i % SampleStride) != 0 && i != n - 1) continue;
+
                 Color32[] frame = captured[keys[i]];
                 float[] alpha = null;
                 bool threadDone = false;
@@ -188,8 +207,17 @@ namespace AIPortraits
                         if (na > unionAlpha[p]) unionAlpha[p] = na;
                     }
                 }
+                if ((i % 24) == 0) Log.Message("[Dynamic AI Portraits] matte alpha pass " + i + "/" + n);
                 yield return null;
             }
+
+            // Kill faint low-confidence background halos: any union alpha below the floor is
+            // snapped to fully transparent. Validated offline on real clips — this removes the
+            // faint bleed/halo around the subject without touching the solid body or soft edges
+            // (foreground coverage above the floor is unchanged).
+            const byte AlphaFloor = 48;
+            for (int p = 0; p < npix; p++)
+                if (unionAlpha[p] < AlphaFloor) unionAlpha[p] = 0;
 
             // ── Pass 2: apply the stabilized union alpha to every frame and write PNGs. ──
             int written = 0;
@@ -214,6 +242,7 @@ namespace AIPortraits
                 }
                 catch (Exception ex) { Log.Warning("[Dynamic AI Portraits] frame write failed: " + ex.Message); }
 
+                if ((i % 24) == 0) Log.Message("[Dynamic AI Portraits] matte write pass " + i + "/" + n);
                 yield return null;
             }
 

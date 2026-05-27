@@ -736,6 +736,11 @@ namespace AIPortraits
                     videoStatus.Remove(key);
                     videoError.Remove(key);
                     Log.Message("[Dynamic AI Portraits] Veo Video Generation Succeeded for " + pawn.LabelShortCap);
+                    // Kick off background removal immediately so it runs while the player is
+                    // still here, rather than waiting until the clip is next drawn. No-op for
+                    // "special" and idempotent (guarded inside EnsureMatted).
+                    if (!string.IsNullOrEmpty(videoPath))
+                        VideoMatteService.EnsureMatted(videoPath, framing);
                 }
             });
         }
