@@ -1,4 +1,4 @@
-# Dynamic AI Portraits — RimWorld 1.6 Mod
+# Dynamic AI Portraits — RimWorld 1.5 & 1.6 Mod
 
 Generates AI portraits and looping animated previews of your colonists that reflect their real-time state: apparel, weapons, health, injuries, mental breaks, xenotype, ideology role, mood, royal title, addictions, pregnancy, and more. The portrait floats above the inspect pane as a clean transparent overlay whenever a colonist is selected and no inspect tab is open.
 
@@ -57,7 +57,7 @@ The mod's **API Settings** tab allows configuring your preferred provider and mo
 ### 💎 Google Imagen 4 — Best quality
 - $0.02 per image (Fast tier).
 - ~3s per portrait, **true transparent PNG output**.
-- Models: `imagen-4.0-fast`, `imagen-4.0-generate`, `imagen-4.0-ultra`.
+- Models: `nanobanana`, `nanobanana-2`, `nanobanana-pro`, `imagen-4.0-fast`, `imagen-4.0-generate`, `imagen-4.0-ultra`.
 - **Setup:** get a free API key at [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey), paste it.
 - Best for: high-quality style adherence and native transparency.
 
@@ -136,18 +136,18 @@ Switching framing triggers a new generation under a separate cache key, so each 
 
 ## Optional: Gemini Flash Prompt Engineering
 
-In API Settings → **Prompt Generation** section, switch from `No — Compiled Template` to `Gemini Flash Lite` (or a `Gemma 4` model — **26B** or **31B**). The mod will send pawn metadata to the model, which rewrites it into a creative, optimized image prompt before sending to your image backend.
+In API Settings → **Prompt Generation** section, providing an API key enables the LLM rewriting, and leaving it blank defaults to the compiled template. The mod will send pawn metadata to the model, which rewrites it into a creative, optimized image prompt before sending to your image backend.
 
 - Free Google AI Studio key works (same key as Imagen if you're already using it)
 - Costs ~$0.0001 per call on Gemini Flash Lite (essentially free)
 - Falls back to the built-in template if Gemini fails
-- Visible in the **Prompt Preview** tab — shows the actual LLM output
+- Visible in the **Prompt Engineering** tab — shows the actual LLM output
 
 ---
 
 ## Building from Source
 
-Requirements: Windows, .NET Framework 4.x (`csc.exe` at the standard path), RimWorld 1.6.
+Requirements: Windows, .NET Framework 4.x (`csc.exe` at the standard path), RimWorld 1.5 & 1.6.
 
 To compile the mod locally without polluting your Git status with machine-specific file paths:
 
@@ -159,7 +159,7 @@ To compile the mod locally without polluting your Git status with machine-specif
    set "HARMONY_PATH=C:\Program Files (x86)\Steam\steamapps\common\RimWorld\Mods\Harmony\Current\Assemblies\0Harmony.dll"
    set "RIMWORLD_MODS_DIR=C:\Program Files (x86)\Steam\steamapps\common\RimWorld\Mods"
    ```
-3. Run [build.bat](build.bat). The build script will automatically detect and load your settings from `build_local.bat`, compile `AIPortraits.dll`, output it to `1.6\Assemblies/` and `Assemblies/`, and optionally deploy it straight to your game's `Mods` folder if `RIMWORLD_MODS_DIR` is set.
+3. Run [build.bat](build.bat). The build script will automatically detect and load your settings from `build_local.bat`, compile `AIPortraits.dll`, output it to `1.5\Assemblies/`, `1.6\Assemblies/` and `Assemblies/`, and optionally deploy it straight to your game's `Mods` folder if `RIMWORLD_MODS_DIR` is set.
 
 For a deeper dive into the mod's internal systems, codebase structure, and algorithms, see the [Developer Architecture Guide](DEVELOPER.md).
 
@@ -167,7 +167,7 @@ For a deeper dive into the mod's internal systems, codebase structure, and algor
 
 ## Compatibility
 
-- RimWorld **1.6** only
+- RimWorld **1.5** and **1.6**
 - Requires **Harmony**
 - Compatible with **Biotech**, **Ideology**, **Royalty**, and **Anomaly** DLCs (xenotypes, genes, ideology roles, royal titles, psylink, ghoul/inhumanized states)
 - Patches `MainTabWindow_Inspect.ExtraOnGUI` (postfix) only — minimal mod surface area
