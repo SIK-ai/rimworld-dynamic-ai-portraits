@@ -14,11 +14,18 @@ namespace AIPortraits
             Instance = this;
             settings = GetSettings<AIPortraitsSettings>();
             
-            // Execute Harmony patches
+            // Execute Harmony patches. Guard so a single failing patch can't abort the whole
+            // mod constructor — that would unregister settings and present as "no config".
             var harmony = new Harmony("antigravity.aiportraits");
-            harmony.PatchAll();
-            
-            Log.Message("[Dynamic AI Portraits] Initialized successfully. Harmony patches applied.");
+            try
+            {
+                harmony.PatchAll();
+                Log.Message("[Dynamic AI Portraits] Initialized successfully. Harmony patches applied.");
+            }
+            catch (System.Exception e)
+            {
+                Log.Error("[Dynamic AI Portraits] Harmony PatchAll failed (mod still loads): " + e);
+            }
         }
 
         public override void DoSettingsWindowContents(Rect inRect)

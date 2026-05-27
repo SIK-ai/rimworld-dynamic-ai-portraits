@@ -364,6 +364,14 @@ namespace AIPortraits
     [HarmonyPatch(typeof(Verse.PawnRenderNode_Apparel), "AppendRequests")]
     public static class Patch_PawnRenderNode_Apparel_AppendRequests
     {
+        // Apply only when this RimWorld build actually exposes the target method.
+        // Returning false makes Harmony skip the patch cleanly instead of throwing
+        // "Undefined target method" during PatchAll (which aborted mod init).
+        public static bool Prepare()
+        {
+            return AccessTools.Method(typeof(Verse.PawnRenderNode_Apparel), "AppendRequests") != null;
+        }
+
         [HarmonyPrefix]
         public static bool Prefix(Verse.PawnRenderNode_Apparel __instance, RimWorld.Apparel ___apparel)
         {
