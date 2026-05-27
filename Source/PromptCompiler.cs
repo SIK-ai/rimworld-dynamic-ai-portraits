@@ -113,7 +113,7 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             else if (state.framing == "special") subjectType = "character dynamic scene illustration";
 
             p.Append(settings.manhwaStylePrompt + ", " + subjectType + ", " + frameText + ", " + bgText + ", ");
-            p.Append("camera setup: 85mm portrait lens, shallow depth of field, sharp focus, lighting setup: cinematic volumetric lighting, sharp side key light, dramatic rim light, ");
+            p.Append("flat 2D hand-drawn illustration, bold clean ink linework, flat cel-shaded color fills, hard-edged anime shadows, bright rim highlights, strictly non-photorealistic, no camera lens, no depth of field blur, ");
             if (!string.IsNullOrEmpty(continuityToken))
                 p.Append(continuityToken + ", ");
         }
@@ -127,7 +127,7 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             else if (state.framing == "special") subjectType = "character dynamic scene illustration";
 
             p.Append(settings.cartoonStylePrompt + ", " + subjectType + ", " + frameText + ", " + bgText + ", ");
-            p.Append("camera setup: 50mm standard lens, deep depth of field, sharp focus, lighting setup: flat cartoon studio lighting, minimal soft shadows, ");
+            p.Append("flat 2D cartoon illustration, thick bold black outlines, flat color fills, minimal flat cel shadows, strictly non-photorealistic, no camera lens, no depth of field blur, ");
             if (!string.IsNullOrEmpty(continuityToken))
                 p.Append(continuityToken + ", ");
         }
@@ -141,7 +141,7 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             else if (state.framing == "special") subjectType = "character dynamic scene illustration";
 
             p.Append(settings.pixelStylePrompt + ", " + subjectType + ", " + frameText + ", " + bgText + ", ");
-            p.Append("camera setup: retro game camera view, sharp pixel-grid focus, lighting setup: simple flat JRPG cel-shaded lighting, ");
+            p.Append("crisp pixel-art grid, sharp pixel alignment, simple flat JRPG cel-shaded lighting, limited color palette, strictly non-photorealistic, ");
             if (!string.IsNullOrEmpty(continuityToken))
                 p.Append(continuityToken + ", ");
         }
@@ -1165,13 +1165,14 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             return
                 "You are an expert AI image prompt engineer for a RimWorld character portrait generator.\n" +
                 "Given a character data sheet, " + framingTask + "\n\n" +
-                "TARGET ART STYLE: " + styleDesc + "\n\n" +
+                "TARGET ART STYLE: " + styleDesc + "\n" +
+                "CRITICAL: This is a FLAT 2D HAND-DRAWN ILLUSTRATION (webtoon / manhwa / cartoon / pixel art), NOT a photograph and NOT a 3D render. It must read as printed comic / webtoon artwork — bold clean ink lines, flat cel-shaded color fills, CMYK print-style colors. NEVER use photography or cinematography vocabulary (no 'photo', 'photograph', 'photorealistic', 'hyperrealistic', 'realistic skin', 'lens', 'mm', 'depth of field', 'bokeh', 'studio lighting', 'cinematic', 'volumetric', '3d render', 'octane render').\n\n" +
                 "RULES:\n" +
                 "1. Structure the prompt into clean, distinct lines separated by newlines, with each line focusing on a specific visual dimension:\n" +
                 "   - Line 1: Core Subject & Pose (describe the character, hair flows, expression, pose, and active gestures)\n" +
                 "   - Line 2: Clothing & Gear (describe the clothing, armor materials, textures, and held/slung weapons or props)\n" +
-                "   - Line 3: Camera & Lens Settings (specify camera angle, lens focal length, focus type, and depth of field)\n" +
-                "   - Line 4: Lighting & Shadows (specify lighting conditions, light direction, and shadow details)\n" +
+                "   - Line 3: Composition & Framing (describe the framing and viewing angle as a 2D drawing — e.g. close-up bust framing, three-quarter view, dynamic low angle. NEVER mention cameras, lenses, focal length, mm, depth of field, bokeh, or the word 'photo')\n" +
+                "   - Line 4: Stylized Shading (describe the drawn shading technique and light direction — e.g. flat cel-shaded color blocks, hard-edged anime drop shadows, bold rim highlights. Keep it 2D and hand-drawn; NO photographic or cinematic studio lighting, NO volumetric light)\n" +
                 "   - Line 5: Aesthetics & Color Scheme (specify color harmonies, accent hues, composition style, and mood)\n" +
                 "   - Line 6: Style Medium & Quality Keywords (specify the art style, line art quality, shading technique, and high-end production terms)\n" +
                 "   - Line 7: Background Setting (as defined in rule 5)\n" +
@@ -1182,10 +1183,11 @@ Content: Render the character's appearance, clean expression, and gear exactly a
                 "5. " + rule5 + "\n" +
                 "6. " + rule6 + "\n" +
                 "7. " + rule7 + "\n" +
-                "8. HIGH QUALITY VISUALS: Elevate the aesthetic by requesting dramatic lighting, strong shadow play, crisp inked linework, and clean color harmony tailored to the style. Avoid generic terms like 'hyperrealistic' or 'detailed'; use concrete modifiers instead. For example, describe the hair flows, glossy highlights, detailed eyes, clothing textures, dynamic lighting, and background color accents in detail (e.g. 'glistening hair flows', 'sharp volumetric highlights', 'masterpiece digital art', 'crisp pixel alignment', 'iridescent fabrics').\n" +
+                "8. HIGH QUALITY VISUALS: Elevate the aesthetic with crisp inked linework, bold cel-shaded shading, and clean flat color harmony tailored to the style. Avoid generic terms like 'hyperrealistic' or 'detailed'; use concrete drawn-art modifiers instead (e.g. 'glistening stylized hair flows', 'bold cel-shaded highlights', 'masterpiece digital illustration', 'crisp pixel alignment', 'flat iridescent fabric fills'). Do NOT use 'volumetric', 'cinematic', or any photographic lighting terms.\n" +
                 "9. STRICT SAFETY: Do NOT use any sexually suggestive, nude, naked, topless, bare-chested, or NSFW-sensitive keywords. The output must be strictly PG-rated and safe for work. Ensure the character is always described as wearing clothing (e.g., if no specific apparel is listed, specify simple modest clothes like a plain tunic or fabric wraps).\n" +
                 "10. Keep total output under 350 words.\n" +
-                "11. Output ONLY the prompt — no explanations, no headers, no quotes.";
+                "11. Output ONLY the prompt — no explanations, no headers, no quotes.\n" +
+                "12. NON-PHOTOREALISTIC (MANDATORY): The result is a 2D drawing/illustration. Your prompt must NOT contain any of these words: photo, photograph, photorealistic, hyperrealistic, realistic skin, lens, focal length, mm, depth of field, bokeh, studio lighting, cinematic, volumetric, 3d render, octane. Describe everything as drawn, inked, cel-shaded, flat-colored illustration art.";
         }
     }
 }
