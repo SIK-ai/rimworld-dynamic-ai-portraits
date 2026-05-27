@@ -261,16 +261,22 @@ namespace AIPortraits
         }
 
         // UI states (not serialized)
-        private int activeTab = 0; // 0 = API Settings, 1 = Pawn Gallery, 2 = Prompt Preview
+        private int activeTab = 0; // 0 = API Settings, 1 = Pawn Gallery, 2 = Prompt Engineering
         private bool showAdvanced = false;
         private Vector2 leftScrollPosition = Vector2.zero;
         private Vector2 rightScrollPosition = Vector2.zero;
         private Vector2 vibeScrollPosition = Vector2.zero;
         private Vector2 promptScrollPosition = Vector2.zero;
         private Pawn selectedPawn = null;
-        private Pawn promptTabSelectedPawn = null;
         private SavedPortrait selectedSavedPortrait = null;
         private string customPromptBuffer = "";
+
+        // Prompt Engineering tab — its own buffer + selection so edits never clobber the Gallery's.
+        private Vector2 promptEngLeftScroll = Vector2.zero;
+        private string promptEngBuffer = "";
+        private SavedPortrait promptEngSelectedPortrait = null;
+        private bool promptEngShowLastSent = true;
+        private bool promptEngShowLlmSystem = false;
 
         public class SavedPortrait
         {
@@ -294,6 +300,8 @@ namespace AIPortraits
         {
             selectedSavedPortrait = null;
             customPromptBuffer = "";
+            promptEngSelectedPortrait = null;
+            promptEngBuffer = "";
 
             // Destroy textures to avoid memory leaks
             foreach (var sp in cachedSavedPortraits)
@@ -438,7 +446,7 @@ namespace AIPortraits
             List<TabRecord> tabs = new List<TabRecord>();
             tabs.Add(new TabRecord("API Settings",   () => { activeTab = 0; }, activeTab == 0));
             tabs.Add(new TabRecord("Pawn Gallery",   () => { activeTab = 1; }, activeTab == 1));
-            tabs.Add(new TabRecord("Prompt Preview", () => { activeTab = 2; }, activeTab == 2));
+            tabs.Add(new TabRecord("Prompt Engineering", () => { activeTab = 2; }, activeTab == 2));
 
             TabDrawer.DrawTabs(tabRect, tabs);
 
@@ -449,7 +457,7 @@ namespace AIPortraits
 
             if      (activeTab == 0) DrawApiSettings(mainRect);
             else if (activeTab == 1) DrawPawnGallery(mainRect);
-            else if (activeTab == 2) DrawPromptPreview(mainRect);
+            else if (activeTab == 2) DrawPromptEngineering(mainRect);
         }
 
         // ──────────────────────────────────────────────────────────────────────────
@@ -1640,11 +1648,11 @@ namespace AIPortraits
         // Shows the user EXACTLY what's being sent to the image API for any colonist,
         // so they can verify equipment, helmets, traits etc. are flowing through to
         // the prompt. Useful for debugging "why isn't the helmet showing up?" cases.
-        private void DrawPromptPreview(Rect inRect)
+        private void DrawPromptEngineering(Rect inRect)
         {
             if (Current.ProgramState != ProgramState.Playing)
             {
-                Widgets.Label(inRect, "Please load a save game to preview prompts.");
+                Widgets.Label(inRect, "Please load a save game to engineer prompts.");
                 return;
             }
 
@@ -1657,191 +1665,391 @@ namespace AIPortraits
                 return;
             }
 
-            if (promptTabSelectedPawn == null || !colonists.Contains(promptTabSelectedPawn))
-                promptTabSelectedPawn = colonists[0];
+            if (selectedPawn == null || !colonists.Contains(selectedPawn))
+            {
+                selectedPawn = colonists[0];
+                promptEngSelectedPortrait = null;
+                promptEngBuffer = "";
+            }
 
-            // ── LEFT: colonist list ──────────────────────────────────────────────
+            // Keep the saved-portrait cache warm (shared with the Pawn Gallery tab so
+            // flipping between tabs doesn't reload/dispose textures every frame).
+            if (selectedPawn != lastCachedPawn)
+            {
+                RefreshPawnPortraitsCache(selectedPawn);
+            }
+            else
+            {
+                string scanDir = CacheManager.GetPortraitSaveDirectory(selectedPawn);
+                int diskCount = 0;
+                if (Directory.Exists(scanDir))
+                {
+                    foreach (string f in Directory.GetFiles(scanDir, "*.png"))
+                    {
+                        if (!f.EndsWith("_ref_gear.png") && !f.EndsWith("_ref_portrait.png"))
+                            diskCount++;
+                    }
+                }
+                if (diskCount != cachedSavedPortraits.Count)
+                    RefreshPawnPortraitsCache(selectedPawn);
+            }
+
+            // ── LEFT sidebar: colonist list ──────────────────────────────────────
             const float SidebarW = 180f;
             Rect sidebarRect = new Rect(inRect.x, inRect.y, SidebarW, inRect.height);
             Widgets.DrawMenuSection(sidebarRect);
             Rect sidebarInner = sidebarRect.ContractedBy(4f);
-            Rect leftView     = new Rect(0f, 0f, sidebarInner.width - 16f, colonists.Count * 32f);
-            Widgets.BeginScrollView(sidebarInner, ref leftScrollPosition, leftView);
+            Rect colView = new Rect(0f, 0f, sidebarInner.width - 16f, colonists.Count * 32f);
+            Widgets.BeginScrollView(sidebarInner, ref leftScrollPosition, colView);
             for (int i = 0; i < colonists.Count; i++)
             {
                 Pawn p = colonists[i];
-                Rect row = new Rect(0f, i * 32f, leftView.width, 28f);
-                if (p == promptTabSelectedPawn) GUI.color = new Color(0.5f, 0.9f, 1f);
+                Rect row = new Rect(0f, i * 32f, colView.width, 28f);
+                if (p == selectedPawn) GUI.color = new Color(0.5f, 0.9f, 1f);
                 if (Widgets.ButtonText(row, p.LabelShortCap))
-                    promptTabSelectedPawn = p;
+                {
+                    selectedPawn = p;
+                    promptEngSelectedPortrait = null;
+                    promptEngBuffer = "";
+                }
                 GUI.color = Color.white;
             }
             Widgets.EndScrollView();
 
-            // ── RIGHT: prompt content ────────────────────────────────────────────
-            Rect rightArea = new Rect(sidebarRect.xMax + 10f, inRect.y,
-                                       inRect.width - SidebarW - 10f, inRect.height);
-            Widgets.DrawMenuSection(rightArea);
-            Rect content = rightArea.ContractedBy(10f);
+            float remaining = inRect.width - SidebarW - 20f;
+            float leftColW  = remaining * 0.42f;
+            float rightColW = remaining - leftColW - 10f;
+            Rect leftCol  = new Rect(sidebarRect.xMax + 10f, inRect.y, leftColW,  inRect.height);
+            Rect rightCol = new Rect(leftCol.xMax + 10f,     inRect.y, rightColW, inRect.height);
 
-            PawnState state = PawnStateExtractor.ExtractState(promptTabSelectedPawn);
-            if (state == null)
+            // ── LEFT column: base-portrait selector + references + output + details ──
+            Widgets.DrawMenuSection(leftCol);
+            Rect leftInner = leftCol.ContractedBy(8f);
+            float leftContentH = 720f + cachedSavedPortraits.Count * 70f;
+            Rect leftViewRect = new Rect(0f, 0f, leftInner.width - 16f, leftContentH);
+            Widgets.BeginScrollView(leftInner, ref promptEngLeftScroll, leftViewRect);
+            float lw = leftViewRect.width;
+            float ly = 0f;
+
+            Widgets.Label(new Rect(0f, ly, lw, 22f), "<b>Base portrait</b>");
+            ly += 24f;
+
+            Rect newRow = new Rect(0f, ly, lw, 30f);
+            if (promptEngSelectedPortrait == null) Widgets.DrawBoxSolid(newRow, new Color(0.2f, 0.35f, 0.45f, 0.6f));
+            else if (Mouse.IsOver(newRow)) Widgets.DrawHighlight(newRow);
+            if (Widgets.ButtonInvisible(newRow))
             {
-                Widgets.Label(content, "Could not extract state for " + promptTabSelectedPawn.LabelShortCap);
-                return;
+                promptEngSelectedPortrait = null;
+                SeedPromptEngBuffer();
+                SoundDefOf.Click.PlayOneShotOnCamera(null);
+            }
+            Text.Anchor = TextAnchor.MiddleLeft;
+            Widgets.Label(new Rect(newRow.x + 6f, newRow.y, newRow.width - 6f, 30f), "+ New prompt (no base image)");
+            Text.Anchor = TextAnchor.UpperLeft;
+            ly += 34f;
+
+            for (int i = 0; i < cachedSavedPortraits.Count; i++)
+            {
+                SavedPortrait sp = cachedSavedPortraits[i];
+                Rect spRow = new Rect(0f, ly, lw, 64f);
+                if (sp == promptEngSelectedPortrait) Widgets.DrawBoxSolid(spRow, new Color(0.2f, 0.35f, 0.45f, 0.6f));
+                else if (Mouse.IsOver(spRow)) Widgets.DrawHighlight(spRow);
+
+                Rect thumbRect = new Rect(spRow.x + 2f, spRow.y + 2f, 60f, 60f);
+                Widgets.DrawBoxSolid(thumbRect, new Color(0.06f, 0.06f, 0.06f, 1f));
+                if (sp.texture != null) GUI.DrawTexture(thumbRect.ContractedBy(2f), sp.texture, ScaleMode.ScaleToFit);
+
+                Text.Font = GameFont.Tiny;
+                Text.Anchor = TextAnchor.MiddleLeft;
+                Widgets.Label(new Rect(thumbRect.xMax + 6f, spRow.y, spRow.width - 70f, 64f),
+                              sp.framingName + "\n" + sp.styleName + "\n" + sp.timestamp);
+                Text.Anchor = TextAnchor.UpperLeft;
+                Text.Font = GameFont.Small;
+
+                if (Widgets.ButtonInvisible(spRow))
+                {
+                    promptEngSelectedPortrait = sp;
+                    promptEngBuffer = sp.prompt != null ? sp.prompt : "";
+                    SoundDefOf.Click.PlayOneShotOnCamera(null);
+                }
+                ly += 68f;
             }
 
-            string framing = "portrait";
-            if (promptTabSelectedPawn != null && pawnFraming != null)
-                pawnFraming.TryGetValue(promptTabSelectedPawn.ThingID, out framing);
-
-            state.framing = framing;
-
-            string structuredDesc = PromptCompiler.CompilePawnStateDescription(state, this);
-            string compiledPrompt = PromptCompiler.CompilePositivePrompt(state, this, null);
-            string llmSystem      = useLLMPrompt ? PromptCompiler.GetLLMSystemPrompt(portraitStyle, this, framing) : null;
-
-            // Read the most recent .txt sibling next to this pawn's saved PNGs — that's
-            // the canonical "what was actually sent to the image API last time" record.
-            string lastActualPrompt = null;
-            string lastActualFile   = null;
-            try
+            ly += 8f;
+            Widgets.Label(new Rect(0f, ly, lw, 20f), "<b>Reference images</b>");
+            ly += 22f;
+            if (promptEngSelectedPortrait != null &&
+                (promptEngSelectedPortrait.refPortraitTexture != null || promptEngSelectedPortrait.refGearTexture != null))
             {
-                string dir = CacheManager.GetPortraitSaveDirectory(promptTabSelectedPawn);
-                if (Directory.Exists(dir))
+                float refX = 0f;
+                if (promptEngSelectedPortrait.refPortraitTexture != null)
                 {
-                    string[] txts = Directory.GetFiles(dir, "*.txt");
-                    DateTime latestT = DateTime.MinValue;
-                    for (int i = 0; i < txts.Length; i++)
-                    {
-                        DateTime t = File.GetLastWriteTime(txts[i]);
-                        if (t > latestT) { latestT = t; lastActualFile = txts[i]; }
-                    }
-                    if (lastActualFile != null)
-                        lastActualPrompt = File.ReadAllText(lastActualFile);
+                    Rect rp = new Rect(refX, ly, 80f, 80f);
+                    Widgets.DrawBoxSolid(rp, new Color(0.06f, 0.06f, 0.06f, 1f));
+                    GUI.DrawTexture(rp.ContractedBy(2f), promptEngSelectedPortrait.refPortraitTexture, ScaleMode.ScaleToFit);
+                    TooltipHandler.TipRegion(rp, "Portrait reference — identity continuity anchor.");
+                    refX += 88f;
                 }
-            }
-            catch (Exception) { /* ignore — just show "none recorded" */ }
-
-            float viewW = content.width - 18f;
-            float descH    = Text.CalcHeight(structuredDesc, viewW - 12f);
-            float promptH  = Text.CalcHeight(compiledPrompt, viewW - 12f);
-            float llmH     = llmSystem != null ? Text.CalcHeight(llmSystem, viewW - 12f) : 0f;
-            float lastH    = !string.IsNullOrEmpty(lastActualPrompt) ? Text.CalcHeight(lastActualPrompt, viewW - 12f) : 0f;
-            float totalH   = descH + promptH + llmH + lastH + 360f;
-
-            Rect view = new Rect(0f, 0f, viewW, totalH);
-            Widgets.BeginScrollView(content, ref promptScrollPosition, view);
-
-            float y = 0f;
-
-            // Heading
-            Text.Font = GameFont.Medium;
-            Widgets.Label(new Rect(0f, y, viewW, 28f),
-                          "Prompt preview for " + promptTabSelectedPawn.LabelShortCap);
-            y += 32f;
-            Text.Font = GameFont.Small;
-
-            // Mode indicator
-            Text.Font = GameFont.Tiny;
-            GUI.color = useLLMPrompt ? new Color(0.4f, 0.85f, 1f) : new Color(0.7f, 0.7f, 0.7f);
-            string activeModelLabel = (llmModelType == LLMModelType.GeminiFlashLite) ? "Gemini Flash" : "Gemma 4 26B";
-            Widgets.Label(new Rect(0f, y, viewW, 18f),
-                          useLLMPrompt
-                            ? "Mode: " + activeModelLabel + " will rewrite the structured data below into a custom image prompt."
-                            : "Mode: Compiled template (LLM mode off — toggle in API Settings to enable).");
-            GUI.color = Color.white;
-            Text.Font = GameFont.Small;
-            y += 22f;
-
-            // ── 0. Last actual prompt sent (read from disk, no API call) ─────────
-            // This is the canonical record of what was sent to the image API on the
-            // most recent generation for this pawn. If you used Gemini Flash mode,
-            // THIS is the Gemini-rewritten prompt. If template mode, this is the
-            // compiled string. Sourced from the .txt sibling next to the saved PNG.
-            if (!string.IsNullOrEmpty(lastActualPrompt))
-            {
-                string fileBaseName = Path.GetFileName(lastActualFile);
-                Widgets.Label(new Rect(0f, y, viewW, 22f),
-                              "<b>Last actual prompt sent</b>  (from " + fileBaseName + "):");
-                y += 24f;
-                Rect copyLastBtn = new Rect(0f, y, 150f, 22f);
-                if (Widgets.ButtonText(copyLastBtn, "Copy last sent prompt"))
+                if (promptEngSelectedPortrait.refGearTexture != null)
                 {
-                    GUIUtility.systemCopyBuffer = lastActualPrompt;
-                    Messages.Message("Last sent prompt copied to clipboard.", MessageTypeDefOf.TaskCompletion, false);
+                    Rect rg = new Rect(refX, ly, 160f, 80f);
+                    Widgets.DrawBoxSolid(rg, new Color(0.06f, 0.06f, 0.06f, 1f));
+                    GUI.DrawTexture(rg.ContractedBy(2f), promptEngSelectedPortrait.refGearTexture, ScaleMode.ScaleToFit);
+                    TooltipHandler.TipRegion(rg, "Gear sprite reference sheet — item design consistency.");
                 }
-                y += 26f;
-                Rect lastBox = new Rect(0f, y, viewW, lastH + 10f);
-                Widgets.DrawBoxSolid(lastBox, new Color(0.08f, 0.05f, 0.12f, 1f));
-                GUI.color = new Color(0.6f, 0.45f, 0.85f, 0.7f);
-                Widgets.DrawBox(lastBox, 1);
-                GUI.color = Color.white;
-                Widgets.Label(lastBox.ContractedBy(6f), lastActualPrompt);
-                y += lastBox.height + 18f;
+                ly += 86f;
             }
             else
             {
                 Text.Font = GameFont.Tiny;
                 GUI.color = new Color(0.55f, 0.55f, 0.55f);
-                Widgets.Label(new Rect(0f, y, viewW, 22f),
-                              "No prompts yet recorded for this pawn — generate a portrait first.");
+                Widgets.Label(new Rect(0f, ly, lw, 30f), promptEngSelectedPortrait == null
+                    ? "Select a saved portrait above to see the reference images it used."
+                    : "No reference images were saved for this portrait.");
                 GUI.color = Color.white;
                 Text.Font = GameFont.Small;
-                y += 26f;
+                ly += 32f;
             }
 
-            // ── 1. Structured pawn description (what the LLM receives, also human-readable)
-            Widgets.Label(new Rect(0f, y, viewW, 22f), "<b>Pawn data sheet (what's extracted):</b>");
-            y += 24f;
-            Rect copyDescBtn = new Rect(0f, y, 130f, 22f);
-            if (Widgets.ButtonText(copyDescBtn, "Copy data sheet"))
+            ly += 8f;
+            Widgets.Label(new Rect(0f, ly, lw, 20f), "<b>Output</b>");
+            ly += 22f;
+            Texture2D outTex;
+            if (promptEngSelectedPortrait != null)
             {
-                GUIUtility.systemCopyBuffer = structuredDesc;
-                Messages.Message("Data sheet copied to clipboard.", MessageTypeDefOf.TaskCompletion, false);
+                outTex = promptEngSelectedPortrait.texture;
             }
-            y += 26f;
-            Rect descBox = new Rect(0f, y, viewW, descH + 10f);
-            Widgets.DrawBoxSolid(descBox, new Color(0.05f, 0.08f, 0.12f, 1f));
-            Widgets.DrawBox(descBox, 1);
-            Widgets.Label(descBox.ContractedBy(6f), structuredDesc);
-            y += descBox.height + 16f;
-
-            // ── 2. Compiled prompt (always shown — this is what the image API receives
-            //       directly when LLM mode is OFF, or as a fallback when LLM fails)
-            Widgets.Label(new Rect(0f, y, viewW, 22f),
-                useLLMPrompt
-                    ? "<b>Compiled prompt (fallback if Gemini fails):</b>"
-                    : "<b>Compiled prompt (sent to image API):</b>");
-            y += 24f;
-            Rect copyPromptBtn = new Rect(0f, y, 130f, 22f);
-            if (Widgets.ButtonText(copyPromptBtn, "Copy prompt"))
+            else
             {
-                GUIUtility.systemCopyBuffer = compiledPrompt;
-                Messages.Message("Compiled prompt copied to clipboard.", MessageTypeDefOf.TaskCompletion, false);
+                GenerationStatus ost; string oerr;
+                outTex = AIPortraitsManager.GetPortraitTexture(selectedPawn, out ost, out oerr);
             }
-            y += 26f;
-            Rect promptBox = new Rect(0f, y, viewW, promptH + 10f);
-            Widgets.DrawBoxSolid(promptBox, new Color(0.05f, 0.08f, 0.12f, 1f));
-            Widgets.DrawBox(promptBox, 1);
-            Widgets.Label(promptBox.ContractedBy(6f), compiledPrompt);
-            y += promptBox.height + 16f;
+            Rect outRect = new Rect(0f, ly, 120f, 120f);
+            Widgets.DrawBoxSolid(outRect, new Color(0.06f, 0.06f, 0.06f, 1f));
+            if (outTex != null) GUI.DrawTexture(outRect.ContractedBy(2f), outTex, ScaleMode.ScaleToFit);
+            GUI.color = new Color(1f, 1f, 1f, 0.15f);
+            Widgets.DrawBox(outRect, 1);
+            GUI.color = Color.white;
+            ly += 128f;
 
-            // ── 3. LLM system prompt (only when LLM mode is on)
-            if (llmSystem != null)
+            Widgets.Label(new Rect(0f, ly, lw, 20f), "<b>Details</b>");
+            ly += 22f;
+            Text.Font = GameFont.Tiny;
+            string styleStr   = promptEngSelectedPortrait != null ? promptEngSelectedPortrait.styleName : portraitStyle.ToString();
+            string framingStr = promptEngSelectedPortrait != null ? promptEngSelectedPortrait.framingName : AIPortraitsManager.GetActiveFraming(selectedPawn);
+            string tsStr      = promptEngSelectedPortrait != null ? promptEngSelectedPortrait.timestamp : "—";
+            string modeStr    = useLLMPrompt ? (llmModelType == LLMModelType.GeminiFlashLite ? "Gemini Flash" : "Gemma 4 26B") : "Compiled template";
+            string modelStr   = string.IsNullOrEmpty(CurrentModelName) ? "(server default)" : CurrentModelName;
+            string detail =
+                "Provider: " + ProviderLabel(backendType) + "\n" +
+                "Model: " + modelStr + "\n" +
+                "Prompt mode: " + modeStr + "\n" +
+                "Art style: " + styleStr + "\n" +
+                "Framing: " + framingStr + "\n" +
+                "Gear reference sheet: " + (useGearReferenceSheet ? "on" : "off") + "\n" +
+                "Timestamp: " + tsStr;
+            if (promptEngSelectedPortrait != null && !string.IsNullOrEmpty(promptEngSelectedPortrait.pngPath))
+                detail += "\nFile: " + Path.GetFileName(promptEngSelectedPortrait.pngPath);
+            float detailH = Text.CalcHeight(detail, lw);
+            Widgets.Label(new Rect(0f, ly, lw, detailH), detail);
+            Text.Font = GameFont.Small;
+            ly += detailH + 8f;
+
+            Widgets.EndScrollView();
+
+            // ── RIGHT column: editable prompt + actions + last sent + data sheet ──
+            Widgets.DrawMenuSection(rightCol);
+            Rect rightInner = rightCol.ContractedBy(8f);
+
+            PawnState pstate = AIPortraitsManager.GetCachedPawnState(selectedPawn);
+            if (pstate == null) pstate = PawnStateExtractor.ExtractState(selectedPawn);
+            string dataSheet = pstate != null ? PromptCompiler.CompilePawnStateDescription(pstate, this) : "(could not extract pawn data)";
+            string framing2  = AIPortraitsManager.GetActiveFraming(selectedPawn);
+            string llmSystem = (useLLMPrompt && promptEngShowLlmSystem) ? PromptCompiler.GetLLMSystemPrompt(portraitStyle, this, framing2) : null;
+
+            if (string.IsNullOrEmpty(promptEngBuffer)) SeedPromptEngBuffer();
+
+            string lastActualPrompt = null;
+            string lastActualFile   = null;
+            try
             {
-                string modelLabel = (llmModelType == LLMModelType.GeminiFlashLite) ? "Gemini Flash" : "Gemma 4 26B";
-                Widgets.Label(new Rect(0f, y, viewW, 22f),
-                              "<b>LLM system instruction (sent to " + modelLabel + "):</b>");
-                y += 24f;
-                Rect llmBox = new Rect(0f, y, viewW, llmH + 10f);
-                Widgets.DrawBoxSolid(llmBox, new Color(0.05f, 0.10f, 0.08f, 1f));
-                Widgets.DrawBox(llmBox, 1);
-                Widgets.Label(llmBox.ContractedBy(6f), llmSystem);
-                y += llmBox.height + 16f;
+                string ddir = CacheManager.GetPortraitSaveDirectory(selectedPawn);
+                if (Directory.Exists(ddir))
+                {
+                    string[] txts = Directory.GetFiles(ddir, "*.txt");
+                    DateTime latest = DateTime.MinValue;
+                    for (int i = 0; i < txts.Length; i++)
+                    {
+                        DateTime t = File.GetLastWriteTime(txts[i]);
+                        if (t > latest) { latest = t; lastActualFile = txts[i]; }
+                    }
+                    if (lastActualFile != null) lastActualPrompt = File.ReadAllText(lastActualFile);
+                }
+            }
+            catch (Exception) { }
+
+            float rw = rightInner.width - 16f;
+            float dataH = Text.CalcHeight(dataSheet, rw - 12f);
+            float lastH = (promptEngShowLastSent && !string.IsNullOrEmpty(lastActualPrompt)) ? Text.CalcHeight(lastActualPrompt, rw - 12f) : 0f;
+            float llmH  = llmSystem != null ? Text.CalcHeight(llmSystem, rw - 12f) : 0f;
+            float rTotalH = dataH + lastH + llmH + 560f;
+            Rect rView = new Rect(0f, 0f, rw, rTotalH);
+            Widgets.BeginScrollView(rightInner, ref promptScrollPosition, rView);
+            float ry = 0f;
+
+            Text.Font = GameFont.Medium;
+            Widgets.Label(new Rect(0f, ry, rw, 28f), "Prompt Engineering — " + selectedPawn.LabelShortCap);
+            ry += 32f;
+            Text.Font = GameFont.Small;
+
+            Text.Font = GameFont.Tiny;
+            GUI.color = new Color(0.7f, 0.7f, 0.7f);
+            Widgets.Label(new Rect(0f, ry, rw, 18f), useLLMPrompt
+                ? "Your edited prompt is sent as-is to the image API (the LLM rewriter is bypassed for custom prompts)."
+                : "Your edited prompt is sent directly to the image API.");
+            GUI.color = Color.white;
+            Text.Font = GameFont.Small;
+            ry += 22f;
+
+            Widgets.Label(new Rect(0f, ry, rw, 20f), "<b>Prompt (editable):</b>");
+            ry += 22f;
+            Rect editRect = new Rect(0f, ry, rw, 160f);
+            promptEngBuffer = Widgets.TextArea(editRect, promptEngBuffer);
+            ry += 168f;
+
+            float bw = (rw - 5f) / 2f;
+            Rect bGen   = new Rect(0f, ry, bw, 28f);
+            Rect bReset = new Rect(bGen.xMax + 5f, ry, bw, 28f);
+            GenerationStatus gs = AIPortraitsManager.GetStatus(selectedPawn);
+            bool genRunning = (gs == GenerationStatus.Generating);
+            if (genRunning) GUI.enabled = false;
+            if (Widgets.ButtonText(bGen, genRunning ? "Generating..." : "Generate"))
+            {
+                AIPortraitsManager.TriggerCustomGeneration(selectedPawn, promptEngBuffer);
+            }
+            GUI.enabled = true;
+            if (Widgets.ButtonText(bReset, "Reset to compiled"))
+            {
+                promptEngSelectedPortrait = null;
+                SeedPromptEngBuffer();
+                SoundDefOf.Click.PlayOneShotOnCamera(null);
+            }
+            ry += 33f;
+
+            Rect bCopy = new Rect(0f, ry, bw, 28f);
+            Rect bSave = new Rect(bCopy.xMax + 5f, ry, bw, 28f);
+            if (Widgets.ButtonText(bCopy, "Copy"))
+            {
+                GUIUtility.systemCopyBuffer = promptEngBuffer;
+                Messages.Message("Prompt copied to clipboard.", MessageTypeDefOf.TaskCompletion, false);
+            }
+            bool canSave = promptEngSelectedPortrait != null && !string.IsNullOrEmpty(promptEngSelectedPortrait.txtPath);
+            if (!canSave) GUI.enabled = false;
+            if (Widgets.ButtonText(bSave, "Save to .txt"))
+            {
+                try
+                {
+                    File.WriteAllText(promptEngSelectedPortrait.txtPath, promptEngBuffer);
+                    promptEngSelectedPortrait.prompt = promptEngBuffer;
+                    Messages.Message("Prompt saved to the portrait's .txt file.", MessageTypeDefOf.TaskCompletion, false);
+                }
+                catch (Exception ex)
+                {
+                    Log.Error("[Dynamic AI Portraits] Failed to save prompt text: " + ex.Message);
+                }
+            }
+            GUI.enabled = true;
+            ry += 38f;
+
+            // Last actually sent (foldout)
+            if (Widgets.ButtonText(new Rect(0f, ry, 24f, 22f), promptEngShowLastSent ? "-" : "+"))
+                promptEngShowLastSent = !promptEngShowLastSent;
+            Widgets.Label(new Rect(28f, ry, rw - 28f, 22f), "<b>Last actually sent</b>"
+                + (lastActualFile != null ? "  (" + Path.GetFileName(lastActualFile) + ")" : ""));
+            ry += 26f;
+            if (promptEngShowLastSent)
+            {
+                if (!string.IsNullOrEmpty(lastActualPrompt))
+                {
+                    Rect bCopyLast = new Rect(0f, ry, 150f, 22f);
+                    if (Widgets.ButtonText(bCopyLast, "Copy last sent"))
+                    {
+                        GUIUtility.systemCopyBuffer = lastActualPrompt;
+                        Messages.Message("Last sent prompt copied.", MessageTypeDefOf.TaskCompletion, false);
+                    }
+                    Rect bLoad = new Rect(bCopyLast.xMax + 5f, ry, 170f, 22f);
+                    if (Widgets.ButtonText(bLoad, "Load into editor"))
+                    {
+                        promptEngBuffer = lastActualPrompt;
+                        SoundDefOf.Click.PlayOneShotOnCamera(null);
+                    }
+                    ry += 26f;
+                    Rect lastBox = new Rect(0f, ry, rw, lastH + 10f);
+                    Widgets.DrawBoxSolid(lastBox, new Color(0.08f, 0.05f, 0.12f, 1f));
+                    GUI.color = new Color(0.6f, 0.45f, 0.85f, 0.7f);
+                    Widgets.DrawBox(lastBox, 1);
+                    GUI.color = Color.white;
+                    Widgets.Label(lastBox.ContractedBy(6f), lastActualPrompt);
+                    ry += lastBox.height + 12f;
+                }
+                else
+                {
+                    Text.Font = GameFont.Tiny;
+                    GUI.color = new Color(0.55f, 0.55f, 0.55f);
+                    Widgets.Label(new Rect(0f, ry, rw, 22f), "No prompts recorded yet — generate a portrait first.");
+                    GUI.color = Color.white;
+                    Text.Font = GameFont.Small;
+                    ry += 24f;
+                }
+            }
+
+            // Pawn data sheet (read-only)
+            Widgets.Label(new Rect(0f, ry, rw, 22f), "<b>Pawn data sheet (what's extracted):</b>");
+            ry += 24f;
+            if (Widgets.ButtonText(new Rect(0f, ry, 140f, 22f), "Copy data sheet"))
+            {
+                GUIUtility.systemCopyBuffer = dataSheet;
+                Messages.Message("Data sheet copied.", MessageTypeDefOf.TaskCompletion, false);
+            }
+            ry += 26f;
+            Rect dataBox = new Rect(0f, ry, rw, dataH + 10f);
+            Widgets.DrawBoxSolid(dataBox, new Color(0.05f, 0.08f, 0.12f, 1f));
+            Widgets.DrawBox(dataBox, 1);
+            Widgets.Label(dataBox.ContractedBy(6f), dataSheet);
+            ry += dataBox.height + 12f;
+
+            // LLM system instruction (foldout, only when LLM mode on)
+            if (useLLMPrompt)
+            {
+                if (Widgets.ButtonText(new Rect(0f, ry, 24f, 22f), promptEngShowLlmSystem ? "-" : "+"))
+                    promptEngShowLlmSystem = !promptEngShowLlmSystem;
+                Widgets.Label(new Rect(28f, ry, rw - 28f, 22f), "<b>LLM system instruction</b>");
+                ry += 26f;
+                if (promptEngShowLlmSystem && llmSystem != null)
+                {
+                    Rect llmBox = new Rect(0f, ry, rw, llmH + 10f);
+                    Widgets.DrawBoxSolid(llmBox, new Color(0.05f, 0.10f, 0.08f, 1f));
+                    Widgets.DrawBox(llmBox, 1);
+                    Widgets.Label(llmBox.ContractedBy(6f), llmSystem);
+                    ry += llmBox.height + 12f;
+                }
             }
 
             Widgets.EndScrollView();
+        }
+
+        // Seeds the Prompt Engineering editor: from the selected saved portrait's prompt,
+        // otherwise from the freshly compiled template for the selected pawn.
+        private void SeedPromptEngBuffer()
+        {
+            if (promptEngSelectedPortrait != null)
+            {
+                promptEngBuffer = promptEngSelectedPortrait.prompt != null ? promptEngSelectedPortrait.prompt : "";
+                return;
+            }
+            PawnState ps = AIPortraitsManager.GetCachedPawnState(selectedPawn);
+            if (ps == null) ps = PawnStateExtractor.ExtractState(selectedPawn);
+            if (ps != null) promptEngBuffer = PromptCompiler.CompilePositivePrompt(ps, this);
         }
     }
 }
