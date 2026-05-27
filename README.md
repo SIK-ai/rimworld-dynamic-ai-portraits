@@ -39,6 +39,8 @@ Generates AI portraits and looping animated previews of your colonists that refl
 
 The mod's **API Settings** tab allows configuring your preferred provider and model parameters.
 
+> **Automatic free fallback:** if your chosen paid provider has no API key set — or fails mid-request — the mod silently retries on free **Pollinations**, so you always end up with a portrait.
+
 ### 🆓 Pollinations — Free, no signup
 - Truly free, no account or key required.
 - Model: `sana`
@@ -134,7 +136,7 @@ Switching framing triggers a new generation under a separate cache key, so each 
 
 ## Optional: Gemini Flash Prompt Engineering
 
-In API Settings → **Prompt Generation** section, switch from `No — Compiled Template` to `Gemini Flash Lite`. The mod will send pawn metadata to Gemini, which rewrites it into a creative, optimized image prompt before sending to your image backend.
+In API Settings → **Prompt Generation** section, switch from `No — Compiled Template` to `Gemini Flash Lite` (or a `Gemma 4` model — **26B** or **31B**). The mod will send pawn metadata to the model, which rewrites it into a creative, optimized image prompt before sending to your image backend.
 
 - Free Google AI Studio key works (same key as Imagen if you're already using it)
 - Costs ~$0.0001 per call on Gemini Flash Lite (essentially free)

@@ -78,6 +78,7 @@ The lifecycle of creating, cleaning, caching, and showing a portrait follows thi
        │
        ▼
 [AsyncAIClient posts payload to chosen Image Generation backend]
+       │   (no key / runtime failure on a paid source → auto-retry on free Pollinations)
        │
        ▼
 [Download & decode raw image bytes into Texture2D]

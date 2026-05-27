@@ -183,7 +183,7 @@ const nodes = [
   // LLM PATH
   { id:'cpd',           x:1190, y:374, w:255, h:44, type:'process',lines:['CompilePawnStateDescription(state)'], sub:'structured pawn text for LLM input' },
   { id:'gsysp',         x:1190, y:432, w:255, h:44, type:'process',lines:['GetLLMSystemPrompt(style, settings, framing)'], sub:'art-style system instructions' },
-  { id:'llm_model',     x:1190, y:490, w:255, h:44, type:'process',lines:['Select model:'], sub:'"gemini-3.1-flash-lite"\nor "gemma-4-26b-a4b-it"' },
+  { id:'llm_model',     x:1190, y:490, w:255, h:44, type:'process',lines:['Select model:'], sub:'"gemini-3.1-flash-lite",\n"gemma-4-26b-a4b-it", or\n"gemma-4-31b-it"' },
   { id:'post_llm',      x:1190, y:548, w:255, h:48, type:'api',    lines:['POST generativelanguage.googleapis.com', '/{model}:generateContent'], sub:'JSON: {system_instruction, contents,\ngenerationConfig{maxTokens:200, temp:0.75}}\ntimeout: 30s' },
   { id:'llm_ok',        x:1255, y:628, w:125, h:48, type:'decision',lines:['LLM\nsuccess?'], sub:'' },
   { id:'extract_g',     x:1190, y:710, w:255, h:44, type:'process',lines:['ExtractGeminiText()'], sub:'parse candidates[0].content.parts[0].text\nclean label prefixes, whitespace, commas' },
@@ -207,7 +207,7 @@ const nodes = [
 
   // BOTH PATHS JOIN
   { id:'neg_prompt',    x:1190, y:1000, w:545, h:44, type:'process',lines:['CompileNegativePrompt(settings, framing)'], sub:'base negatives + framing-specific exclusions\n(bodyshot: no face crop; portrait: no full body; etc.)' },
-  { id:'dispatch',      x:1190, y:1068, w:545, h:44, type:'process',lines:['DispatchImageBackend(positivePrompt, negPrompt, settings, state, refBytes, cb)'], sub:'' },
+  { id:'dispatch',      x:1190, y:1068, w:545, h:44, type:'process',lines:['DispatchImageBackend(positivePrompt, negPrompt, settings, state, refBytes, cb)'], sub:'auto-fallback: a paid source with no key, or any runtime failure, silently retries on free Pollinations' },
 
   // ── BACKENDS ─────────────────────────────────────────────────────────────
   { id:'back_sw',       x:1810, y:220, w:140, h:48, type:'decision',lines:['backend\nType?'], sub:'' },
