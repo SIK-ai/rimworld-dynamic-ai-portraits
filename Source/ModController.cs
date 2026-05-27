@@ -13,7 +13,10 @@ namespace AIPortraits
         {
             Instance = this;
             settings = GetSettings<AIPortraitsSettings>();
-            DebugLog.Begin("mod init");
+            DebugLog.Begin("mod init (game start)");
+            // Mark a clean shutdown in the debug log (crashes are still captured because every
+            // line is flushed live; this just bookends a normal quit — "game start and end").
+            UnityEngine.Application.quitting += delegate { DebugLog.Log("SESSION", "game quitting (clean shutdown)"); };
 
             // Execute Harmony patches. Guard so a single failing patch can't abort the whole
             // mod constructor — that would unregister settings and present as "no config".
