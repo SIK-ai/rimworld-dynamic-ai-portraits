@@ -78,11 +78,10 @@ namespace AIPortraits
             float y = paneRect.y - ph - TabStripClearance + offsetY;
             Rect portraitRect = new Rect(x, y, pw, ph);
 
-            bool videoEnabled = false;
-            if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.pawnVideoToggles != null)
-            {
-                AIPortraitsMod.settings.pawnVideoToggles.TryGetValue(pawn.ThingID, out videoEnabled);
-            }
+            // Per-framing live toggle: this framing renders video only if [V] was enabled
+            // for THIS framing (portrait/bodyshot/special each track their own still-vs-live
+            // state), so the live state never carries across when switching shots or pawns.
+            bool videoEnabled = AIPortraitsManager.IsVideoMode(pawn);
 
             if (videoEnabled)
             {
@@ -111,15 +110,9 @@ namespace AIPortraits
                     GenerationStatus vStatus; string vError;
                     AIPortraitsManager.GetVideoStatus(pawn, out vStatus, out vError);
 
-                    if (vStatus == GenerationStatus.Idle)
-                    {
-                        byte[] imgBytes = AIPortraitsManager.GetActivePortraitBytes(pawn);
-                        if (imgBytes != null && imgBytes.Length > 0)
-                        {
-                            AIPortraitsManager.TriggerVideoGeneration(pawn, imgBytes);
-                        }
-                    }
-
+                    // Video MODE is on for this framing but no clip exists yet. Do NOT
+                    // auto-generate \u2014 show the static portrait and wait for the user to
+                    // click the refresh (\u21bb) button to animate it.
                     if (portrait != null)
                     {
                         GUI.DrawTexture(portraitRect, portrait, ScaleMode.ScaleAndCrop);
@@ -151,6 +144,17 @@ namespace AIPortraits
                         GUI.color = Color.white;
                         Text.Anchor = TextAnchor.UpperLeft;
                         Text.Font = GameFont.Small;
+                    }
+                    else
+                    {
+                        // Idle, no clip yet \u2014 subtle prompt to generate it via refresh.
+                        Text.Anchor = TextAnchor.LowerCenter;
+                        Text.Font = GameFont.Tiny;
+                        GUI.color = new Color(0.6f, 0.85f, 1f, 0.9f);
+                        Widgets.Label(portraitRect, "Click \u21bb to animate");
+                        GUI.color = Color.white;
+                        Text.Font = GameFont.Small;
+                        Text.Anchor = TextAnchor.UpperLeft;
                     }
                 }
             }
@@ -284,11 +288,9 @@ namespace AIPortraits
             Text.Font = GameFont.Small;
             Text.Anchor = TextAnchor.UpperLeft;
 
-            bool videoActive = false;
-            if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.pawnVideoToggles != null)
-                AIPortraitsMod.settings.pawnVideoToggles.TryGetValue(pawn.ThingID, out videoActive);
+            bool videoActive = AIPortraitsManager.IsVideoMode(pawn);
 
-            string tip = videoActive ? "Regenerate video for this pawn" : "Refresh portrait using selected framing";
+            string tip = videoActive ? "Generate / regenerate video for this framing" : "Refresh portrait using selected framing";
             TooltipHandler.TipRegion(rect, tip);
 
             if (Widgets.ButtonInvisible(rect))
@@ -340,11 +342,7 @@ namespace AIPortraits
 
         private static void DrawVeoButton(Rect rect, Pawn pawn)
         {
-            bool active = false;
-            if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.pawnVideoToggles != null)
-            {
-                AIPortraitsMod.settings.pawnVideoToggles.TryGetValue(pawn.ThingID, out active);
-            }
+            bool active = AIPortraitsManager.IsVideoMode(pawn);
 
             bool hovered = Mouse.IsOver(rect);
 
@@ -376,10 +374,9 @@ namespace AIPortraits
                 bool newState = !active;
                 if (AIPortraitsMod.settings != null)
                 {
-                    if (AIPortraitsMod.settings.pawnVideoToggles == null)
-                        AIPortraitsMod.settings.pawnVideoToggles = new System.Collections.Generic.Dictionary<string, bool>();
-
-                    AIPortraitsMod.settings.pawnVideoToggles[pawn.ThingID] = newState;
+                    // Per-framing toggle; enabling video MODE just switches THIS framing to
+                    // "live" — it does NOT auto-generate. The user clicks ↻ to generate.
+                    AIPortraitsManager.SetVideoMode(pawn, newState);
                     AIPortraitsMod.Instance.WriteSettings();
                     SoundDefOf.Click.PlayOneShotOnCamera(null);
 

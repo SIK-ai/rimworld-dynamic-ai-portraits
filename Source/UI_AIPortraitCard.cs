@@ -186,6 +186,32 @@ namespace AIPortraits
             return null;
         }
 
+        // ── Per-pawn-per-framing "live" (video) toggle ────────────────────────────────
+        // The [V] button enables video MODE for the CURRENT framing only — portrait,
+        // bodyshot, and special each track their own still-vs-live state. Keying the
+        // toggle by pawn+framing means switching framing (or pawn) never carries the
+        // live state across to a different shot.
+        private static string VideoToggleKey(Pawn pawn)
+        {
+            return pawn.ThingID + "_" + GetActiveFraming(pawn);
+        }
+
+        public static bool IsVideoMode(Pawn pawn)
+        {
+            if (pawn == null || AIPortraitsMod.settings == null || AIPortraitsMod.settings.pawnVideoToggles == null)
+                return false;
+            bool on;
+            return AIPortraitsMod.settings.pawnVideoToggles.TryGetValue(VideoToggleKey(pawn), out on) && on;
+        }
+
+        public static void SetVideoMode(Pawn pawn, bool on)
+        {
+            if (pawn == null || AIPortraitsMod.settings == null) return;
+            if (AIPortraitsMod.settings.pawnVideoToggles == null)
+                AIPortraitsMod.settings.pawnVideoToggles = new Dictionary<string, bool>();
+            AIPortraitsMod.settings.pawnVideoToggles[VideoToggleKey(pawn)] = on;
+        }
+
         public static PawnState GetCachedPawnState(Pawn pawn)
         {
             if (pawn == null) return null;
@@ -908,10 +934,8 @@ namespace AIPortraits
             Rect btnSave = new Rect(rect.x + btnW, rect.y, btnW, btnH);
             Rect btnFolder = new Rect(rect.x + btnW * 2f, rect.y, btnW, btnH);
 
-            // Button 1: New — respects [V] video toggle
-            bool videoModeNew = false;
-            if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.pawnVideoToggles != null)
-                AIPortraitsMod.settings.pawnVideoToggles.TryGetValue(pawn.ThingID, out videoModeNew);
+            // Button 1: New — respects the per-framing [V] live toggle
+            bool videoModeNew = AIPortraitsManager.IsVideoMode(pawn);
 
             string newLabel   = videoModeNew ? "\u267b Video" : "\u267b New";
             string newTooltip = videoModeNew ? "Regenerate the animated video for this pawn." : "Generate a new portrait using current traits and character vibe.";
