@@ -48,13 +48,35 @@ namespace AIPortraits
                 offsetY = AIPortraitsMod.settings.portraitOffsetY;
             }
 
+            // Size the overlay to the framing's real aspect instead of forcing a square:
+            // bodyshot is a tall 2:3 full-body, special is a wide 3:2 scene. 'side' (the
+            // Display Size slider) is the reference dimension; the wide/tall shots are
+            // enlarged so the body isn't squeezed and the special scene isn't a sliver.
+            string dispFraming = AIPortraitsManager.GetActiveFraming(pawn);
+            float pw, ph;
+            if (dispFraming == "special")
+            {
+                pw = side * 1.7f;          // wide 3:2, enlarged (was too small)
+                ph = pw * 2f / 3f;
+            }
+            else if (dispFraming == "bodyshot")
+            {
+                ph = side * 1.5f;          // tall 2:3 full-body
+                pw = ph * 2f / 3f;
+            }
+            else
+            {
+                pw = side;                 // portrait 1:1
+                ph = side;
+            }
+
             // Leave clearance for the inspect-pane tab strip (Log, Health, etc.) which
             // sits in the space just above paneRect.y.
             const float TabStripClearance = 36f;
 
-            float x = paneRect.x + (paneRect.width - side) * 0.5f + offsetX;
-            float y = paneRect.y - side - TabStripClearance + offsetY;
-            Rect portraitRect = new Rect(x, y, side, side);
+            float x = paneRect.x + (paneRect.width - pw) * 0.5f + offsetX;
+            float y = paneRect.y - ph - TabStripClearance + offsetY;
+            Rect portraitRect = new Rect(x, y, pw, ph);
 
             bool videoEnabled = false;
             if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.pawnVideoToggles != null)
@@ -72,8 +94,8 @@ namespace AIPortraits
                     // Background-remove portrait/bodyshot clips once (offline u2netp). "special"
                     // is skipped inside EnsureMatted so its scenic background is kept. Until the
                     // matte finishes, StartPlayback falls back to the original mp4.
-                    VideoMatteService.EnsureMatted(videoPath, AIPortraitsManager.GetActiveFraming(pawn));
-                    VideoPlaybackManager.StartPlayback(pawn.ThingID, videoPath);
+                    VideoMatteService.EnsureMatted(videoPath, dispFraming);
+                    VideoPlaybackManager.StartPlayback(pawn.ThingID, videoPath, dispFraming);
                     RenderTexture videoTex = VideoPlaybackManager.GetActiveTexture();
                     if (videoTex != null)
                     {

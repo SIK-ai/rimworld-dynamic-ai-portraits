@@ -984,7 +984,7 @@ namespace AIPortraits
             return null;
         }
 
-        public static void StartPlayback(string pawnId, string videoPath)
+        public static void StartPlayback(string pawnId, string videoPath, string framing)
         {
             if (activeVideoPlayer != null && activePawnId == pawnId && activeVideoPath == videoPath)
             {
@@ -999,6 +999,11 @@ namespace AIPortraits
                 activePawnId = pawnId;
                 activeVideoPath = videoPath;
 
+                // Render-texture aspect must match the clip so it isn't squashed:
+                // special is 16:9 (landscape); portrait/bodyshot are 9:16 (tall).
+                int rtW = (framing == "special") ? 910 : 512;
+                int rtH = (framing == "special") ? 512 : 910;
+
                 // If a background-removed sequence exists for this clip (portrait/bodyshot),
                 // play that PNG sequence with alpha instead of the original mp4.
                 if (VideoMatteService.IsMatted(videoPath))
@@ -1006,7 +1011,7 @@ namespace AIPortraits
                     activeSeq = new MattedSequencePlayer(videoPath);
                     if (activeSeq.Valid)
                     {
-                        activeRenderTexture = new RenderTexture(512, 910, 0, RenderTextureFormat.ARGB32);
+                        activeRenderTexture = new RenderTexture(rtW, rtH, 0, RenderTextureFormat.ARGB32);
                         activeRenderTexture.Create();
                         return;
                     }
@@ -1020,8 +1025,8 @@ namespace AIPortraits
                 activeVideoPlayer.isLooping = true;
                 activeVideoPlayer.renderMode = VideoRenderMode.RenderTexture;
 
-                // 9:16 vertical format matches portrait/bodyshot; use tall RT so it renders without upscaling.
-                activeRenderTexture = new RenderTexture(512, 910, 0, RenderTextureFormat.ARGB32);
+                // RT aspect per framing (set above) so the clip renders without squashing.
+                activeRenderTexture = new RenderTexture(rtW, rtH, 0, RenderTextureFormat.ARGB32);
                 activeRenderTexture.Create();
 
                 activeVideoPlayer.targetTexture = activeRenderTexture;
