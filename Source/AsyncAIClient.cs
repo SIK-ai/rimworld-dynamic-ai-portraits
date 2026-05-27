@@ -165,7 +165,7 @@ namespace AIPortraits
             string modelName = "gemini-3.1-flash-lite";
             if (settings.llmModelType == LLMModelType.Gemma26B)
             {
-                modelName = "gemma-2-27b-it";
+                modelName = "gemma-4-26b-a4b-it";
             }
             string llmUrl = "https://generativelanguage.googleapis.com/v1beta/models/" + modelName + ":generateContent?key=" + llmKey;
 

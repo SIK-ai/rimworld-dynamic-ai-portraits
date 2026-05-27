@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dynamic AI Portraits — Full Architecture Flowchart</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; background: #0d1117; overflow: hidden; user-select: none; font-family: 'Consolas', 'Courier New', monospace; }
+#hint { position:fixed; bottom:12px; right:16px; color:#3d444d; font-size:11px; pointer-events:none; }
+#legend { position:fixed; top:12px; left:12px; background:rgba(13,17,23,0.95); border:1px solid #30363d; border-radius:8px; padding:12px 16px; z-index:100; }
+#legend h3 { margin:0 0 8px; color:#e6edf3; font-size:12px; letter-spacing:0.05em; }
+.leg { display:flex; align-items:center; gap:8px; margin-bottom:4px; font-size:10px; color:#8b949e; }
+.lc { width:13px; height:13px; border-radius:2px; flex-shrink:0; }
+#ctrls { position:fixed; top:12px; right:16px; display:flex; flex-direction:column; gap:6px; z-index:100; }
+.btn { background:#21262d; color:#c9d1d9; border:1px solid #30363d; padding:6px 16px; cursor:pointer; border-radius:6px; font-size:12px; font-family: monospace; }
+.btn:hover { background:#30363d; }
+</style>
+</head>
+<body>
+
+<div id="legend">
+  <h3>Node Types</h3>
+  <div class="leg"><div class="lc" style="background:#112218;border:1.5px solid #2ea043;"></div>Process / Function</div>
+  <div class="leg"><div class="lc" style="background:#0d1f3c;border:1.5px solid #388bfd;"></div>Entry / Trigger</div>
+  <div class="leg"><div class="lc" style="background:#2a1e00;border:1.5px solid #e3b341;"></div>Decision (diamond)</div>
+  <div class="leg"><div class="lc" style="background:#1e0f3a;border:1.5px solid #a371f7;"></div>External API</div>
+  <div class="leg"><div class="lc" style="background:#0f2a2a;border:1.5px solid #39c5cf;"></div>UI / Draw output</div>
+  <div class="leg"><div class="lc" style="background:#251c00;border:1.5px solid #d29922;"></div>Button action</div>
+  <div class="leg"><div class="lc" style="background:#061e2a;border:1.5px solid #4fa3d4;"></div>Video-specific</div>
+  <div class="leg"><div class="lc" style="background:#2a0f0f;border:1.5px solid #f85149;"></div>Error / Fail</div>
+  <div class="leg"><div class="lc" style="background:#111e14;border:1.5px dashed #3fb950;"></div>Cache / Storage</div>
+  <div class="leg"><div class="lc" style="background:#1a103a;border:1.5px solid #bc8cff;"></div>Harmony Patch</div>
+</div>
+
+<div id="ctrls">
+  <button class="btn" onclick="doZoom(1.25)">＋ Zoom In</button>
+  <button class="btn" onclick="doZoom(0.8)">－ Zoom Out</button>
+  <button class="btn" onclick="resetView()">⌂ Reset View</button>
+</div>
+
+<div id="hint">Drag to pan · Scroll wheel to zoom</div>
+
+<canvas id="c"></canvas>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+let tx = 0, ty = 0, scale = 0.72;
+let dragging = false, lx = 0, ly = 0;
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  draw();
+}
+window.addEventListener('resize', resize);
+
+canvas.addEventListener('mousedown', e => { dragging = true; lx = e.clientX; ly = e.clientY; canvas.style.cursor='grabbing'; });
+canvas.addEventListener('mouseup', () => { dragging = false; canvas.style.cursor='grab'; });
+canvas.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  tx += e.clientX - lx; ty += e.clientY - ly;
+  lx = e.clientX; ly = e.clientY; draw();
+});
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const f = e.deltaY < 0 ? 1.1 : 0.9;
+  const mx = e.clientX - tx, my = e.clientY - ty;
+  scale *= f; tx = e.clientX - mx * f; ty = e.clientY - my * f;
+  draw();
+}, { passive: false });
+
+function doZoom(f) {
+  const mx = W/2 - tx, my = H/2 - ty;
+  scale *= f; tx = W/2 - mx*f; ty = H/2 - my*f; draw();
+}
+function resetView() { scale = 0.72; tx = 20; ty = 20; draw(); }
+
+// ─── DATA ────────────────────────────────────────────────────────────────────
+
+const COLORS = {
+  process : { fill:'#112218', stroke:'#2ea043', text:'#7ee787' },
+  trigger : { fill:'#0d1f3c', stroke:'#388bfd', text:'#79c0ff' },
+  decision: { fill:'#2a1e00', stroke:'#e3b341', text:'#e3b341' },
+  api     : { fill:'#1e0f3a', stroke:'#a371f7', text:'#d2a8ff' },
+  ui      : { fill:'#0f2a2a', stroke:'#39c5cf', text:'#76e3ea' },
+  action  : { fill:'#251c00', stroke:'#d29922', text:'#e3b341' },
+  video   : { fill:'#061e2a', stroke:'#4fa3d4', text:'#79c0ff' },
+  error   : { fill:'#2a0f0f', stroke:'#f85149', text:'#ff7b72' },
+  storage : { fill:'#111e14', stroke:'#3fb950', text:'#56d364', dash: true },
+  patch   : { fill:'#1a103a', stroke:'#bc8cff', text:'#bc8cff' },
+  section : { fill:'#161b22', stroke:'#30363d', text:'#e6edf3' },
+  header  : { fill:'#1c2128', stroke:'#484f58', text:'#8b949e' },
+  info    : { fill:'#13161b', stroke:'#30363d', text:'#6e7681' },
+};
+
+// Node: { id, x, y, w, h, type, lines:[], sub }
+// sub = small grey subtitle text under lines
+const nodes = [
+  // ── INIT ──────────────────────────────────────────────────────────────────
+  { id:'mod_init',      x:60,  y:65,  w:220, h:48, type:'trigger', lines:['AIPortraitsMod()'], sub:'ModController.cs constructor' },
+  { id:'get_settings',  x:310, y:65,  w:260, h:48, type:'process', lines:['GetSettings<AIPortraitsSettings>()'], sub:'Load / deserialise persisted settings' },
+  { id:'harmony_all',   x:600, y:65,  w:230, h:48, type:'process', lines:['new Harmony("antigravity.aiportraits")', '.PatchAll()'], sub:'' },
+  { id:'patch1',        x:870, y:48,  w:340, h:30, type:'patch',   lines:['[Postfix] MainTabWindow_Inspect.ExtraOnGUI'], sub:'' },
+  { id:'patch2',        x:870, y:83,  w:340, h:30, type:'patch',   lines:['[Postfix] Window.PostClose'], sub:'' },
+  { id:'patch3',        x:870, y:118, w:340, h:30, type:'patch',   lines:['[Prefix] PawnRenderNode_Apparel.AppendRequests'], sub:'helmet exclusion' },
+
+  // ── RENDER LOOP ───────────────────────────────────────────────────────────
+  { id:'extra_gui',     x:60,  y:220, w:500, h:44, type:'trigger', lines:['⚡ ExtraOnGUI fires (every frame)'], sub:'HarmonyPatches.cs Postfix' },
+  { id:'get_pawn',      x:60,  y:286, w:500, h:44, type:'process', lines:['pawn = Find.Selector.SingleSelectedThing as Pawn'], sub:'' },
+  { id:'guard',         x:200, y:362, w:220, h:48, type:'decision',lines:['shouldDraw?'], sub:'pawn!=null && !pawn.Destroyed\n&& OpenTabType==null\n&& ShouldGenerateFor(pawn)' },
+  { id:'fail_stop',     x:460, y:364, w:200, h:44, type:'error',   lines:['StopPlayback() + return'], sub:'' },
+  { id:'get_tex',       x:60,  y:444, w:500, h:44, type:'process', lines:['GetPortraitTexture(pawn, out status, out error)'], sub:'returns cached Texture2D + GenerationStatus' },
+  { id:'comp_rect',     x:60,  y:508, w:500, h:44, type:'process', lines:['Compute portraitRect'], sub:'paneRect ± offsetX/Y from settings  |  scale = settings.portraitScale  |  clearance 36px for tab strip' },
+  { id:'vid_enabled',   x:185, y:584, w:250, h:48, type:'decision',lines:['videoEnabled?'], sub:'pawnVideoToggles[pawn.ThingID]' },
+
+  // VIDEO BRANCH
+  { id:'mp4_exists',    x:60,  y:668, w:200, h:48, type:'decision',lines:['mp4 file\nexists?'], sub:'AIPortraitsCache/{diskKey}.mp4' },
+  { id:'ensure_matted', x:20,  y:754, w:225, h:48, type:'video',   lines:['VideoMatteService.EnsureMatted()'], sub:'bg-remove each frame via u2netp\n(skip "special" framing)' },
+  { id:'start_pb',      x:20,  y:822, w:225, h:44, type:'video',   lines:['VideoPlaybackManager.StartPlayback(pawnId, path)'], sub:'UnityVideoPlayer → RenderTexture, loop=true' },
+  { id:'get_vtex',      x:70,  y:896, w:125, h:48, type:'decision',lines:['tex\n!= null?'], sub:'' },
+  { id:'draw_vtex',     x:20,  y:978, w:160, h:44, type:'ui',      lines:['GUI.DrawTexture', '(videoTex)'], sub:'' },
+  { id:'draw_vfall',    x:200, y:978, w:160, h:44, type:'ui',      lines:['GUI.DrawTexture', '(portrait fallback)'], sub:'' },
+  // NO-mp4 path
+  { id:'get_vs',        x:300, y:668, w:240, h:44, type:'video',   lines:['GetVideoStatus(pawn,', 'out vStatus, out vError)'], sub:'' },
+  { id:'vstatus_dec',   x:335, y:742, w:170, h:48, type:'decision',lines:['vStatus?'], sub:'' },
+  { id:'trig_vg_idle',  x:275, y:826, w:230, h:48, type:'process', lines:['GetActivePortraitBytes(pawn)', '→ TriggerVideoGeneration()'], sub:'only if bytes != null' },
+  { id:'making_alive',  x:525, y:826, w:190, h:44, type:'ui',      lines:['"Making alive..."', 'overlay (cyan)'], sub:'Generating status' },
+  { id:'veo_err',       x:525, y:886, w:190, h:44, type:'error',   lines:['"✖ Veo Error"', 'overlay (red)'], sub:'Error status' },
+  { id:'draw_static_f', x:285, y:950, w:230, h:44, type:'ui',      lines:['Draw static portrait or', 'dark placeholder box'], sub:'' },
+
+  // STATIC BRANCH
+  { id:'port_null',     x:200, y:1058, w:220, h:48, type:'decision',lines:['portrait\n!= null?'], sub:'' },
+  { id:'draw_port',     x:60,  y:1140, w:185, h:44, type:'ui',     lines:['GUI.DrawTexture', '(portrait, ScaleToFit)'], sub:'' },
+  { id:'draw_ph',       x:280, y:1140, w:200, h:44, type:'ui',     lines:['Draw dark placeholder box'], sub:'#101010 fill, dim border' },
+  { id:'status_dec',    x:310, y:1218, w:150, h:48, type:'decision',lines:['status?'], sub:'' },
+  { id:'txt_idle',      x:200, y:1302, w:145, h:44, type:'ui',     lines:['"No portrait"', '"Click ↻ to generate"'], sub:'Idle state (grey text)' },
+  { id:'txt_gen',       x:365, y:1302, w:145, h:44, type:'ui',     lines:['"Painting..."'], sub:'Generating (blue text)' },
+  { id:'txt_err',       x:520, y:1302, w:145, h:44, type:'error',  lines:['"✖ {error}"'], sub:'Error (red text)' },
+  { id:'stop_pb',       x:60,  y:1390, w:500, h:44, type:'process',lines:['VideoPlaybackManager.StopPlayback()'], sub:'' },
+
+  // BUTTONS
+  { id:'btns_hdr',      x:60,  y:1464, w:500, h:32, type:'header', lines:['── OVERLAY BUTTONS (always drawn) ──'], sub:'' },
+  { id:'btn_p',         x:60,  y:1510, w:148, h:40, type:'action', lines:['P'], sub:'framing = "portrait"\nWriteSettings + StopPlayback' },
+  { id:'btn_b',         x:218, y:1510, w:148, h:40, type:'action', lines:['B'], sub:'framing = "bodyshot"\nWriteSettings + StopPlayback' },
+  { id:'btn_s',         x:376, y:1510, w:148, h:40, type:'action', lines:['S'], sub:'framing = "special"\nWriteSettings + StopPlayback' },
+  { id:'btn_v',         x:60,  y:1564, w:212, h:40, type:'action', lines:['V  (Toggle Video Mode)'], sub:'pawnVideoToggles toggle\nif OFF → StopPlayback()' },
+  { id:'btn_r',         x:360, y:1564, w:200, h:40, type:'action', lines:['↻  (Refresh)'], sub:'' },
+  { id:'ref_dec',       x:200, y:1634, w:220, h:48, type:'decision',lines:['videoActive?'], sub:'' },
+  { id:'regen_vid2',    x:60,  y:1714, w:200, h:44, type:'process',lines:['GetActivePortraitBytes(pawn)', '→ TriggerVideoGeneration()'], sub:'YES branch' },
+  { id:'trig_new',      x:340, y:1714, w:200, h:44, type:'trigger',lines:['TriggerNewPortrait-', 'WithContinuity(pawn)'], sub:'NO → leads to generation' },
+
+  // ── PAWN STATE EXTRACTION ─────────────────────────────────────────────────
+  { id:'trig_new2',     x:640, y:220, w:510, h:44, type:'trigger', lines:['TriggerNewPortraitWithContinuity(pawn)'], sub:'AIPortraitsManager.cs' },
+  { id:'extract',       x:640, y:290, w:510, h:44, type:'process', lines:['PawnStateExtractor.ExtractState(pawn)'], sub:'PawnStateExtractor.cs' },
+  { id:'ps_identity',   x:640, y:356, w:510, h:58, type:'info',    lines:['IDENTITY'], sub:'name, gender, bioAge\nbodyType ← story.bodyType.label\nheadShape ← story.headType.label\nframing ← pawnFraming[ThingID]' },
+  { id:'ps_appear',     x:640, y:428, w:510, h:58, type:'info',    lines:['APPEARANCE'], sub:'hairStyle+Color (GetColorDescription HSV)\nskinColor (GetSkinColorDescription YCbCr)\nbeard, tattoo (FaceTattoo+BodyTattoo)\nchildhood/adulthood backstory titles' },
+  { id:'ps_xeno',       x:640, y:500, w:510, h:58, type:'info',    lines:['XENOTYPE / GENES'], sub:'xenotype label, xenotypeName (player-renamed)\ncosmeticGenes[] via IsCosmeticGene() – horns,tail,ears,fur,scales…\nabilityGenes[] via IsAbilityGene()\nisHemogenic, hasTail, hasHorns, hasFur flags' },
+  { id:'ps_equip',      x:640, y:572, w:510, h:58, type:'info',    lines:['EQUIPMENT'], sub:'weapon: quality prefix + stuff material + color + label + damage suffix\nweaponType: melee / ranged / unarmed\napparel[]: same rich format, lower-body excluded\napparelStyle: armored / noble / tribal / civilian / nude' },
+  { id:'ps_h1',         x:640, y:644, w:510, h:44, type:'info',    lines:['HEALTH – Pass 1: map replaced body parts (bionic/peg/implant)'], sub:'' },
+  { id:'ps_h2a',        x:640, y:702, w:510, h:58, type:'info',    lines:['HEALTH – Pass 2a'], sub:'Addiction → addictions[]\nSleepdeprivation hediff / rest < 28% → isExhausted\nMalnutrition hediff / food < 25% → isMalnourished\nPregnant hediff severity → pregnancyTrimester (1/2/3)' },
+  { id:'ps_h2b',        x:640, y:774, w:510, h:44, type:'info',    lines:['HEALTH – Pass 2b'], sub:'Inhumanized/voidtouched → isInhumanized\nCataract/badback/frail/dementia → chronicConditions[]\nFrostbite/burn IsPermanent → permanentScars[]' },
+  { id:'ps_h2c',        x:640, y:832, w:510, h:58, type:'info',    lines:['HEALTH – Pass 2c'], sub:'isSick (makesSickThought || isBad), isBloodloss, isBurning\npainLevel (PainTotal), isInPain (>0.25)\nMissingPart → missingParts[] (skip descendants of replaced part)\nImplant/AddedPart → implants[]  |  Injury → headInjuries[]/bodyInjuries[]\nFormatCount: "two peg legs", "several missing toes"' },
+  { id:'ps_mood',       x:640, y:904, w:510, h:44, type:'info',    lines:['MOOD + MENTAL STATE'], sub:'moodLevel (needs.mood.CurLevel)\nmentalState (MentalStateDef.label)\nisFleeing (job driver name contains "flee")\nisPsychicSensitive (PsychicSensitivity > 1.0)' },
+  { id:'ps_traits',     x:640, y:962, w:510, h:30, type:'info',    lines:['TRAITS   story.traits.allTraits[]  |  isViolentIncapable (WorkTags.Violent)'], sub:'' },
+  { id:'ps_skills',     x:640, y:1006, w:510, h:30, type:'info',   lines:['SKILLS   top 2 by (level + passion bonus: Major+3, Minor+1)'], sub:'' },
+  { id:'ps_role',       x:640, y:1050, w:510, h:44, type:'info',   lines:['IDEOLOGY / ROYALTY'], sub:'ideo.Ideo: name, GetRole(pawn), favoriteColor\nroyalty.MainTitle() → royalTitle\nPsychicAmplifier hediff severity → psylinkLevel (0-6)' },
+  { id:'ps_ctx',        x:640, y:1108, w:510, h:58, type:'info',   lines:['FACTION + CONTEXT'], sub:'factionName, pawnKind\nhasSpouse, hasLover (DirectRelations)\nisPrisoner, isSlave (IsPrisoner/IsSlave)\nisGhoul (kindDef contains "ghoul")' },
+  { id:'pawn_state',    x:640, y:1180, w:510, h:44, type:'process',lines:['→ PawnState  (complete data object)'], sub:'' },
+
+  { id:'build_ref',     x:640, y:1248, w:510, h:44, type:'process',lines:['BuildReferenceSheet(state)'], sub:'AsyncAIClient.cs' },
+  { id:'find_pawn',     x:640, y:1310, w:510, h:36, type:'process',lines:['FindPawnById(state.pawnId)'], sub:'search: Selector → Maps.AllPawns → World.worldPawns' },
+  { id:'native_pt',     x:640, y:1360, w:510, h:44, type:'process',lines:['GetReadableNativePortraitTexture(pawn)'], sub:'PortraitsCache.Get(256×256, Rot4.South) → ReadPixels → Texture2D\nif excludeHelmet: SetDirty before + after render' },
+  { id:'scan_sp',       x:640, y:1418, w:510, h:36, type:'process',lines:['Scan /Sprites/*.png → normalize(filename) → dict'], sub:'' },
+  { id:'match_g',       x:640, y:1468, w:510, h:36, type:'process',lines:['For each gear: best substring match in sprite dict'], sub:'' },
+  { id:'composite',     x:640, y:1518, w:510, h:48, type:'process',lines:['Composite: [native portrait | sprite₁ | sprite₂ | …]'], sub:'white background, alpha-blended, horizontal strip → PNG bytes' },
+
+  // ── PROMPT PIPELINE ───────────────────────────────────────────────────────
+  { id:'queue_gen',     x:1190, y:220, w:560, h:44, type:'process',lines:['AsyncAIClient.QueueGeneration(state, settings, token, refBytes, cb)'], sub:'' },
+  { id:'llm_check',     x:1315, y:294, w:310, h:48, type:'decision',lines:['useLLMPrompt &&\nllmApiKey != null?'], sub:'' },
+
+  // LLM PATH
+  { id:'cpd',           x:1190, y:374, w:255, h:44, type:'process',lines:['CompilePawnStateDescription(state)'], sub:'structured pawn text for LLM input' },
+  { id:'gsysp',         x:1190, y:432, w:255, h:44, type:'process',lines:['GetLLMSystemPrompt(style, settings, framing)'], sub:'art-style system instructions' },
+  { id:'llm_model',     x:1190, y:490, w:255, h:44, type:'process',lines:['Select model:'], sub:'"gemini-3.1-flash-lite"\nor "gemma-2-27b-it"' },
+  { id:'post_llm',      x:1190, y:548, w:255, h:48, type:'api',    lines:['POST generativelanguage.googleapis.com', '/{model}:generateContent'], sub:'JSON: {system_instruction, contents,\ngenerationConfig{maxTokens:200, temp:0.75}}\ntimeout: 30s' },
+  { id:'llm_ok',        x:1255, y:628, w:125, h:48, type:'decision',lines:['LLM\nsuccess?'], sub:'' },
+  { id:'extract_g',     x:1190, y:710, w:255, h:44, type:'process',lines:['ExtractGeminiText()'], sub:'parse candidates[0].content.parts[0].text\nclean label prefixes, whitespace, commas' },
+  { id:'llm_fb',        x:1190, y:768, w:255, h:44, type:'error',  lines:['Fallback to template'], sub:'Log warning; CompilePositivePrompt()' },
+  { id:'llm_done',      x:1190, y:826, w:255, h:36, type:'process',lines:['→ LLM-generated prompt'], sub:'' },
+
+  // TEMPLATE PATH
+  { id:'comp_pos',      x:1480, y:374, w:255, h:44, type:'process',lines:['CompilePositivePrompt(state, settings, token)'], sub:'' },
+  { id:'style_sw',      x:1555, y:440, w:105, h:48, type:'decision',lines:['style?'], sub:'' },
+  { id:'korean',        x:1450, y:518, w:130, h:32, type:'process',lines:['Korean Webtoon header'], sub:'Solo Leveling manhwa, ink, chiaroscuro' },
+  { id:'western',       x:1595, y:518, w:130, h:32, type:'process',lines:['Western Realistic header'], sub:'oil painting, cinematic portrait' },
+  { id:'pixel',         x:1740, y:518, w:130, h:32, type:'process',lines:['Pixel/Dot header'], sub:'16-bit JRPG sprite, Tactics Ogre' },
+  { id:'app_race',      x:1480, y:574, w:255, h:40, type:'process',lines:['AppendRaceClass'], sub:'xenotype, role, captivity, anomaly, backstory' },
+  { id:'app_phys',      x:1480, y:626, w:255, h:40, type:'process',lines:['AppendPhysical'], sub:'hair style+color, skin, beard, genes, tattoo, bodytype' },
+  { id:'app_gear',      x:1480, y:678, w:255, h:40, type:'process',lines:['AppendGear'], sub:'weapon descriptor + apparel list' },
+  { id:'get_expr',      x:1480, y:730, w:255, h:40, type:'process',lines:['GetExpression'], sub:'moodLevel→ happy/neutral/sad/broken\nmentalState override, drug signs, flags' },
+  { id:'app_props',     x:1480, y:782, w:255, h:40, type:'process',lines:['AppendCuteProps'], sub:'drug prop (yayo pipe, bottle…)\npregnancy belly, royal crown, faction props' },
+  { id:'app_sprops',    x:1480, y:834, w:255, h:40, type:'process',lines:['AppendSkillProps'], sub:'tool/item matching topSkill1/2' },
+  { id:'app_health',    x:1480, y:886, w:255, h:40, type:'process',lines:['AppendHealthModifiers'], sub:'injuries, implants, scars\nexhausted, malnourished, chronic' },
+  { id:'pos_done',      x:1480, y:940, w:255, h:36, type:'process',lines:['→ positive prompt string'], sub:'' },
+
+  // BOTH PATHS JOIN
+  { id:'neg_prompt',    x:1190, y:1000, w:545, h:44, type:'process',lines:['CompileNegativePrompt(settings, framing)'], sub:'base negatives + framing-specific exclusions\n(bodyshot: no face crop; portrait: no full body; etc.)' },
+  { id:'dispatch',      x:1190, y:1068, w:545, h:44, type:'process',lines:['DispatchImageBackend(positivePrompt, negPrompt, settings, state, refBytes, cb)'], sub:'' },
+
+  // ── BACKENDS ─────────────────────────────────────────────────────────────
+  { id:'back_sw',       x:1810, y:220, w:140, h:48, type:'decision',lines:['backend\nType?'], sub:'' },
+  { id:'hf',            x:1800, y:310, w:270, h:68, type:'api',    lines:['HuggingFace Inference'], sub:'POST api-inference.huggingface.co/models/{id}\nJSON: {inputs, parameters{neg_prompt, steps, w, h, cfg}}\nBearer hfApiKey  |  timeout 120s  →  raw image bytes' },
+  { id:'poll',          x:1800, y:392, w:270, h:68, type:'api',    lines:['Pollinations (Free)'], sub:'GET image.pollinations.ai/prompt/{encoded}?w&h&model\nNo auth  |  prompt URL-capped 3500 chars\n→ raw image bytes' },
+  { id:'imagen',        x:1800, y:474, w:270, h:68, type:'api',    lines:['Google Imagen 4'], sub:'POST generativelanguage.googleapis.com/.../generateImages\nJSON: {prompt, referenceImages[base64 refSheet], cfg}\ngiApiKey  →  base64 PNG → decoded bytes' },
+  { id:'a1111',         x:1800, y:556, w:270, h:68, type:'api',    lines:['Local A1111 / Forge / ComfyUI'], sub:'POST http://127.0.0.1:7860/sdapi/v1/txt2img\nJSON: {prompt, neg, steps, w, h, cfg_scale, sampler}\n→ base64 image decoded to bytes' },
+  { id:'cf',            x:2100, y:310, w:270, h:68, type:'api',    lines:['Cloudflare Workers AI'], sub:'POST api.cloudflare.com/.../accounts/{acctId}/ai/run/{model}\nBearer cfApiKey (format "acctId:token")\n→ raw image bytes' },
+  { id:'di',            x:2100, y:392, w:270, h:68, type:'api',    lines:['DeepInfra'], sub:'POST api.deepinfra.com/v1/inference/{model}\nJSON: {input:{prompt, neg, w, h, steps, guidance}}\nBearer diApiKey  →  base64 / raw bytes' },
+  { id:'api_resp',      x:1900, y:660, w:430, h:44, type:'process',lines:['→ raw image bytes (all backends)'], sub:'' },
+
+  // ── POST-PROCESSING ───────────────────────────────────────────────────────
+  { id:'deliver',       x:2420, y:220, w:530, h:44, type:'process',lines:['DeliverImage(imgBytes, prompt, provider, state, settings, cb)'], sub:'AsyncAIClient.cs' },
+  { id:'bg_rem',        x:2420, y:290, w:530, h:68, type:'process',lines:['BackgroundRemover.Process(texture)'], sub:'YCbCr convert per pixel\nSample ≤3 dominant edge colors as bg seeds\nCore-zone guard protects face center\nPass 1: strict flood-fill from edge strips\nPass 2: loose halo cleanup (depth ≤1)\nα=0 on matched bg pixels  |  MaxRemovedFraction=0.95' },
+  { id:'bg_api_skip',   x:2420, y:374, w:530, h:36, type:'info',   lines:['(Google Imagen returns native transparent PNG — bg removal skipped)'], sub:'' },
+  { id:'cb_call',       x:2420, y:430, w:530, h:44, type:'process',lines:['callback(Texture2D, rawBytes, promptUsed, null)'], sub:'' },
+
+  // CACHE
+  { id:'save_cache',    x:2420, y:500, w:530, h:54, type:'storage',lines:['CacheManager.SaveToCache(key, bytes)'], sub:'path: Application.persistentDataPath/AIPortraitsCache/{worldId}_{pawnId}_{framing}.png\nkey = AIPortraitsManager.GetActiveKey(pawn)' },
+  { id:'save_disk',     x:2420, y:570, w:530, h:54, type:'storage',lines:['CacheManager.SavePortraitToDisk(pawn, style, framing, bytes)'], sub:'path: Documents/RimWorld Portraits/{PawnName}_{PawnID}/{name}_{style}_{framing}_{ts}.png\nmigrates old-style folder if found' },
+  { id:'in_mem',        x:2420, y:640, w:530, h:54, type:'storage',lines:['Update in-memory cache (AIPortraitsManager)'], sub:'Dictionary<PawnFramingKey{worldId,pawnId,framing}, {Texture2D, bytes}>\nset GenerationStatus = Idle  |  UI auto-refreshes next ExtraOnGUI frame' },
+
+  // ── VIDEO PIPELINE ────────────────────────────────────────────────────────
+  { id:'trig_vg',       x:60,  y:1880, w:480, h:44, type:'video',  lines:['TriggerVideoGeneration(pawn, imgBytes)'], sub:'Set video GenerationStatus = Generating' },
+  { id:'qvg',           x:60,  y:1944, w:480, h:44, type:'video',  lines:['AsyncAIClient.QueueVideoGeneration(pawn, state, imgBytes, apiKey, cb)'], sub:'' },
+  { id:'vg_guards',     x:60,  y:2008, w:480, h:44, type:'decision',lines:['apiKey empty?\nOR imgBytes null?'], sub:'' },
+  { id:'vg_guard_err',  x:570, y:2008, w:200, h:44, type:'error',  lines:['callback(null, error)'], sub:'' },
+  { id:'vg_coroutine',  x:60,  y:2078, w:480, h:44, type:'video',  lines:['GenerateVeoVideoCoroutine(pawn, state, imgBytes, apiKey)'], sub:'' },
+  { id:'vg_prompt',     x:60,  y:2140, w:480, h:44, type:'process',lines:['Build video prompt'], sub:'CompilePositivePrompt(state) + ", cinematic, masterpiece, character comes alive,\nbreathing, blinking, seamless loop, start/end frames identical, idle animation"' },
+  { id:'vg_framing',    x:60,  y:2210, w:480, h:36, type:'process',lines:['framing → aspectRatio:  portrait/bodyshot → "9:16"   special → "16:9"'], sub:'' },
+  { id:'vg_key',        x:60,  y:2260, w:480, h:36, type:'process',lines:['diskKey = GetActiveKeyForFraming(pawn, framing)  → {worldId}_{pawnId}_{framing}'], sub:'' },
+  { id:'vg_b64',        x:60,  y:2310, w:480, h:36, type:'process',lines:['base64Image = Convert.ToBase64String(imgBytes)'], sub:'' },
+  { id:'post_veo',      x:60,  y:2362, w:480, h:76, type:'api',    lines:['POST Veo 3.1 Lite'], sub:'generativelanguage.googleapis.com/v1beta/models/\nveo-3.1-lite-generate-preview:predictLongRunning\n{instances:[{prompt, image:{bytesBase64Encoded, mimeType:"image/png"}}],\nparameters:{sampleCount:1, aspectRatio, durationSeconds:4, resolution:"720p"}}\ntimeout: 60s' },
+  { id:'parse_op',      x:60,  y:2454, w:480, h:36, type:'process',lines:['Parse operationName from response JSON'], sub:'' },
+
+  { id:'poll_hdr',      x:60,  y:2510, w:480, h:44, type:'video',  lines:['PollVeoOperation(operationName, apiKey, callback)'], sub:'max 30 attempts × WaitForSeconds(10) = 300s total' },
+  { id:'wait_10',       x:60,  y:2568, w:480, h:36, type:'video',  lines:['WaitForSeconds(10)  →  GET .../{operationName}?key=...'], sub:'' },
+  { id:'poll_err',      x:90,  y:2622, w:200, h:48, type:'decision',lines:['response\nhas "error"?'], sub:'' },
+  { id:'poll_err_cb',   x:320, y:2622, w:220, h:44, type:'error',  lines:['ParseVeoError → callback(null, msg)'], sub:'' },
+  { id:'poll_done',     x:90,  y:2702, w:200, h:48, type:'decision',lines:['ParseVeoDone\n("done":true)?'], sub:'' },
+  { id:'poll_uri',      x:90,  y:2786, w:200, h:48, type:'decision',lines:['ParseVeoVideoUri\nfound?'], sub:'' },
+  { id:'dl_video',      x:60,  y:2872, w:255, h:44, type:'video',  lines:['DownloadVideoBytes(videoUri + ?key=...)'], sub:'timeout 60s' },
+  { id:'save_mp4',      x:60,  y:2934, w:255, h:54, type:'storage',lines:['Save .mp4 to cache'], sub:'AIPortraitsCache/{diskKey}.mp4\nDocuments/RimWorld Portraits/{PawnName}_{PawnID}/{name}_{style}_{framing}_{ts}.mp4' },
+  { id:'poll_rai',      x:340, y:2786, w:220, h:44, type:'error',  lines:['ParseVeoRaiReason →\nSafety filter error'], sub:'' },
+  { id:'poll_timeout',  x:340, y:2872, w:220, h:44, type:'error',  lines:['maxAttempts exceeded →\n"timed out after 300s"'], sub:'' },
+  { id:'poll_cont',     x:340, y:2702, w:220, h:44, type:'video',  lines:['still generating\n→ continue loop'], sub:'' },
+  { id:'vg_cb',         x:60,  y:3012, w:255, h:44, type:'process',lines:['callback(videoPath, null)'], sub:'' },
+
+  { id:'matte_svc',     x:600, y:2362, w:430, h:76, type:'video',  lines:['VideoMatteService.EnsureMatted(videoPath, framing)'], sub:'skip "special" framing (keep scenic bg)\nextract frames from .mp4\nBackgroundRemover per frame (offline u2netp CPU model)\nreassemble → {diskKey}_matted.mp4' },
+  { id:'vpm_start',     x:600, y:2454, w:430, h:48, type:'video',  lines:['VideoPlaybackManager.StartPlayback(pawnId, videoPath)'], sub:'UnityVideoPlayer (DontDestroyOnLoad) → RenderTexture, loop=true' },
+  { id:'vpm_tex',       x:600, y:2518, w:430, h:36, type:'video',  lines:['GetActiveTexture() → current RenderTexture frame  →  overlay renders'], sub:'' },
+
+  // STORAGE SUMMARY
+  { id:'store_sum',     x:2420, y:750, w:530, h:170, type:'storage',lines:['STORAGE OVERVIEW'], sub:'Auto-cache (hidden):  persistentDataPath/AIPortraitsCache/\n  {worldId}_{pawnId}_{framing}.png  — portrait PNGs\n  {worldId}_{pawnId}_{framing}.mp4  — raw video\n  {worldId}_{pawnId}_{framing}_matted.mp4  — bg-removed video\n\nUser-visible folder (Documents/RimWorld Portraits/):\n  {PawnName}_{PawnID}/{name}_{style}_{framing}_{ts}.png\n  {PawnName}_{PawnID}/{name}_{style}_{framing}_{ts}.mp4\n\nIn-memory: Dictionary<PawnFramingKey, {Texture2D, bytes, GenerationStatus, videoStatus}>' },
+];
+
+// Edges: { from, to, label, color, fromSide, toSide, ox, oy }
+// fromSide/toSide: 'right','left','bottom','top'
+const edges = [
+  // INIT
+  { from:'mod_init',    to:'get_settings', color:'default' },
+  { from:'get_settings',to:'harmony_all',  color:'default' },
+  { from:'harmony_all', to:'patch1',       color:'patch', fromSide:'right', toSide:'left' },
+  { from:'harmony_all', to:'patch2',       color:'patch', fromSide:'right', toSide:'left' },
+  { from:'harmony_all', to:'patch3',       color:'patch', fromSide:'right', toSide:'left' },
+  { from:'patch1',      to:'extra_gui',    color:'patch', fromSide:'bottom', toSide:'top', label:'fires each frame' },
+
+  // RENDER LOOP
+  { from:'extra_gui',   to:'get_pawn',     color:'default' },
+  { from:'get_pawn',    to:'guard',        color:'default' },
+  { from:'guard',       to:'fail_stop',    color:'red',   label:'FAIL' },
+  { from:'guard',       to:'get_tex',      color:'green', label:'PASS' },
+  { from:'get_tex',     to:'comp_rect',    color:'default' },
+  { from:'comp_rect',   to:'vid_enabled',  color:'default' },
+  { from:'vid_enabled', to:'mp4_exists',   color:'cyan',  label:'YES (video)' },
+  { from:'vid_enabled', to:'port_null',    color:'default',label:'NO (static)' },
+
+  // VIDEO PATH
+  { from:'mp4_exists',  to:'ensure_matted',color:'green', label:'YES' },
+  { from:'ensure_matted',to:'start_pb',    color:'cyan' },
+  { from:'start_pb',    to:'get_vtex',     color:'cyan' },
+  { from:'get_vtex',    to:'draw_vtex',    color:'green', label:'YES' },
+  { from:'get_vtex',    to:'draw_vfall',   color:'red',   label:'NO' },
+  { from:'mp4_exists',  to:'get_vs',       color:'red',   label:'NO' },
+  { from:'get_vs',      to:'vstatus_dec',  color:'cyan' },
+  { from:'vstatus_dec', to:'trig_vg_idle', color:'default',label:'Idle' },
+  { from:'vstatus_dec', to:'making_alive', color:'default',label:'Generating' },
+  { from:'vstatus_dec', to:'veo_err',      color:'red',   label:'Error' },
+  { from:'vstatus_dec', to:'draw_static_f',color:'default' },
+
+  // STATIC PATH
+  { from:'port_null',   to:'draw_port',    color:'green', label:'YES' },
+  { from:'port_null',   to:'draw_ph',      color:'red',   label:'NO' },
+  { from:'draw_ph',     to:'status_dec',   color:'default' },
+  { from:'status_dec',  to:'txt_idle',     color:'default',label:'Idle' },
+  { from:'status_dec',  to:'txt_gen',      color:'default',label:'Generating' },
+  { from:'status_dec',  to:'txt_err',      color:'red',   label:'Error' },
+  { from:'stop_pb',     to:'vid_enabled',  color:'default',label:'↑ loop', toSide:'top' },
+
+  // BUTTONS
+  { from:'btn_r',       to:'ref_dec',      color:'default' },
+  { from:'ref_dec',     to:'regen_vid2',   color:'green',  label:'YES' },
+  { from:'ref_dec',     to:'trig_new',     color:'default',label:'NO' },
+  { from:'trig_new',    to:'trig_new2',    color:'blue',   label:'→ extraction' },
+
+  // PAWN EXTRACTION
+  { from:'trig_new2',   to:'extract',      color:'default' },
+  { from:'extract',     to:'ps_identity',  color:'default' },
+  { from:'ps_identity', to:'ps_appear',    color:'default' },
+  { from:'ps_appear',   to:'ps_xeno',      color:'default' },
+  { from:'ps_xeno',     to:'ps_equip',     color:'default' },
+  { from:'ps_equip',    to:'ps_h1',        color:'default' },
+  { from:'ps_h1',       to:'ps_h2a',       color:'default' },
+  { from:'ps_h2a',      to:'ps_h2b',       color:'default' },
+  { from:'ps_h2b',      to:'ps_h2c',       color:'default' },
+  { from:'ps_h2c',      to:'ps_mood',      color:'default' },
+  { from:'ps_mood',     to:'ps_traits',    color:'default' },
+  { from:'ps_traits',   to:'ps_skills',    color:'default' },
+  { from:'ps_skills',   to:'ps_role',      color:'default' },
+  { from:'ps_role',     to:'ps_ctx',       color:'default' },
+  { from:'ps_ctx',      to:'pawn_state',   color:'green' },
+  { from:'pawn_state',  to:'build_ref',    color:'default' },
+  { from:'build_ref',   to:'find_pawn',    color:'default' },
+  { from:'find_pawn',   to:'native_pt',    color:'default' },
+  { from:'native_pt',   to:'scan_sp',      color:'default' },
+  { from:'scan_sp',     to:'match_g',      color:'default' },
+  { from:'match_g',     to:'composite',    color:'default' },
+  { from:'composite',   to:'queue_gen',    color:'blue', label:'→ prompt pipeline' },
+
+  // PROMPT
+  { from:'queue_gen',   to:'llm_check',    color:'default' },
+  { from:'llm_check',   to:'cpd',          color:'green',  label:'YES (LLM)' },
+  { from:'llm_check',   to:'comp_pos',     color:'default',label:'NO (template)' },
+  { from:'cpd',         to:'gsysp',        color:'default' },
+  { from:'gsysp',       to:'llm_model',    color:'default' },
+  { from:'llm_model',   to:'post_llm',     color:'default' },
+  { from:'post_llm',    to:'llm_ok',       color:'default' },
+  { from:'llm_ok',      to:'extract_g',    color:'green',  label:'YES' },
+  { from:'llm_ok',      to:'llm_fb',       color:'red',    label:'NO/empty' },
+  { from:'extract_g',   to:'llm_done',     color:'default' },
+  { from:'llm_fb',      to:'llm_done',     color:'default' },
+  { from:'llm_done',    to:'neg_prompt',   color:'default' },
+
+  { from:'comp_pos',    to:'style_sw',     color:'default' },
+  { from:'style_sw',    to:'korean',       color:'default' },
+  { from:'style_sw',    to:'western',      color:'default' },
+  { from:'style_sw',    to:'pixel',        color:'default' },
+  { from:'korean',      to:'app_race',     color:'default' },
+  { from:'western',     to:'app_race',     color:'default' },
+  { from:'pixel',       to:'app_race',     color:'default' },
+  { from:'app_race',    to:'app_phys',     color:'default' },
+  { from:'app_phys',    to:'app_gear',     color:'default' },
+  { from:'app_gear',    to:'get_expr',     color:'default' },
+  { from:'get_expr',    to:'app_props',    color:'default' },
+  { from:'app_props',   to:'app_sprops',   color:'default' },
+  { from:'app_sprops',  to:'app_health',   color:'default' },
+  { from:'app_health',  to:'pos_done',     color:'green' },
+  { from:'pos_done',    to:'neg_prompt',   color:'default' },
+  { from:'neg_prompt',  to:'dispatch',     color:'default' },
+
+  // BACKENDS
+  { from:'dispatch',    to:'back_sw',      color:'blue',   label:'→ backend dispatch' },
+  { from:'back_sw',     to:'hf',           color:'default' },
+  { from:'back_sw',     to:'poll',         color:'default' },
+  { from:'back_sw',     to:'imagen',       color:'default' },
+  { from:'back_sw',     to:'a1111',        color:'default' },
+  { from:'back_sw',     to:'cf',           color:'default' },
+  { from:'back_sw',     to:'di',           color:'default' },
+  { from:'hf',          to:'api_resp',     color:'default' },
+  { from:'poll',        to:'api_resp',     color:'default' },
+  { from:'imagen',      to:'api_resp',     color:'default' },
+  { from:'a1111',       to:'api_resp',     color:'default' },
+  { from:'cf',          to:'api_resp',     color:'default' },
+  { from:'di',          to:'api_resp',     color:'default' },
+  { from:'api_resp',    to:'deliver',      color:'blue',   label:'→ post-processing' },
+
+  // POST-PROCESS
+  { from:'deliver',     to:'bg_rem',       color:'default' },
+  { from:'bg_rem',      to:'bg_api_skip',  color:'default' },
+  { from:'bg_api_skip', to:'cb_call',      color:'default' },
+  { from:'cb_call',     to:'save_cache',   color:'default' },
+  { from:'save_cache',  to:'save_disk',    color:'default' },
+  { from:'save_disk',   to:'in_mem',       color:'default' },
+
+  // VIDEO
+  { from:'trig_vg',     to:'qvg',          color:'cyan' },
+  { from:'qvg',         to:'vg_guards',    color:'cyan' },
+  { from:'vg_guards',   to:'vg_guard_err', color:'red',   label:'YES' },
+  { from:'vg_guards',   to:'vg_coroutine', color:'green', label:'NO' },
+  { from:'vg_coroutine',to:'vg_prompt',    color:'cyan' },
+  { from:'vg_prompt',   to:'vg_framing',   color:'cyan' },
+  { from:'vg_framing',  to:'vg_key',       color:'cyan' },
+  { from:'vg_key',      to:'vg_b64',       color:'cyan' },
+  { from:'vg_b64',      to:'post_veo',     color:'cyan' },
+  { from:'post_veo',    to:'parse_op',     color:'cyan' },
+  { from:'parse_op',    to:'poll_hdr',     color:'cyan' },
+  { from:'poll_hdr',    to:'wait_10',      color:'cyan' },
+  { from:'wait_10',     to:'poll_err',     color:'cyan' },
+  { from:'poll_err',    to:'poll_err_cb',  color:'red',   label:'YES' },
+  { from:'poll_err',    to:'poll_done',    color:'green', label:'NO' },
+  { from:'poll_done',   to:'poll_uri',     color:'green', label:'YES' },
+  { from:'poll_done',   to:'poll_cont',    color:'red',   label:'NO' },
+  { from:'poll_cont',   to:'wait_10',      color:'cyan',  label:'loop' },
+  { from:'poll_uri',    to:'dl_video',     color:'green', label:'YES' },
+  { from:'poll_uri',    to:'poll_rai',     color:'red',   label:'NO' },
+  { from:'dl_video',    to:'save_mp4',     color:'cyan' },
+  { from:'save_mp4',    to:'vg_cb',        color:'cyan' },
+  { from:'vg_cb',       to:'matte_svc',    color:'cyan', label:'→ matte + play' },
+  { from:'matte_svc',   to:'vpm_start',    color:'cyan' },
+  { from:'vpm_start',   to:'vpm_tex',      color:'cyan' },
+
+  // VIDEO trigger from render loop
+  { from:'trig_vg_idle',to:'trig_vg',      color:'cyan',  label:'triggers' },
+  { from:'regen_vid2',  to:'trig_vg',      color:'cyan',  label:'triggers' },
+];
+
+// ─── DRAWING ─────────────────────────────────────────────────────────────────
+
+function nodeById(id) { return nodes.find(n => n.id === id); }
+
+function nodeEdgePoint(n, side) {
+  if (side === 'right')  return [n.x + n.w,     n.y + n.h/2];
+  if (side === 'left')   return [n.x,            n.y + n.h/2];
+  if (side === 'top')    return [n.x + n.w/2,    n.y];
+  return                        [n.x + n.w/2,    n.y + n.h];  // 'bottom' default
+}
+
+const ARROW_COLORS = {
+  default: '#484f58',
+  green:   '#2ea043',
+  red:     '#f85149',
+  blue:    '#388bfd',
+  cyan:    '#39c5cf',
+  patch:   '#bc8cff',
+  yellow:  '#e3b341',
+};
+
+function arrowTip(ctx, x, y, angle, col, size) {
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x - size*Math.cos(angle-0.38), y - size*Math.sin(angle-0.38));
+  ctx.lineTo(x - size*Math.cos(angle+0.38), y - size*Math.sin(angle+0.38));
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawArrowFull(e) {
+  const fn = nodeById(e.from), tn = nodeById(e.to);
+  if (!fn || !tn) return;
+  const fs = e.fromSide || 'bottom';
+  const ts = e.toSide   || 'top';
+  const [x1,y1] = nodeEdgePoint(fn, fs);
+  const [x2,y2] = nodeEdgePoint(tn, ts);
+  const col = ARROW_COLORS[e.color] || ARROW_COLORS.default;
+
+  ctx.save();
+  ctx.strokeStyle = col;
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([]);
+
+  // Determine route and tip angle
+  let tipAngle;
+  ctx.beginPath();
+
+  const dx = Math.abs(x2-x1), dy = Math.abs(y2-y1);
+
+  if (dx < 4) {
+    // straight vertical
+    ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
+    tipAngle = y2 > y1 ? Math.PI/2 : -Math.PI/2;
+  } else if (dy < 4) {
+    // straight horizontal
+    ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
+    tipAngle = x2 > x1 ? 0 : Math.PI;
+  } else if (fs === 'right' && ts === 'left') {
+    // horizontal L-route
+    const mx = (x1+x2)/2;
+    ctx.moveTo(x1,y1); ctx.lineTo(mx,y1); ctx.lineTo(mx,y2); ctx.lineTo(x2,y2);
+    tipAngle = x2 > x1 ? 0 : Math.PI;
+  } else if (fs === 'bottom' && ts === 'top') {
+    // vertical T-route
+    const my = (y1+y2)/2;
+    ctx.moveTo(x1,y1); ctx.lineTo(x1,my); ctx.lineTo(x2,my); ctx.lineTo(x2,y2);
+    tipAngle = Math.PI/2;
+  } else if (fs === 'bottom' && ts === 'left') {
+    ctx.moveTo(x1,y1); ctx.lineTo(x1,y2); ctx.lineTo(x2,y2);
+    tipAngle = x2 > x1 ? 0 : Math.PI;
+  } else if (fs === 'right' && ts === 'top') {
+    ctx.moveTo(x1,y1); ctx.lineTo(x2,y1); ctx.lineTo(x2,y2);
+    tipAngle = Math.PI/2;
+  } else {
+    ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
+    tipAngle = Math.atan2(y2-y1, x2-x1);
+  }
+  ctx.stroke();
+  arrowTip(ctx, x2, y2, tipAngle, col, 9);
+
+  if (e.label) {
+    ctx.fillStyle = col;
+    ctx.font = `bold 10px Consolas, monospace`;
+    ctx.textAlign = 'center';
+    // Place label near midpoint, offset perpendicular
+    let lx = (x1+x2)/2, ly = (y1+y2)/2 - 4;
+    if (dx < 4) lx += 28;   // vertical arrow: label to the right
+    ctx.fillText(e.label, lx, ly);
+  }
+  ctx.restore();
+}
+
+function drawDiamond(x, y, w, h, col) {
+  const cx = x+w/2, cy = y+h/2;
+  ctx.beginPath();
+  ctx.moveTo(cx, y); ctx.lineTo(x+w, cy); ctx.lineTo(cx, y+h); ctx.lineTo(x, cy);
+  ctx.closePath();
+  ctx.fillStyle = col.fill; ctx.fill();
+  ctx.strokeStyle = col.stroke; ctx.lineWidth = 1.5; ctx.stroke();
+}
+
+// polyfill-safe rounded rect
+function drawRoundRect(x, y, w, h, r, col) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y);  ctx.arcTo(x+w, y,   x+w, y+r,   r);
+  ctx.lineTo(x+w, y+h-r); ctx.arcTo(x+w, y+h, x+w-r, y+h, r);
+  ctx.lineTo(x+r, y+h);  ctx.arcTo(x,   y+h, x,   y+h-r, r);
+  ctx.lineTo(x, y+r);    ctx.arcTo(x,   y,   x+r, y,     r);
+  ctx.closePath();
+  ctx.fillStyle = col.fill; ctx.fill();
+  if (col.dash) ctx.setLineDash([4,3]);
+  ctx.strokeStyle = col.stroke; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function wrapText(text, maxWidth, fontSize) {
+  const words = text.split(' ');
+  const lines = [];
+  let cur = '';
+  for (const w of words) {
+    const test = cur ? cur + ' ' + w : w;
+    if (ctx.measureText(test).width > maxWidth && cur) {
+      lines.push(cur); cur = w;
+    } else { cur = test; }
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
+function drawNode(n) {
+  const col = COLORS[n.type] || COLORS.process;
+
+  if (n.type === 'decision') {
+    drawDiamond(n.x, n.y, n.w, n.h, col);
+    ctx.fillStyle = col.text;
+    ctx.font = `bold 10px Consolas, monospace`;
+    ctx.textAlign = 'center';
+    const lines = n.lines.join('\n').split('\n');
+    const lineH = 13;
+    const startY = n.y + n.h/2 - (lines.length-1)*lineH/2;
+    lines.forEach((l,i) => ctx.fillText(l, n.x+n.w/2, startY + i*lineH));
+  } else {
+    drawRoundRect(n.x, n.y, n.w, n.h, 5, col);
+
+    // Main text
+    ctx.fillStyle = col.text;
+    ctx.font = `bold 10.5px Consolas, monospace`;
+    ctx.textAlign = 'left';
+    const pad = 8;
+    const maxW = n.w - pad*2;
+
+    let allLines = [];
+    for (const line of n.lines) {
+      const wrapped = wrapText(line, maxW, 10.5);
+      allLines = allLines.concat(wrapped);
+    }
+
+    const lineH = 13;
+    const subLines = n.sub ? n.sub.split('\n') : [];
+    const totalH = allLines.length * lineH + (subLines.length > 0 ? 6 + subLines.length * 11 : 0);
+    let startY = n.y + (n.h - totalH) / 2 + lineH;
+
+    allLines.forEach((l, i) => {
+      ctx.fillText(l, n.x + pad, startY + i * lineH);
+    });
+
+    if (subLines.length) {
+      ctx.fillStyle = '#484f58';
+      ctx.font = `9px Consolas, monospace`;
+      const subY = startY + allLines.length * lineH + 4;
+      subLines.forEach((l, i) => {
+        ctx.fillText(l, n.x + pad, subY + i * 11);
+      });
+    }
+  }
+}
+
+// ── SECTION BACKGROUNDS ───────────────────────────────────────────────────
+const sections = [
+  { label:'MOD INITIALIZATION',     x:30,   y:30,   w:1270, h:160, color:'#1c2128' },
+  { label:'RENDER LOOP (per frame)', x:30,   y:200,  w:580,  h:1630, color:'#13161c' },
+  { label:'PAWN STATE EXTRACTION',   x:620,  y:200,  w:550,  h:1400, color:'#111c14' },
+  { label:'PROMPT PIPELINE',         x:1180, y:200,  w:580,  h:950,  color:'#13131c' },
+  { label:'BACKEND DISPATCH',        x:1780, y:200,  w:620,  h:540,  color:'#191320' },
+  { label:'POST-PROCESSING',         x:2400, y:200,  w:580,  h:320,  color:'#141c14' },
+  { label:'CACHE & STORAGE',         x:2400, y:530,  w:580,  h:420,  color:'#141c14' },
+  { label:'VIDEO PIPELINE  (Veo 3.1 Lite)', x:30, y:1860, w:780, h:1250, color:'#0d1820' },
+  { label:'VIDEO MATTE + PLAYBACK',  x:580,  y:2340, w:500,  h:260,  color:'#0d1820' },
+];
+
+function drawSection(s) {
+  const r = 8;
+  ctx.beginPath();
+  ctx.moveTo(s.x+r, s.y);
+  ctx.lineTo(s.x+s.w-r, s.y); ctx.arcTo(s.x+s.w,s.y,    s.x+s.w,s.y+r,    r);
+  ctx.lineTo(s.x+s.w, s.y+s.h-r); ctx.arcTo(s.x+s.w,s.y+s.h,s.x+s.w-r,s.y+s.h,r);
+  ctx.lineTo(s.x+r, s.y+s.h); ctx.arcTo(s.x,s.y+s.h,    s.x,s.y+s.h-r,   r);
+  ctx.lineTo(s.x, s.y+r); ctx.arcTo(s.x,s.y,    s.x+r,s.y,    r);
+  ctx.closePath();
+  ctx.fillStyle = s.color; ctx.fill();
+  ctx.strokeStyle = '#21262d'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.fillStyle = '#3d444d';
+  ctx.font = 'bold 11px Consolas, monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText('▸ ' + s.label, s.x + 12, s.y + 16);
+}
+
+// ─── MAIN DRAW ────────────────────────────────────────────────────────────
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  ctx.save();
+  ctx.translate(tx, ty);
+  ctx.scale(scale, scale);
+
+  // Sections
+  sections.forEach(drawSection);
+
+  // Edges (behind nodes)
+  edges.forEach(drawArrowFull);
+
+  // Nodes
+  nodes.forEach(drawNode);
+
+  ctx.restore();
+}
+
+canvas.style.cursor = 'grab';
+resize();
+resetView();
+</script>
+</body>
+</html>

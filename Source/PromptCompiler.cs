@@ -552,30 +552,37 @@ Content: Render the character's appearance, clean expression, and gear exactly a
         private static string BuildGearLine(PawnState state, out string helmet)
         {
             helmet = null;
-            if (state.apparel == null || state.apparel.Count == 0) return "";
-
             List<string> remainingApparel = new List<string>();
-            foreach (var app in state.apparel)
+
+            if (state.apparel != null)
             {
-                if (IsHeadgearLabel(app))
+                foreach (var app in state.apparel)
                 {
-                    if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.excludeHelmet)
+                    if (IsHeadgearLabel(app))
                     {
-                        // Exclude headgear entirely
+                        if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.excludeHelmet)
+                        {
+                            // Exclude headgear entirely
+                        }
+                        else
+                        {
+                            helmet = app;
+                        }
                     }
                     else
                     {
-                        helmet = app;
+                        remainingApparel.Add(app);
                     }
-                }
-                else
-                {
-                    remainingApparel.Add(app);
                 }
             }
 
             string apparelDesc = string.Join(", ", remainingApparel.ToArray());
-            if (string.IsNullOrEmpty(apparelDesc)) return "";
+            if (string.IsNullOrEmpty(apparelDesc))
+            {
+                // Pawn has no body clothing (naked, or only headgear).
+                // Describe them in modest clothing to prevent the AI from generating nudity and triggering NSFW filters.
+                return "wearing simple modest fabric wraps";
+            }
 
             if (state.apparelStyle == "heavily armored")
             {
@@ -1025,8 +1032,36 @@ Content: Render the character's appearance, clean expression, and gear exactly a
 
             if (!string.IsNullOrEmpty(state.primaryWeapon))
                 sb.AppendLine("Weapon: " + state.primaryWeapon + " (" + state.weaponType + ")");
-            if (state.apparel.Count > 0)
-                sb.AppendLine("Apparel: " + string.Join(", ", state.apparel.ToArray()));
+            // Separate body apparel and headgear to detect if body is bare
+            List<string> bodyApparel = new List<string>();
+            List<string> headgear = new List<string>();
+            if (state.apparel != null)
+            {
+                foreach (var app in state.apparel)
+                {
+                    if (IsHeadgearLabel(app))
+                    {
+                        if (settings == null || !settings.excludeHelmet)
+                            headgear.Add(app);
+                    }
+                    else
+                    {
+                        bodyApparel.Add(app);
+                    }
+                }
+            }
+
+            List<string> printedApparel = new List<string>();
+            printedApparel.AddRange(headgear);
+            if (bodyApparel.Count > 0)
+            {
+                printedApparel.AddRange(bodyApparel);
+            }
+            else
+            {
+                printedApparel.Add("simple modest clothing");
+            }
+            sb.AppendLine("Apparel: " + string.Join(", ", printedApparel.ToArray()));
 
             if (!string.IsNullOrEmpty(state.childhoodTitle))
                 sb.AppendLine("Childhood: " + state.childhoodTitle);
@@ -1148,8 +1183,9 @@ Content: Render the character's appearance, clean expression, and gear exactly a
                 "6. " + rule6 + "\n" +
                 "7. " + rule7 + "\n" +
                 "8. HIGH QUALITY VISUALS: Elevate the aesthetic by requesting dramatic lighting, strong shadow play, crisp inked linework, and clean color harmony tailored to the style. Avoid generic terms like 'hyperrealistic' or 'detailed'; use concrete modifiers instead. For example, describe the hair flows, glossy highlights, detailed eyes, clothing textures, dynamic lighting, and background color accents in detail (e.g. 'glistening hair flows', 'sharp volumetric highlights', 'masterpiece digital art', 'crisp pixel alignment', 'iridescent fabrics').\n" +
-                "9. Keep total output under 350 words.\n" +
-                "10. Output ONLY the prompt — no explanations, no headers, no quotes.";
+                "9. STRICT SAFETY: Do NOT use any sexually suggestive, nude, naked, topless, bare-chested, or NSFW-sensitive keywords. The output must be strictly PG-rated and safe for work. Ensure the character is always described as wearing clothing (e.g., if no specific apparel is listed, specify simple modest clothes like a plain tunic or fabric wraps).\n" +
+                "10. Keep total output under 350 words.\n" +
+                "11. Output ONLY the prompt — no explanations, no headers, no quotes.";
         }
     }
 }
