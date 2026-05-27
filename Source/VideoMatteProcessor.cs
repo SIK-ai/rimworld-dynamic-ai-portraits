@@ -154,19 +154,26 @@ namespace AIPortraits
             // Snapshot the captured frames in index order.
             List<long> keys = new List<long>(captured.Keys);
             keys.Sort();
+            int n = keys.Count;
+            int npix = width * height;
 
-            int written = 0;
-            for (int i = 0; i < keys.Count; i++)
+            // ── Pass 1: matte every frame and accumulate a per-pixel UNION (max) alpha. ──
+            // u2netp segments each frame independently and, on these animated clips, drops
+            // the torso/body on many frames (it works on some, fails on others) — which made
+            // the body flicker in and out. Taking the max alpha across all frames keeps any
+            // region that was correctly detected in at least one frame, so the body stays
+            // present and stable on every frame. Veo portrait/bodyshot clips are near-static,
+            // so the union is tight (minimal ghosting).
+            int wpx = width, hpx = height;
+            byte[] unionAlpha = new byte[npix];
+            for (int i = 0; i < n; i++)
             {
                 Color32[] frame = captured[keys[i]];
-
-                // Matte on a background thread (ONNX inference is CPU-only, no Unity calls).
                 float[] alpha = null;
                 bool threadDone = false;
-                int w = width, h = height;
                 ThreadPool.QueueUserWorkItem(delegate
                 {
-                    try { alpha = U2NetRemover.ComputeAlpha(frame, w, h); }
+                    try { alpha = U2NetRemover.ComputeAlpha(frame, wpx, hpx); }
                     catch { alpha = null; }
                     threadDone = true;
                 });
@@ -174,15 +181,28 @@ namespace AIPortraits
 
                 if (alpha != null)
                 {
-                    for (int p = 0; p < frame.Length; p++)
+                    int lim = npix < alpha.Length ? npix : alpha.Length;
+                    for (int p = 0; p < lim; p++)
                     {
                         byte na = (byte)Mathf.Clamp(Mathf.RoundToInt(alpha[p] * 255f), 0, 255);
-                        if (na < frame[p].a) frame[p].a = na;
+                        if (na > unionAlpha[p]) unionAlpha[p] = na;
                     }
                 }
+                yield return null;
+            }
 
-                // Encode + write (main thread for Texture2D, but file IO is cheap).
-                Texture2D ft = new Texture2D(w, h, TextureFormat.RGBA32, false);
+            // ── Pass 2: apply the stabilized union alpha to every frame and write PNGs. ──
+            int written = 0;
+            for (int i = 0; i < n; i++)
+            {
+                Color32[] frame = captured[keys[i]];
+                int lim = frame.Length < unionAlpha.Length ? frame.Length : unionAlpha.Length;
+                for (int p = 0; p < lim; p++)
+                {
+                    if (unionAlpha[p] < frame[p].a) frame[p].a = unionAlpha[p];
+                }
+
+                Texture2D ft = new Texture2D(width, height, TextureFormat.RGBA32, false);
                 ft.SetPixels32(frame);
                 ft.Apply(false);
                 byte[] png = ImageConversion.EncodeToPNG(ft);
