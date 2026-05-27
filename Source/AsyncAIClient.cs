@@ -1458,6 +1458,7 @@ namespace AIPortraits
             json.Append("}],");
             json.Append("\"parameters\":{");
             json.Append("\"sampleCount\":1,");
+            json.Append("\"generateAudio\":false,");   // muted on playback + dropped by the matte — don't pay to generate it
             json.Append("\"aspectRatio\":\"").Append(aspectRatio).Append("\",");
             json.Append("\"durationSeconds\":4,");
             json.Append("\"resolution\":\"720p\"");
