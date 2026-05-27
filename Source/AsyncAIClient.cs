@@ -1432,7 +1432,7 @@ namespace AIPortraits
             string url = "https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-lite-generate-preview:predictLongRunning?key=" + apiKey;
 
             string basePrompt = PromptCompiler.CompilePositivePrompt(state, AIPortraitsMod.settings, null);
-            string prompt = basePrompt + ", cinematic, masterpiece, character comes alive, breathing, blinking, looking at camera, subtle movement, high quality, seamless loop, start and end frames are identical, continuous looping idle animation, steady camera";
+            string prompt = basePrompt + ", cinematic, masterpiece, character comes alive, breathing, blinking, looking at camera, subtle movement, high quality, seamless loop, start and end frames are identical, continuous looping idle animation, steady camera. Audio: silent or only soft ambient wind with faint distant birdsong, no music, no speech, no dialogue, quiet and unobtrusive.";
 
             // Match aspect ratio to framing:
             // portrait / bodyshot → 9:16 (vertical, matches tall portrait images)
@@ -1458,7 +1458,8 @@ namespace AIPortraits
             json.Append("}],");
             json.Append("\"parameters\":{");
             json.Append("\"sampleCount\":1,");
-            json.Append("\"generateAudio\":false,");   // muted on playback + dropped by the matte — don't pay to generate it
+            // NOTE: veo-3.1-lite rejects "generateAudio" (HTTP 400 "isn't supported by this model").
+            // Audio is steered to be quiet via the prompt instead; do not re-add this parameter.
             json.Append("\"aspectRatio\":\"").Append(aspectRatio).Append("\",");
             json.Append("\"durationSeconds\":4,");
             json.Append("\"resolution\":\"720p\"");
