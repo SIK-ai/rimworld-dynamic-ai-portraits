@@ -481,13 +481,17 @@ namespace AIPortraits
             // flight for this pawn+framing (protects the per-frame auto-trigger path).
             GenerationStatus inFlight;
             if (requestStatus.TryGetValue(pawnKey, out inFlight) && inFlight == GenerationStatus.Generating)
+            {
+                DebugLog.Log("FSM", "image GEN blocked (already Generating) key=" + pawnKey);
                 return;
+            }
 
             PortraitStyle currentStyle = AIPortraitsMod.settings.portraitStyle;
 
             activeRequests[pawnKey] = diskCacheKey;
             requestStatus[pawnKey]  = GenerationStatus.Generating;
             requestError[pawnKey]   = null;
+            DebugLog.Log("FSM", "image GEN start key=" + pawnKey + " -> Generating  backend=" + AIPortraitsMod.settings.backendType + " style=" + currentStyle);
 
             string positivePrompt = PromptCompiler.CompilePositivePrompt(state, AIPortraitsMod.settings, continuityToken);
             Log.Message("[Dynamic AI Portraits] PROMPT for " + pawn.LabelShortCap + " (" + framing + "):\n" + positivePrompt);
@@ -507,6 +511,7 @@ namespace AIPortraits
                     requestStatus[pawnKey] = GenerationStatus.Error;
                     requestError[pawnKey] = err;
                     activeRequests.Remove(pawnKey);
+                    DebugLog.Log("FSM", "image GEN ERROR key=" + pawnKey + " -> Error: " + err);
                 }
                 else if (tex != null && bytes != null)
                 {
@@ -554,6 +559,7 @@ namespace AIPortraits
                     requestStatus.Remove(pawnKey);
                     activeRequests.Remove(pawnKey);
                     requestError.Remove(pawnKey);
+                    DebugLog.Log("FSM", "image GEN done key=" + pawnKey + " -> Idle  saved=" + (savedPath ?? "(cache only)"));
 
                     // Auto-pin the freshly generated portrait as the active one for this pawn.
                     // Without this, a previously-locked portrait would keep taking priority in
@@ -626,6 +632,7 @@ namespace AIPortraits
                     requestStatus[pawnKey] = GenerationStatus.Error;
                     requestError[pawnKey] = err;
                     activeRequests.Remove(pawnKey);
+                    DebugLog.Log("FSM", "image GEN ERROR key=" + pawnKey + " -> Error: " + err);
                 }
                 else if (tex != null && bytes != null)
                 {
@@ -673,6 +680,7 @@ namespace AIPortraits
                     requestStatus.Remove(pawnKey);
                     activeRequests.Remove(pawnKey);
                     requestError.Remove(pawnKey);
+                    DebugLog.Log("FSM", "image GEN done key=" + pawnKey + " -> Idle  saved=" + (savedPath ?? "(cache only)"));
 
                     // Auto-pin the freshly generated portrait as the active one for this pawn.
                     if (!string.IsNullOrEmpty(savedPath) && AIPortraitsMod.settings != null)
@@ -735,10 +743,14 @@ namespace AIPortraits
             // ignore the re-fire (double-click, or manual refresh racing the auto-trigger).
             GenerationStatus inFlight;
             if (videoStatus.TryGetValue(key, out inFlight) && inFlight == GenerationStatus.Generating)
+            {
+                DebugLog.Log("FSM", "video GEN blocked (already Generating) key=" + key);
                 return;
+            }
 
             videoStatus[key] = GenerationStatus.Generating;
             videoError[key] = null;
+            DebugLog.Log("FSM", "video GEN start key=" + key + " -> Generating");
 
             PawnState state = GetCachedPawnState(pawn);
             if (state != null)
@@ -756,12 +768,14 @@ namespace AIPortraits
                     videoStatus[key] = GenerationStatus.Error;
                     videoError[key] = err;
                     Log.Error("[Dynamic AI Portraits] Veo Video Generation Error: " + err);
+                    DebugLog.Log("FSM", "video GEN ERROR key=" + key + " -> Error: " + err);
                 }
                 else
                 {
                     videoStatus.Remove(key);
                     videoError.Remove(key);
                     Log.Message("[Dynamic AI Portraits] Veo Video Generation Succeeded for " + pawn.LabelShortCap);
+                    DebugLog.Log("FSM", "video GEN done key=" + key + " -> Idle  file=" + (string.IsNullOrEmpty(videoPath) ? "?" : System.IO.Path.GetFileName(videoPath)));
                     // Kick off background removal immediately so it runs while the player is
                     // still here, rather than waiting until the clip is next drawn. No-op for
                     // "special" and idempotent (guarded inside EnsureMatted).
@@ -1060,6 +1074,7 @@ namespace AIPortraits
             {
                 activePawnId = pawnId;
                 activeVideoPath = videoPath;
+                DebugLog.Log("PLAY", "start pawn=" + pawnId + " framing=" + framing + " matte=" + VideoMatteService.IsMatted(videoPath) + " file=" + System.IO.Path.GetFileName(videoPath));
 
                 // Render-texture aspect must match the clip so it isn't squashed:
                 // special is 16:9 (landscape); portrait/bodyshot are 9:16 (tall).
@@ -1113,6 +1128,8 @@ namespace AIPortraits
 
         public static void StopPlayback()
         {
+            if (activeSeq != null || activeVideoPlayer != null)
+                DebugLog.Log("PLAY", "stop pawn=" + (activePawnId ?? "-") + " file=" + (activeVideoPath != null ? System.IO.Path.GetFileName(activeVideoPath) : "-"));
             if (activeSeq != null)
             {
                 activeSeq.Dispose();

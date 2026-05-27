@@ -183,6 +183,9 @@ namespace AIPortraits
         public Dictionary<string, string> pawnFraming = new Dictionary<string, string>();
         public Dictionary<string, bool> pawnVideoToggles = new Dictionary<string, bool>();
 
+        // Debug Mode — opt-in structured logging to AIPortraitsCache/DebugLogs (see DebugLog.cs).
+        public bool debugMode = false;
+
         public override void ExposeData()
         {
             base.ExposeData();
@@ -250,6 +253,7 @@ namespace AIPortraits
             Scribe_Values.Look(ref llmApiKey,          "llmApiKey",        "");
             Scribe_Values.Look(ref videoApiKey,        "videoApiKey",      "");
             Scribe_Values.Look(ref useAIBgRemoval,     "useAIBgRemoval",   false);
+            Scribe_Values.Look(ref debugMode,          "debugMode",        false);
             Scribe_Values.Look(ref cfBgRemovalKey,     "cfBgRemovalKey",   "");
             Scribe_Collections.Look(ref activePortraits, "activePortraits", LookMode.Value, LookMode.Value);
             Scribe_Collections.Look(ref pawnFraming, "pawnFraming", LookMode.Value, LookMode.Value);
@@ -635,6 +639,7 @@ namespace AIPortraits
         {
             float viewHeight = 1000f;
             if (useAIBgRemoval) viewHeight += 100f;
+            if (debugMode) viewHeight += 70f;
             if (showAdvanced) viewHeight += 540f;
 
             Rect viewRect = new Rect(0f, 0f, inRect.width - 18f, viewHeight);
@@ -841,6 +846,31 @@ namespace AIPortraits
                     Text.Font = GameFont.Small;
                 }
                 listing.Gap(4f);
+            }
+
+            listing.Gap(8f);
+            listing.GapLine();
+            listing.Gap(8f);
+
+            // ── DEBUG MODE ────────────────────────────────────────────────────────
+            listing.Label("Debug Mode");
+            listing.Gap(4f);
+            listing.CheckboxLabeled("Enable debug logging", ref debugMode,
+                "Write a detailed per-session log (FSM transitions, API calls + fallbacks, overlay-draw and video-playback decisions, plus a settings snapshot) to AIPortraitsCache/DebugLogs. Use it to backtrack a vanished portrait, a failed API call, or the wrong video playing. Off by default.");
+            if (debugMode)
+            {
+                Rect dbgBtn = listing.GetRect(28f);
+                if (Widgets.ButtonText(dbgBtn, "Open Debug Log Folder"))
+                {
+                    try { System.Diagnostics.Process.Start(DebugLog.LogFolder()); }
+                    catch (Exception ex) { Log.Warning("[Dynamic AI Portraits] Could not open debug log folder: " + ex.Message); }
+                }
+                listing.Gap(2f);
+                Text.Font = GameFont.Tiny;
+                GUI.color = new Color(0.55f, 0.55f, 0.55f);
+                Widgets.Label(listing.GetRect(20f), "  Logs flush live (survive crashes); the last 15 sessions are kept.");
+                GUI.color = Color.white;
+                Text.Font = GameFont.Small;
             }
 
             listing.Gap(8f);

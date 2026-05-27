@@ -68,6 +68,7 @@ namespace AIPortraits
                                                  AIPortraitsSettings settings, PawnState state, byte[] portraitBytes, PortraitCallback callback)
         {
             BackendType bt = settings.backendType;
+            DebugLog.Log("API", "image dispatch: backend=" + bt + " framing=" + (state != null ? state.framing : "?"));
 
             // Paid/keyed source with a blank key → go straight to free Pollinations.
             bool needsKey = (bt == BackendType.Cloudflare || bt == BackendType.GoogleImagen ||
@@ -75,6 +76,7 @@ namespace AIPortraits
             if (needsKey && string.IsNullOrEmpty((settings.CurrentApiKey ?? "").Trim()))
             {
                 Log.Message("[Dynamic AI Portraits] No API key for " + bt + " — using free Pollinations.");
+                DebugLog.Log("API", "image: no key for " + bt + " -> fallback Pollinations");
                 CoroutineRunner.Instance.StartCoroutine(GeneratePollinations(positivePrompt, settings, state, callback));
                 return;
             }
@@ -93,6 +95,7 @@ namespace AIPortraits
                         Log.Warning("[Dynamic AI Portraits] " + failed + " failed (" +
                                     (string.IsNullOrEmpty(error) ? "no image returned" : error) +
                                     ") — falling back to free Pollinations.");
+                        DebugLog.Log("API", "image: " + failed + " FAILED (" + (string.IsNullOrEmpty(error) ? "no image" : error) + ") -> fallback Pollinations");
                         CoroutineRunner.Instance.StartCoroutine(GeneratePollinations(positivePrompt, settings, state, original));
                     }
                     else
@@ -1614,6 +1617,7 @@ namespace AIPortraits
                         string videoUri = ParseVeoVideoUri(text);
                         if (!string.IsNullOrEmpty(videoUri))
                         {
+                            DebugLog.Log("API", "veo poll: DONE, video ready after " + attempts + " polls");
                             callback(videoUri, null);
                             yield break;
                         }
@@ -1623,6 +1627,7 @@ namespace AIPortraits
                             string raiReason = ParseVeoRaiReason(text);
                             if (!string.IsNullOrEmpty(raiReason))
                             {
+                                DebugLog.Log("API", "veo poll: SAFETY FILTER -> " + raiReason);
                                 callback(null, "Veo safety filter: " + raiReason);
                             }
                             else
@@ -1636,6 +1641,7 @@ namespace AIPortraits
             }
 
             // Wait interval is 10s (WaitForSeconds(10f)), not 5s — bug fixed during audit
+            DebugLog.Log("API", "veo poll: TIMEOUT after " + (maxAttempts * 10) + "s (" + maxAttempts + " polls)");
             callback(null, "Veo video generation timed out after " + (maxAttempts * 10) + " seconds.");
         }
 

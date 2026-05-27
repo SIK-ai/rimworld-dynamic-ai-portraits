@@ -13,7 +13,8 @@ namespace AIPortraits
         {
             Instance = this;
             settings = GetSettings<AIPortraitsSettings>();
-            
+            DebugLog.Begin("mod init");
+
             // Execute Harmony patches. Guard so a single failing patch can't abort the whole
             // mod constructor — that would unregister settings and present as "no config".
             var harmony = new Harmony("antigravity.aiportraits");

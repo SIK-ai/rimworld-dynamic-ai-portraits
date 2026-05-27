@@ -29,9 +29,15 @@ namespace AIPortraits
 
             if (!shouldDraw)
             {
+                DebugLog.LogOnChange("draw_" + (pawn != null ? pawn.ThingID : "none"), "DRAW",
+                    "hidden (shouldDraw=false): pawnNull=" + (pawn == null) +
+                    " tabOpen=" + (activePane != null && activePane.OpenTabType != null));
                 VideoPlaybackManager.StopPlayback();
                 return;
             }
+
+            try
+            {
 
             GenerationStatus status; string error;
             Texture2D portrait = AIPortraitsManager.GetPortraitTexture(pawn, out status, out error);
@@ -82,6 +88,9 @@ namespace AIPortraits
             // for THIS framing (portrait/bodyshot/special each track their own still-vs-live
             // state), so the live state never carries across when switching shots or pawns.
             bool videoEnabled = AIPortraitsManager.IsVideoMode(pawn);
+            DebugLog.LogOnChange("draw_" + pawn.ThingID, "DRAW",
+                "pawn=" + pawn.LabelShortCap + " framing=" + dispFraming + " live=" + videoEnabled +
+                " portraitNull=" + (portrait == null) + " status=" + status);
 
             if (videoEnabled)
             {
@@ -226,6 +235,15 @@ namespace AIPortraits
 
             DrawVeoButton(veoRect, pawn);
             DrawRefreshButton(refreshRect, pawn);
+
+            }
+            catch (System.Exception ex)
+            {
+                // An unhandled exception in this IMGUI postfix can blank the whole overlay
+                // (and spam the log). Catch it, record it for backtracking, and keep going.
+                DebugLog.Log("DRAW", "EXCEPTION pawn=" + (pawn != null ? pawn.LabelShortCap : "?") + ": " + ex.Message);
+                Log.Warning("[Dynamic AI Portraits] overlay draw exception: " + ex);
+            }
         }
 
         private static void DrawFramingButton(Rect rect, string text, string framingName, string currentFraming, Pawn pawn, string tooltip)
