@@ -15,7 +15,7 @@ Generates AI portraits and looping animated previews of your colonists that refl
 - **Refresh button on the overlay** — Regenerate any portrait in one click.
 - **Pawn Gallery** — Browse saved portraits and video loops, set active states, copy prompts, and delete saved files.
 - **Prompt Preview tab** — Inspect exactly what is sent to the image generation and LLM APIs.
-- **Perceptual YCbCr background removal** — CPU-based offline background remover that preserves skin tones, faces, and vivid outfits.
+- **Local u2netp ONNX background removal** — offline neural cutout (u2netp via ONNX Runtime) that isolates the character on `portrait` / `bodyshot` framings; optional cloud **Cloudflare Bria RMBG 1.4** for flawless matting, with a legacy YCbCr flood-fill as the last-resort fallback. The `special` framing keeps its scenic background.
 - **Organized Save Folders** — Saved files are grouped into subfolders keyed by the pawn's unique ID (`Documents/RimWorld Portraits/<PawnID>_<PawnName>/`) to prevent collisions.
 - **No auto-regeneration** — Portraits remain pinned to their current state until you click the refresh button.
 
@@ -38,6 +38,8 @@ Generates AI portraits and looping animated previews of your colonists that refl
 ## Backend / Provider Selection
 
 The mod's **API Settings** tab allows configuring your preferred provider and model parameters.
+
+> **Automatic free fallback:** if your chosen paid provider has no API key set — or fails mid-request — the mod silently retries on free **Pollinations**, so you always end up with a portrait.
 
 ### 🆓 Pollinations — Free, no signup
 - Truly free, no account or key required.
@@ -134,7 +136,7 @@ Switching framing triggers a new generation under a separate cache key, so each 
 
 ## Optional: Gemini Flash Prompt Engineering
 
-In API Settings → **Prompt Generation** section, switch from `No — Compiled Template` to `Gemini Flash Lite`. The mod will send pawn metadata to Gemini, which rewrites it into a creative, optimized image prompt before sending to your image backend.
+In API Settings → **Prompt Generation** section, switch from `No — Compiled Template` to `Gemini Flash Lite` (or a `Gemma 4` model — **26B** or **31B**). The mod will send pawn metadata to the model, which rewrites it into a creative, optimized image prompt before sending to your image backend.
 
 - Free Google AI Studio key works (same key as Imagen if you're already using it)
 - Costs ~$0.0001 per call on Gemini Flash Lite (essentially free)
@@ -149,7 +151,7 @@ Requirements: Windows, .NET Framework 4.x (`csc.exe` at the standard path), RimW
 
 To compile the mod locally without polluting your Git status with machine-specific file paths:
 
-1. Create a local configuration file named [build_local.bat](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/build_local.bat) in the repository root (this file is already ignored by `.gitignore`).
+1. Create a local configuration file named [build_local.bat](build_local.bat) in the repository root (this file is already ignored by `.gitignore`).
 2. Add your local game and dependency paths to `build_local.bat`. For example:
    ```bat
    @echo off
@@ -157,7 +159,7 @@ To compile the mod locally without polluting your Git status with machine-specif
    set "HARMONY_PATH=C:\Program Files (x86)\Steam\steamapps\common\RimWorld\Mods\Harmony\Current\Assemblies\0Harmony.dll"
    set "RIMWORLD_MODS_DIR=C:\Program Files (x86)\Steam\steamapps\common\RimWorld\Mods"
    ```
-3. Run [build.bat](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/build.bat). The build script will automatically detect and load your settings from `build_local.bat`, compile `AIPortraits.dll`, output it to `1.6\Assemblies/` and `Assemblies/`, and optionally deploy it straight to your game's `Mods` folder if `RIMWORLD_MODS_DIR` is set.
+3. Run [build.bat](build.bat). The build script will automatically detect and load your settings from `build_local.bat`, compile `AIPortraits.dll`, output it to `1.6\Assemblies/` and `Assemblies/`, and optionally deploy it straight to your game's `Mods` folder if `RIMWORLD_MODS_DIR` is set.
 
 For a deeper dive into the mod's internal systems, codebase structure, and algorithms, see the [Developer Architecture Guide](DEVELOPER.md).
 
@@ -175,4 +177,4 @@ For a deeper dive into the mod's internal systems, codebase structure, and algor
 
 ## License
 
-MIT — see [LICENSE](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/LICENSE). Free to use, modify, and redistribute with attribution.
+MIT — see [LICENSE](LICENSE). Free to use, modify, and redistribute with attribution.
