@@ -1023,13 +1023,15 @@ namespace AIPortraits
             return activeVideoPlayer != null && activeVideoPlayer.isPlaying;
         }
 
-        public static RenderTexture GetActiveTexture()
+        public static Texture GetActiveTexture()
         {
-            if (activeSeq != null && activeRenderTexture != null)
+            if (activeSeq != null)
             {
-                Texture2D f = activeSeq.CurrentFrame();
-                if (f != null) { Graphics.Blit(f, activeRenderTexture); return activeRenderTexture; }
-                return null;
+                // Return the matted frame directly (RGBA, alpha intact). Do NOT route it
+                // through Graphics.Blit -> RenderTexture: the default blit forces alpha to 1,
+                // which turned the transparent background opaque (it showed the clip's flat
+                // white background). GUI.DrawTexture alpha-blends a Texture2D directly.
+                return activeSeq.CurrentFrame();
             }
             if (activeVideoPlayer != null && activeVideoPlayer.isPlaying)
             {
@@ -1040,10 +1042,16 @@ namespace AIPortraits
 
         public static void StartPlayback(string pawnId, string videoPath, string framing)
         {
-            if (activeVideoPlayer != null && activePawnId == pawnId && activeVideoPath == videoPath)
+            // Already showing the correct thing for this clip? Don't tear down and rebuild
+            // every frame. The "correct thing" is the matted PNG sequence once it exists,
+            // otherwise the raw mp4. (Rebuilding a MattedSequencePlayer every frame froze it
+            // on frame 0 and thrashed the disk, because the matted path has no VideoPlayer.)
+            if (activePawnId == pawnId && activeVideoPath == videoPath)
             {
-                // Already playing this video
-                return;
+                bool matteReady = VideoMatteService.IsMatted(videoPath);
+                if (matteReady && activeSeq != null) return;            // correctly playing the matte
+                if (!matteReady && activeVideoPlayer != null) return;   // correctly playing the raw mp4
+                // otherwise fall through and (re)start with the right source (e.g. raw -> matte)
             }
 
             StopPlayback();
@@ -1065,8 +1073,8 @@ namespace AIPortraits
                     activeSeq = new MattedSequencePlayer(videoPath);
                     if (activeSeq.Valid)
                     {
-                        activeRenderTexture = new RenderTexture(rtW, rtH, 0, RenderTextureFormat.ARGB32);
-                        activeRenderTexture.Create();
+                        // Matted frames are drawn directly as Texture2D (alpha preserved) —
+                        // no RenderTexture needed. See GetActiveTexture.
                         return;
                     }
                     activeSeq = null;   // invalid manifest -> fall back to original mp4
@@ -1076,6 +1084,14 @@ namespace AIPortraits
                 UnityEngine.Object.DontDestroyOnLoad(activeVideoGo);
 
                 activeVideoPlayer = activeVideoGo.AddComponent<VideoPlayer>();
+                activeVideoPlayer.playOnAwake = false;
+
+                // Mute BEFORE assigning the URL / preparing — setting audioOutputMode after
+                // the source is configured can be too late to suppress the track. Disable
+                // audio output entirely and drop all controlled audio tracks.
+                activeVideoPlayer.audioOutputMode = VideoAudioOutputMode.None;
+                activeVideoPlayer.controlledAudioTrackCount = 0;
+
                 activeVideoPlayer.isLooping = true;
                 activeVideoPlayer.renderMode = VideoRenderMode.RenderTexture;
 
@@ -1085,9 +1101,6 @@ namespace AIPortraits
 
                 activeVideoPlayer.targetTexture = activeRenderTexture;
                 activeVideoPlayer.url = videoPath;
-
-                // Mute audio to avoid unwanted noise from the pawn video
-                activeVideoPlayer.audioOutputMode = VideoAudioOutputMode.None;
 
                 activeVideoPlayer.Play();
             }

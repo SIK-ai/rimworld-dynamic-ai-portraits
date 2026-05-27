@@ -95,7 +95,7 @@ namespace AIPortraits
                     // matte finishes, StartPlayback falls back to the original mp4.
                     VideoMatteService.EnsureMatted(videoPath, dispFraming);
                     VideoPlaybackManager.StartPlayback(pawn.ThingID, videoPath, dispFraming);
-                    RenderTexture videoTex = VideoPlaybackManager.GetActiveTexture();
+                    Texture videoTex = VideoPlaybackManager.GetActiveTexture();
                     if (videoTex != null)
                     {
                         GUI.DrawTexture(portraitRect, videoTex, ScaleMode.ScaleAndCrop);
