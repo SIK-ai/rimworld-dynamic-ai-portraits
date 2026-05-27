@@ -958,14 +958,23 @@ namespace AIPortraits
         private static RenderTexture activeRenderTexture;
         private static string activePawnId;
         private static string activeVideoPath;
+        private static MattedSequencePlayer activeSeq;   // non-null when playing a bg-removed PNG sequence
 
         public static bool IsPlaying(string pawnId)
         {
-            return activeVideoPlayer != null && activePawnId == pawnId && activeVideoPlayer.isPlaying;
+            if (activePawnId != pawnId) return false;
+            if (activeSeq != null) return true;
+            return activeVideoPlayer != null && activeVideoPlayer.isPlaying;
         }
 
         public static RenderTexture GetActiveTexture()
         {
+            if (activeSeq != null && activeRenderTexture != null)
+            {
+                Texture2D f = activeSeq.CurrentFrame();
+                if (f != null) { Graphics.Blit(f, activeRenderTexture); return activeRenderTexture; }
+                return null;
+            }
             if (activeVideoPlayer != null && activeVideoPlayer.isPlaying)
             {
                 return activeRenderTexture;
@@ -987,6 +996,20 @@ namespace AIPortraits
             {
                 activePawnId = pawnId;
                 activeVideoPath = videoPath;
+
+                // If a background-removed sequence exists for this clip (portrait/bodyshot),
+                // play that PNG sequence with alpha instead of the original mp4.
+                if (VideoMatteService.IsMatted(videoPath))
+                {
+                    activeSeq = new MattedSequencePlayer(videoPath);
+                    if (activeSeq.Valid)
+                    {
+                        activeRenderTexture = new RenderTexture(512, 910, 0, RenderTextureFormat.ARGB32);
+                        activeRenderTexture.Create();
+                        return;
+                    }
+                    activeSeq = null;   // invalid manifest -> fall back to original mp4
+                }
 
                 activeVideoGo = new GameObject("AIPortraits_VideoPlayer_" + pawnId);
                 UnityEngine.Object.DontDestroyOnLoad(activeVideoGo);
@@ -1016,6 +1039,11 @@ namespace AIPortraits
 
         public static void StopPlayback()
         {
+            if (activeSeq != null)
+            {
+                activeSeq.Dispose();
+                activeSeq = null;
+            }
             if (activeVideoPlayer != null)
             {
                 activeVideoPlayer.Stop();
