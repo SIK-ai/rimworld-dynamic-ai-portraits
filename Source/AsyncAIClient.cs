@@ -978,13 +978,13 @@ namespace AIPortraits
             return null;
         }
 
-        private static IEnumerator GenerateCloudflareBackgroundRemoval(byte[] imgBytes, string promptUsed, string backendName, PawnState state, AIPortraitsSettings settings, PortraitCallback callback)
+        private static IEnumerator GenerateCloudflareBackgroundRemoval(byte[] imgBytes, string promptUsed, string backendName, PawnState state, AIPortraitsSettings settings, bool shouldRemoveBg, PortraitCallback callback)
         {
             string key = GetCFBgRemovalKey(settings);
             if (string.IsNullOrEmpty(key) || !key.Contains(":"))
             {
                 Log.Warning("[Dynamic AI Portraits] AI Background Removal enabled but no valid Cloudflare key found (format accountId:token). Falling back to local flood-fill.");
-                DeliverImageLocal(imgBytes, promptUsed, backendName, state, callback);
+                DeliverImageLocal(imgBytes, promptUsed, backendName, state, shouldRemoveBg, callback);
                 yield break;
             }
 
@@ -1012,7 +1012,7 @@ namespace AIPortraits
                 if (!IsSuccess(request))
                 {
                     Log.Warning(SanitizeLog("[Dynamic AI Portraits] Cloudflare BG Removal failed: " + request.error + " | " + Truncate(request.downloadHandler.text, 200) + ". Falling back to local flood-fill.", settings));
-                    DeliverImageLocal(imgBytes, promptUsed, backendName, state, callback);
+                    DeliverImageLocal(imgBytes, promptUsed, backendName, state, shouldRemoveBg, callback);
                     yield break;
                 }
 
@@ -1020,7 +1020,7 @@ namespace AIPortraits
                 if (transparentBytes == null || transparentBytes.Length == 0)
                 {
                     Log.Warning("[Dynamic AI Portraits] Cloudflare BG Removal returned empty bytes. Falling back to local.");
-                    DeliverImageLocal(imgBytes, promptUsed, backendName, state, callback);
+                    DeliverImageLocal(imgBytes, promptUsed, backendName, state, shouldRemoveBg, callback);
                     yield break;
                 }
 
@@ -1029,7 +1029,7 @@ namespace AIPortraits
                 {
                     UnityEngine.Object.Destroy(tex);
                     Log.Warning("[Dynamic AI Portraits] Cloudflare BG Removal returned invalid image data. Falling back to local.");
-                    DeliverImageLocal(imgBytes, promptUsed, backendName, state, callback);
+                    DeliverImageLocal(imgBytes, promptUsed, backendName, state, shouldRemoveBg, callback);
                     yield break;
                 }
 
@@ -1045,17 +1045,40 @@ namespace AIPortraits
                 return;
             }
 
-            if (settings.useAIBgRemoval && state != null && (state.framing == "portrait" || state.framing == "bodyshot"))
+            bool shouldRemoveBg = false;
+            if (state != null)
             {
-                CoroutineRunner.Instance.StartCoroutine(GenerateCloudflareBackgroundRemoval(imgBytes, promptUsed, backendName, state, settings, callback));
+                if (state.framing == "portrait" || state.framing == "bodyshot")
+                {
+                    shouldRemoveBg = true;
+                }
+                else if (state.framing == "special")
+                {
+                    // Check if the generated special scene has a mono-colored/flat background
+                    Texture2D temp = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                    if (ImageConversion.LoadImage(temp, imgBytes))
+                    {
+                        if (BackgroundRemover.IsMonoBackground(temp))
+                        {
+                            shouldRemoveBg = true;
+                            Log.Message("[Dynamic AI Portraits] Detected mono-colored background in special photoshoot. Enabling background removal.");
+                        }
+                    }
+                    UnityEngine.Object.Destroy(temp);
+                }
+            }
+
+            if (settings.useAIBgRemoval && shouldRemoveBg)
+            {
+                CoroutineRunner.Instance.StartCoroutine(GenerateCloudflareBackgroundRemoval(imgBytes, promptUsed, backendName, state, settings, shouldRemoveBg, callback));
             }
             else
             {
-                DeliverImageLocal(imgBytes, promptUsed, backendName, state, callback);
+                DeliverImageLocal(imgBytes, promptUsed, backendName, state, shouldRemoveBg, callback);
             }
         }
 
-        private static void DeliverImageLocal(byte[] imgBytes, string promptUsed, string backendName, PawnState state, PortraitCallback callback)
+        private static void DeliverImageLocal(byte[] imgBytes, string promptUsed, string backendName, PawnState state, bool shouldRemoveBg, PortraitCallback callback)
         {
             Texture2D raw = new Texture2D(2, 2, TextureFormat.RGBA32, false);
             if (!ImageConversion.LoadImage(raw, imgBytes))
@@ -1069,11 +1092,10 @@ namespace AIPortraits
             byte[] finalBytes;
             try
             {
-                if (state != null && (state.framing == "portrait" || state.framing == "bodyshot"))
+                if (shouldRemoveBg)
                 {
                     // u2netp ONNX remover (local, offline). Internally falls back to the legacy
-                    // YCbCr remover if the native runtime/model can't load. "special" framing is
-                    // intentionally excluded by this condition, so its scenic background is kept.
+                    // YCbCr remover if the native runtime/model can't load.
                     processed = U2NetRemover.Process(raw);
                     if (processed != raw)
                     {

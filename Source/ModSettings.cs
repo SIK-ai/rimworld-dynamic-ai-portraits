@@ -151,7 +151,7 @@ namespace AIPortraits
 
         // User-appended style suffix (overrides nothing, just appends)
         public string baseStylePrompt = "";
-        public string manhwaStylePrompt = "flat 2D webtoon manhwa drawing, hand-drawn digital illustration, bold clean inked outlines, flat cel-shaded color fills, hard-edged anime shadows, bright saturated CMYK print-style colors, expressive stylized anime eyes, glossy stylized hair, crisp clean line art, masterpiece webtoon key visual, strictly non-photorealistic 2D art, no realistic skin texture, no camera lens blur, no depth of field";
+        public string manhwaStylePrompt = "flat 2D webtoon manhwa drawing, hand-drawn digital illustration, bold clean inked outlines, flat cel-shaded color fills, hard-edged anime shadows, bright saturated CMYK print-style colors, expressive stylized anime eyes, glossy stylized hair, crisp clean line art, masterpiece webtoon key visual, strictly 2D flat art, smooth flat skin rendering, no lens blur, no depth of field";
         public string cartoonStylePrompt = "Rick and Morty Adult Swim cartoon character, Justin Roiland animation style, thick consistent black outlines, flat 2D color fills, no gradients, no painterly shading, bulging round cartoon eyes with tiny black dot pupils, exaggerated wonky proportions, oversized head, hand-drawn animation cel look, bright primary color palette";
         public string pixelStylePrompt = "high-quality 16-bit retro JRPG character sprite, Tactics Ogre and Final Fantasy Tactics style, clean pixel-art grid, zero anti-aliasing, sharp deliberate pixel edges, thin consistent dark outlines, clean flat cel-shading, limited color palette, anime-style cute facial features, detailed hair";
         public string baseNegativePrompt = "generic fantasy art, cartoon style, bright cheerful lighting, flat lighting, blurry textures, generic features, messy brushstrokes, standard clean weapon, generic clothing, missing face tattoos, missing horns, missing cybernetic eyes, missing scars, photorealistic photograph, 3d render, chibi, flat shading, low quality, watermark, extra limbs, deformed face, bad anatomy, multiple people, text, signature, anti-aliased pixels, jagged irregular lines, muddied unclear character design, illegible text, generic UI, inconsistency between sprite and portrait";
@@ -232,7 +232,7 @@ namespace AIPortraits
             }
             Scribe_Values.Look(ref portraitStyle, "portraitStyle", PortraitStyle.Realistic_Korean);
             Scribe_Values.Look(ref baseStylePrompt, "baseStylePrompt", "");
-            Scribe_Values.Look(ref manhwaStylePrompt, "manhwaStylePrompt", "flat 2D webtoon manhwa drawing, hand-drawn digital illustration, bold clean inked outlines, flat cel-shaded color fills, hard-edged anime shadows, bright saturated CMYK print-style colors, expressive stylized anime eyes, glossy stylized hair, crisp clean line art, masterpiece webtoon key visual, strictly non-photorealistic 2D art, no realistic skin texture, no camera lens blur, no depth of field");
+            Scribe_Values.Look(ref manhwaStylePrompt, "manhwaStylePrompt", "flat 2D webtoon manhwa drawing, hand-drawn digital illustration, bold clean inked outlines, flat cel-shaded color fills, hard-edged anime shadows, bright saturated CMYK print-style colors, expressive stylized anime eyes, glossy stylized hair, crisp clean line art, masterpiece webtoon key visual, strictly 2D flat art, smooth flat skin rendering, no lens blur, no depth of field");
             Scribe_Values.Look(ref cartoonStylePrompt, "cartoonStylePrompt", "Rick and Morty Adult Swim cartoon character, Justin Roiland animation style, thick consistent black outlines, flat 2D color fills, no gradients, no painterly shading, bulging round cartoon eyes with tiny black dot pupils, exaggerated wonky proportions, oversized head, hand-drawn animation cel look, bright primary color palette");
             Scribe_Values.Look(ref pixelStylePrompt, "pixelStylePrompt", "high-quality 16-bit retro JRPG character sprite, Tactics Ogre and Final Fantasy Tactics style, clean pixel-art grid, zero anti-aliasing, sharp deliberate pixel edges, thin consistent dark outlines, clean flat cel-shading, limited color palette, anime-style cute facial features, detailed hair");
             Scribe_Values.Look(ref baseNegativePrompt, "baseNegativePrompt", "generic fantasy art, cartoon style, bright cheerful lighting, flat lighting, blurry textures, generic features, messy brushstrokes, standard clean weapon, generic clothing, missing face tattoos, missing horns, missing cybernetic eyes, missing scars, photorealistic photograph, 3d render, chibi, flat shading, low quality, watermark, extra limbs, deformed face, bad anatomy, multiple people, text, signature, anti-aliased pixels, jagged irregular lines, muddied unclear character design, illegible text, generic UI, inconsistency between sprite and portrait");
@@ -261,6 +261,14 @@ namespace AIPortraits
                 pawnFraming = new Dictionary<string, string>();
             if (pawnVideoToggles == null)
                 pawnVideoToggles = new Dictionary<string, bool>();
+
+            if (Scribe.mode == LoadSaveMode.PostLoadInit)
+            {
+                if (manhwaStylePrompt != null && (manhwaStylePrompt.Contains("no realistic skin texture") || manhwaStylePrompt.Contains("non-photorealistic")))
+                {
+                    manhwaStylePrompt = "flat 2D webtoon manhwa drawing, hand-drawn digital illustration, bold clean inked outlines, flat cel-shaded color fills, hard-edged anime shadows, bright saturated CMYK print-style colors, expressive stylized anime eyes, glossy stylized hair, crisp clean line art, masterpiece webtoon key visual, strictly 2D flat art, smooth flat skin rendering, no lens blur, no depth of field";
+                }
+            }
         }
 
         // UI states (not serialized)
@@ -851,7 +859,7 @@ namespace AIPortraits
                 if (listing.ButtonText("Reset to Default Prompts & Settings"))
                 {
                     baseStylePrompt = "";
-                    manhwaStylePrompt = "flat 2D webtoon manhwa drawing, hand-drawn digital illustration, bold clean inked outlines, flat cel-shaded color fills, hard-edged anime shadows, bright saturated CMYK print-style colors, expressive stylized anime eyes, glossy stylized hair, crisp clean line art, masterpiece webtoon key visual, strictly non-photorealistic 2D art, no realistic skin texture, no camera lens blur, no depth of field";
+                    manhwaStylePrompt = "flat 2D webtoon manhwa drawing, hand-drawn digital illustration, bold clean inked outlines, flat cel-shaded color fills, hard-edged anime shadows, bright saturated CMYK print-style colors, expressive stylized anime eyes, glossy stylized hair, crisp clean line art, masterpiece webtoon key visual, strictly 2D flat art, smooth flat skin rendering, no lens blur, no depth of field";
                     cartoonStylePrompt = "Rick and Morty Adult Swim cartoon character, Justin Roiland animation style, thick consistent black outlines, flat 2D color fills, no gradients, no painterly shading, bulging round cartoon eyes with tiny black dot pupils, exaggerated wonky proportions, oversized head, hand-drawn animation cel look, bright primary color palette";
                     pixelStylePrompt = "high-quality 16-bit retro JRPG character sprite, Tactics Ogre and Final Fantasy Tactics style, clean pixel-art grid, zero anti-aliasing, sharp deliberate pixel edges, thin consistent dark outlines, clean flat cel-shading, limited color palette, anime-style cute facial features, detailed hair";
                     baseNegativePrompt = "generic fantasy art, cartoon style, bright cheerful lighting, flat lighting, blurry textures, generic features, messy brushstrokes, standard clean weapon, generic clothing, missing face tattoos, missing horns, missing cybernetic eyes, missing scars, photorealistic photograph, 3d render, chibi, flat shading, low quality, watermark, extra limbs, deformed face, bad anatomy, multiple people, text, signature, anti-aliased pixels, jagged irregular lines, muddied unclear character design, illegible text, generic UI, inconsistency between sprite and portrait";

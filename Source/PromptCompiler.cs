@@ -113,7 +113,7 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             else if (state.framing == "special") subjectType = "character dynamic scene illustration";
 
             p.Append(settings.manhwaStylePrompt + ", " + subjectType + ", " + frameText + ", " + bgText + ", ");
-            p.Append("flat 2D hand-drawn illustration, bold clean ink linework, flat cel-shaded color fills, hard-edged anime shadows, bright rim highlights, strictly non-photorealistic, no camera lens, no depth of field blur, ");
+            p.Append("flat 2D hand-drawn illustration, bold clean ink linework, flat cel-shaded color fills, hard-edged anime shadows, bright rim highlights, strictly flat 2D art style, no lens blur, no depth of field, ");
             if (!string.IsNullOrEmpty(continuityToken))
                 p.Append(continuityToken + ", ");
         }
@@ -127,7 +127,7 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             else if (state.framing == "special") subjectType = "character dynamic scene illustration";
 
             p.Append(settings.cartoonStylePrompt + ", " + subjectType + ", " + frameText + ", " + bgText + ", ");
-            p.Append("flat 2D cartoon illustration, thick bold black outlines, flat color fills, minimal flat cel shadows, strictly non-photorealistic, no camera lens, no depth of field blur, ");
+            p.Append("flat 2D cartoon illustration, thick bold black outlines, flat color fills, minimal flat cel shadows, strictly flat 2D art style, no lens blur, no depth of field, ");
             if (!string.IsNullOrEmpty(continuityToken))
                 p.Append(continuityToken + ", ");
         }
@@ -141,7 +141,7 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             else if (state.framing == "special") subjectType = "character dynamic scene illustration";
 
             p.Append(settings.pixelStylePrompt + ", " + subjectType + ", " + frameText + ", " + bgText + ", ");
-            p.Append("crisp pixel-art grid, sharp pixel alignment, simple flat JRPG cel-shaded lighting, limited color palette, strictly non-photorealistic, ");
+            p.Append("crisp pixel-art grid, sharp pixel alignment, simple flat JRPG cel-shaded lighting, limited color palette, strictly flat 2D art style, ");
             if (!string.IsNullOrEmpty(continuityToken))
                 p.Append(continuityToken + ", ");
         }
@@ -1136,7 +1136,7 @@ Content: Render the character's appearance, clean expression, and gear exactly a
                                 (settings != null ? settings.pixelStylePrompt : "sharp deliberate pixel grid, thin dark outlines, limited color palette");
                     break;
                 default:
-                    styleDesc = "semi-realistic anime RPG character portrait, professional digital illustration";
+                    styleDesc = "flat 2D anime RPG character portrait, professional digital illustration, bold clean outlines, flat cel-shading";
                     break;
             }
 
@@ -1187,7 +1187,7 @@ Content: Render the character's appearance, clean expression, and gear exactly a
                 "9. STRICT SAFETY: Do NOT use any sexually suggestive, nude, naked, topless, bare-chested, or NSFW-sensitive keywords. The output must be strictly PG-rated and safe for work. Ensure the character is always described as wearing clothing (e.g., if no specific apparel is listed, specify simple modest clothes like a plain tunic or fabric wraps).\n" +
                 "10. Keep total output under 350 words.\n" +
                 "11. Output ONLY the prompt — no explanations, no headers, no quotes.\n" +
-                "12. NON-PHOTOREALISTIC (MANDATORY): The result is a 2D drawing/illustration. Your prompt must NOT contain any of these words: photo, photograph, photorealistic, hyperrealistic, realistic skin, lens, focal length, mm, depth of field, bokeh, studio lighting, cinematic, volumetric, 3d render, octane. Describe everything as drawn, inked, cel-shaded, flat-colored illustration art.";
+                "12. 2D ARTWORK ONLY (MANDATORY): The result is a flat 2D graphic drawing/illustration. Your prompt must NOT contain any photography, 3D, or realism terms. Do not use words like photo, photograph, photorealistic, hyperrealistic, realistic, lens, focal length, mm, depth of field, bokeh, studio lighting, cinematic, volumetric, 3d render, octane. Describe everything as drawn, inked, cel-shaded, flat-colored illustration art.";
         }
     }
 }

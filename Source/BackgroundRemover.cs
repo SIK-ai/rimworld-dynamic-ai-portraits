@@ -401,5 +401,116 @@ namespace AIPortraits
             return false;
         }
 
+        public static bool IsMonoBackground(Texture2D source)
+        {
+            if (source == null) return false;
+
+            int w = source.width;
+            int h = source.height;
+            Color32[] pixels = source.GetPixels32();
+
+            List<Color32> samples = new List<Color32>();
+
+            // Sample edges to analyze background uniformity
+            // Top border
+            int yTop = h - 2;
+            if (yTop >= 0)
+            {
+                for (int x = 0; x < w; x += 4)
+                {
+                    samples.Add(pixels[yTop * w + x]);
+                }
+            }
+
+            // Left border (upper 60%)
+            int xLeft = 1;
+            for (int y = h * 4 / 10; y < h - 2; y += 4)
+            {
+                samples.Add(pixels[y * w + xLeft]);
+            }
+
+            // Right border (upper 60%)
+            int xRight = w - 2;
+            if (xRight >= 0)
+            {
+                for (int y = h * 4 / 10; y < h - 2; y += 4)
+                {
+                    samples.Add(pixels[y * w + xRight]);
+                }
+            }
+
+            if (samples.Count == 0) return false;
+
+            // 1. Bin colors to find the dominant color bucket (8 bins per channel -> 512 total)
+            int[] buckets = new int[512];
+            int validCount = 0;
+            foreach (var p in samples)
+            {
+                if (p.a < AlreadyTransparentAlpha) continue;
+                int rBin = p.r / 32;
+                int gBin = p.g / 32;
+                int bBin = p.b / 32;
+                int binIdx = rBin * 64 + gBin * 8 + bBin;
+                buckets[binIdx]++;
+                validCount++;
+            }
+
+            // If the image is already mostly transparent, we don't need background removal
+            if (validCount < samples.Count * 0.2f)
+            {
+                return false;
+            }
+
+            // Find the most frequent bucket
+            int maxCount = 0;
+            int maxIdx = -1;
+            for (int i = 0; i < buckets.Length; i++)
+            {
+                if (buckets[i] > maxCount)
+                {
+                    maxCount = buckets[i];
+                    maxIdx = i;
+                }
+            }
+
+            if (maxIdx == -1 || maxCount == 0) return false;
+
+            // 2. Compute average color of pixels in that bucket
+            long sumR = 0, sumG = 0, sumB = 0;
+            int matchCount = 0;
+            foreach (var p in samples)
+            {
+                if (p.a < AlreadyTransparentAlpha) continue;
+                int binIdx = (p.r / 32) * 64 + (p.g / 32) * 8 + (p.b / 32);
+                if (binIdx == maxIdx)
+                {
+                    sumR += p.r;
+                    sumG += p.g;
+                    sumB += p.b;
+                    matchCount++;
+                }
+            }
+
+            if (matchCount == 0) return false;
+
+            byte domR = (byte)(sumR / matchCount);
+            byte domG = (byte)(sumG / matchCount);
+            byte domB = (byte)(sumB / matchCount);
+
+            // 3. Count how many of the valid samples are close to this dominant color (L1 distance < 45)
+            int closeCount = 0;
+            foreach (var p in samples)
+            {
+                if (p.a < AlreadyTransparentAlpha) continue;
+                int diff = System.Math.Abs(p.r - domR) + System.Math.Abs(p.g - domG) + System.Math.Abs(p.b - domB);
+                if (diff < 45)
+                {
+                    closeCount++;
+                }
+            }
+
+            float ratio = (float)closeCount / validCount;
+            return ratio > 0.50f; // Threshold verified via Python batch testing
+        }
     }
 }
