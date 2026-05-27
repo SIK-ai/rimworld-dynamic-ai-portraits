@@ -166,11 +166,13 @@ namespace AIPortraits
 
             // LLM key — separate field, may differ from any provider's key
             if (!string.IsNullOrEmpty(settings.llmApiKey)) s = s.Replace(settings.llmApiKey, "[REDACTED]");
+            if (!string.IsNullOrEmpty(settings.videoApiKey)) s = s.Replace(settings.videoApiKey, "[REDACTED]");
+            if (!string.IsNullOrEmpty(settings.cfBgRemovalKey)) s = s.Replace(settings.cfBgRemovalKey, "[REDACTED]");
 
             // Cloudflare uses account_id:token format — if cfApiKey is set we already redacted
             // it above, but the token portion alone might still appear in URL paths. Defensive
             // extra pass on each key after splitting on a colon (catches token-only leakage).
-            string[] possibleCombined = { settings.cfApiKey };
+            string[] possibleCombined = { settings.cfApiKey, settings.cfBgRemovalKey };
             foreach (string combo in possibleCombined)
             {
                 if (string.IsNullOrEmpty(combo)) continue;
