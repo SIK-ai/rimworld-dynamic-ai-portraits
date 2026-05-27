@@ -694,7 +694,9 @@ namespace AIPortraits
             {
                 state.framing = framing;
             }
-            string apiKey = AIPortraitsMod.settings.giApiKey;
+            string apiKey = !string.IsNullOrEmpty(AIPortraitsMod.settings.videoApiKey)
+                ? AIPortraitsMod.settings.videoApiKey
+                : AIPortraitsMod.settings.giApiKey;
 
             AsyncAIClient.QueueVideoGeneration(pawn, state, initImageBytes, apiKey, delegate(string videoPath, string err)
             {

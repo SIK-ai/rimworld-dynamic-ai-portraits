@@ -36,8 +36,9 @@ namespace AIPortraits
 
         public static void QueueGeneration(PawnState state, AIPortraitsSettings settings, string continuityToken, byte[] portraitBytes, PortraitCallback callback)
         {
-            // If Gemini Flash prompt generation is enabled and a key is available, run that path.
-            if (settings.useLLMPrompt && !string.IsNullOrEmpty(GetLLMApiKey(settings)))
+            // If a prompt-generation key is set, rewrite via the LLM; otherwise fall back to
+            // the in-house compiled template (no separate on/off toggle — the key is the switch).
+            if (!string.IsNullOrEmpty(GetLLMApiKey(settings)))
             {
                 CoroutineRunner.Instance.StartCoroutine(GenerateLLMThenDispatch(state, settings, continuityToken, portraitBytes, callback));
                 return;
@@ -207,6 +208,10 @@ namespace AIPortraits
             {
                 modelName = "gemma-4-26b-a4b-it";
             }
+            else if (settings.llmModelType == LLMModelType.Gemma31B)
+            {
+                modelName = "gemma-4-31b-it";
+            }
             string llmUrl = "https://generativelanguage.googleapis.com/v1beta/models/" + modelName + ":generateContent?key=" + llmKey;
 
             StringBuilder json = new StringBuilder();
@@ -231,7 +236,7 @@ namespace AIPortraits
             byte[] jsonBytes = Encoding.UTF8.GetBytes(json.ToString());
             string generatedPrompt = null;
 
-            string modelLogName = (settings.llmModelType == LLMModelType.GeminiFlashLite) ? "Gemini Flash" : "Gemma 4 26B";
+            string modelLogName = AIPortraitsSettings.LLMModelLabel(settings.llmModelType);
 
             using (UnityWebRequest request = new UnityWebRequest(llmUrl, "POST"))
             {

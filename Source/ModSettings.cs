@@ -30,7 +30,8 @@ namespace AIPortraits
     public enum LLMModelType
     {
         GeminiFlashLite,
-        Gemma26B
+        Gemma26B,
+        Gemma31B
     }
 
     public class AIPortraitsSettings : ModSettings
@@ -170,6 +171,7 @@ namespace AIPortraits
         // LLM-assisted prompt generation (Gemini Flash)
         public bool   useLLMPrompt = false;
         public string llmApiKey    = "";
+        public string videoApiKey  = "";
 
         // AI Background Removal (Cloudflare Bria-RMBG-1.4)
         public bool useAIBgRemoval = false;
@@ -246,6 +248,7 @@ namespace AIPortraits
             Scribe_Values.Look(ref useLLMPrompt,       "useLLMPrompt",     false);
             Scribe_Values.Look(ref llmModelType,       "llmModelType",     LLMModelType.GeminiFlashLite);
             Scribe_Values.Look(ref llmApiKey,          "llmApiKey",        "");
+            Scribe_Values.Look(ref videoApiKey,        "videoApiKey",      "");
             Scribe_Values.Look(ref useAIBgRemoval,     "useAIBgRemoval",   false);
             Scribe_Values.Look(ref cfBgRemovalKey,     "cfBgRemovalKey",   "");
             Scribe_Collections.Look(ref activePortraits, "activePortraits", LookMode.Value, LookMode.Value);
@@ -466,6 +469,17 @@ namespace AIPortraits
         // a new switch case in each of these helpers + a coroutine in AsyncAIClient.
         // ──────────────────────────────────────────────────────────────────────────
 
+        public static string LLMModelLabel(LLMModelType t)
+        {
+            switch (t)
+            {
+                case LLMModelType.GeminiFlashLite: return "Gemini Flash Lite";
+                case LLMModelType.Gemma26B:        return "Gemma 4 26B";
+                case LLMModelType.Gemma31B:        return "Gemma 4 31B";
+                default:                           return t.ToString();
+            }
+        }
+
         private static string ProviderLabel(BackendType bt)
         {
             switch (bt)
@@ -611,10 +625,9 @@ namespace AIPortraits
 
         private void DrawApiSettings(Rect inRect)
         {
-            float viewHeight = 850f;
-            if (useLLMPrompt) viewHeight += 160f;
+            float viewHeight = 1000f;
             if (useAIBgRemoval) viewHeight += 100f;
-            if (showAdvanced) viewHeight += 480f;
+            if (showAdvanced) viewHeight += 540f;
 
             Rect viewRect = new Rect(0f, 0f, inRect.width - 18f, viewHeight);
             Widgets.BeginScrollView(inRect, ref scrollPosition, viewRect);
@@ -658,99 +671,84 @@ namespace AIPortraits
             listing.GapLine();
             listing.Gap(8f);
 
+            // ── PROMPT GENERATION ─────────────────────────────────────────────────
+            // Pick a model + paste a key. With a key the LLM rewrites the prompt; blank
+            // uses the in-house compiled template automatically (see QueueGeneration).
+            listing.Label("Prompt Generation");
+            listing.Gap(6f);
+
+            Rect pgModelRow = listing.GetRect(32f);
+            Widgets.Label(new Rect(pgModelRow.x, pgModelRow.y + 6f, 60f, 24f), "Model:");
+            Rect pgModelBtn = new Rect(pgModelRow.x + 60f, pgModelRow.y, pgModelRow.width - 60f, 32f);
+            if (Widgets.ButtonText(pgModelBtn, LLMModelLabel(llmModelType)))
+            {
+                var pgOpts = new List<FloatMenuOption>();
+                LLMModelType[] pgOrder = new[] { LLMModelType.GeminiFlashLite, LLMModelType.Gemma26B, LLMModelType.Gemma31B };
+                foreach (LLMModelType t in pgOrder)
+                {
+                    LLMModelType captured = t;
+                    pgOpts.Add(new FloatMenuOption(LLMModelLabel(t), delegate () { llmModelType = captured; }));
+                }
+                Find.WindowStack.Add(new FloatMenu(pgOpts));
+            }
+            listing.Gap(6f);
+
+            listing.Label("Prompt API Key:");
+            Rect pgKeyRect = listing.GetRect(24f);
+            llmApiKey = UnityEngine.GUI.PasswordField(pgKeyRect, llmApiKey, '*');
+            listing.Gap(listing.verticalSpacing);
+            listing.Gap(2f);
+            Text.Font = GameFont.Tiny;
+            GUI.color = new Color(0.55f, 0.55f, 0.55f);
+            Widgets.Label(listing.GetRect(20f), "  Free key at aistudio.google.com/app/apikey");
+            GUI.color = Color.white;
+            Text.Font = GameFont.Small;
+
+            listing.Gap(12f);
+            listing.GapLine();
+            listing.Gap(8f);
+
             // ── IMAGE GENERATION ──────────────────────────────────────────────────
-            // Three straightforward image sources. Anything paid auto-falls back to the
-            // free, keyless Pollinations if it errors or its key is blank (see
-            // AsyncAIClient.DispatchImageBackend). Extra backends live under Advanced.
+            // Cloudflare when a key is set, otherwise free Pollinations. Paid sources
+            // auto-fall back to Pollinations on failure (AsyncAIClient.DispatchImageBackend).
             listing.Label("Image Generation");
             listing.Gap(6f);
 
-            Rect srcRow = listing.GetRect(34f);
-            float srcW = srcRow.width / 3f;
-            Rect btnPol = new Rect(srcRow.x,             srcRow.y, srcW - 4f, 34f);
-            Rect btnCf  = new Rect(srcRow.x + srcW,      srcRow.y, srcW - 4f, 34f);
-            Rect btnGoo = new Rect(srcRow.x + srcW * 2f, srcRow.y, srcW - 4f, 34f);
-
-            if (backendType == BackendType.Pollinations) GUI.color = new Color(0.5f, 0.9f, 1f);
-            if (Widgets.ButtonText(btnPol, "🆓 Pollinations (free)")) ApplyProviderDefaults(BackendType.Pollinations);
-            GUI.color = Color.white;
-
-            if (backendType == BackendType.Cloudflare) GUI.color = new Color(0.5f, 0.9f, 1f);
-            if (Widgets.ButtonText(btnCf, "☁ Cloudflare")) ApplyProviderDefaults(BackendType.Cloudflare);
-            GUI.color = Color.white;
-
-            if (backendType == BackendType.GoogleImagen) GUI.color = new Color(0.5f, 0.9f, 1f);
-            if (Widgets.ButtonText(btnGoo, "💎 Google (nano-banana)"))
-            {
-                ApplyProviderDefaults(BackendType.GoogleImagen);
-                if (string.IsNullOrEmpty(giModelName) || giModelName.StartsWith("imagen"))
-                    giModelName = "nanobanana-pro";
-            }
-            GUI.color = Color.white;
-            listing.Gap(6f);
-
-            // Selected-source info box
-            string infoText = ProviderInfo(backendType);
-            float infoHeight = Text.CalcHeight(infoText, listing.ColumnWidth - 12f) + 12f;
-            Rect infoBoxRect = listing.GetRect(infoHeight);
-            Widgets.DrawBoxSolid(infoBoxRect, ProviderInfoColor(backendType));
+            listing.Label("Cloudflare API Key:");
+            Rect cfKeyRect = listing.GetRect(24f);
+            cfApiKey = UnityEngine.GUI.PasswordField(cfKeyRect, cfApiKey, '*');
+            listing.Gap(listing.verticalSpacing);
+            listing.Gap(2f);
             Text.Font = GameFont.Tiny;
-            Widgets.Label(infoBoxRect.ContractedBy(6f), infoText);
-            Text.Font = GameFont.Small;
-            listing.Gap(4f);
-
-            // Always-visible fallback note
-            Text.Font = GameFont.Tiny;
-            GUI.color = new Color(0.55f, 0.8f, 0.95f);
-            Widgets.Label(listing.GetRect(20f), backendType == BackendType.Pollinations
-                ? "  ↳ Free, no key required — always available."
-                : "  ↳ Auto-falls back to free Pollinations if this source fails or its key is blank.");
+            GUI.color = new Color(0.55f, 0.55f, 0.55f);
+            Widgets.Label(listing.GetRect(20f), "  Format account_id:token (dash.cloudflare.com → Workers AI).  Blank = free Pollinations.");
             GUI.color = Color.white;
             Text.Font = GameFont.Small;
+
+            // Cloudflare if a key is present, else free Pollinations — unless an advanced
+            // backend was explicitly chosen under Advanced Settings.
+            if (backendType == BackendType.Pollinations || backendType == BackendType.Cloudflare)
+                backendType = string.IsNullOrEmpty(cfApiKey) ? BackendType.Pollinations : BackendType.Cloudflare;
+
+            listing.Gap(12f);
+            listing.GapLine();
+            listing.Gap(8f);
+
+            // ── VIDEO ─────────────────────────────────────────────────────────────
+            // Google Veo video key. Blank simply disables video generation.
+            listing.Label("Video");
             listing.Gap(6f);
 
-            // ─── API KEY FIELD (single field; format varies per provider) ─────────
-            // Masked with password-field stars so the key isn't visible during screen sharing
-            // (originally proposed by Jules-bot sentinel/mask-api-key).
-            if (ProviderNeedsApiKey(backendType))
-            {
-                listing.Label(ApiKeyLabel(backendType));
-                Rect apiKeyRect = listing.GetRect(24f);
-                CurrentApiKey = UnityEngine.GUI.PasswordField(apiKeyRect, CurrentApiKey, '*');
-                listing.Gap(listing.verticalSpacing);
-                listing.Gap(2f);
-                Text.Font = GameFont.Tiny;
-
-                // Inline validation: red warning when key is missing for a provider that needs it
-                // (originally proposed by Jules-bot palette-ux-improvements).
-                if (string.IsNullOrEmpty(CurrentApiKey))
-                {
-                    GUI.color = new Color(0.9f, 0.3f, 0.3f);
-                    Widgets.Label(listing.GetRect(20f),
-                        "  ⚠ API key required for " + ProviderLabel(backendType).Trim());
-                }
-                else
-                {
-                    GUI.color = new Color(0.6f, 0.6f, 0.6f);
-                    Widgets.Label(listing.GetRect(20f), "  " + ApiKeyHint(backendType));
-                }
-                GUI.color = Color.white;
-                Text.Font = GameFont.Small;
-            }
-
-            // ─── LOCAL SERVER URL (only when LocalA1111 selected) ─────────────────
-            if (backendType == BackendType.LocalA1111)
-            {
-                listing.Gap(4f);
-                listing.Label("Server URL");
-                CurrentApiUrl = listing.TextEntry(CurrentApiUrl);
-                listing.Gap(2f);
-                Text.Font = GameFont.Tiny;
-                GUI.color = new Color(0.6f, 0.6f, 0.6f);
-                Widgets.Label(listing.GetRect(20f), "  Default: http://127.0.0.1:7860 (A1111 / Forge default)");
-                GUI.color = Color.white;
-                Text.Font = GameFont.Small;
-            }
+            listing.Label("Video API Key:");
+            Rect vidKeyRect = listing.GetRect(24f);
+            videoApiKey = UnityEngine.GUI.PasswordField(vidKeyRect, videoApiKey, '*');
+            listing.Gap(listing.verticalSpacing);
+            listing.Gap(2f);
+            Text.Font = GameFont.Tiny;
+            GUI.color = new Color(0.55f, 0.55f, 0.55f);
+            Widgets.Label(listing.GetRect(20f), "  Google AI Studio key for Veo video (aistudio.google.com/app/apikey).");
+            GUI.color = Color.white;
+            Text.Font = GameFont.Small;
 
             listing.Gap(12f);
             listing.GapLine();
@@ -782,91 +780,6 @@ namespace AIPortraits
             portraitOffsetY = listing.Slider(portraitOffsetY, -300f, 300f);
             listing.Gap(8f);
 
-            listing.GapLine();
-            listing.Gap(6f);
-
-            // ── PROMPT GENERATION ─────────────────────────────────────────────────
-            listing.Label("Prompt Generation");
-            listing.Gap(6f);
-
-            // Two-button toggle: No (compiled template) vs Yes (LLM Prompt Generator)
-            Rect promptModeRow  = listing.GetRect(36f);
-            float promptHalfW   = promptModeRow.width / 2f;
-            Rect btnNoLLM       = new Rect(promptModeRow.x,                promptModeRow.y, promptHalfW - 4f, 36f);
-            Rect btnYesLLM      = new Rect(promptModeRow.x + promptHalfW,  promptModeRow.y, promptHalfW - 4f, 36f);
-
-            if (!useLLMPrompt) GUI.color = new Color(0.5f, 0.85f, 0.5f);
-            if (Widgets.ButtonText(btnNoLLM, "No — Compiled Template"))
-                useLLMPrompt = false;
-            GUI.color = Color.white;
-
-            if (useLLMPrompt) GUI.color = new Color(0.5f, 0.75f, 1f);
-            if (Widgets.ButtonText(btnYesLLM, "Yes — LLM Prompt Generator"))
-                useLLMPrompt = true;
-            GUI.color = Color.white;
-
-            listing.Gap(8f);
-
-            Rect promptInfoRect = listing.GetRect(48f);
-            Widgets.DrawBoxSolid(promptInfoRect,
-                useLLMPrompt
-                    ? new Color(0.08f, 0.14f, 0.22f, 0.7f)
-                    : new Color(0.10f, 0.16f, 0.10f, 0.7f));
-            Text.Font = GameFont.Tiny;
-            Widgets.Label(promptInfoRect.ContractedBy(6f),
-                useLLMPrompt
-                    ? "LLM Prompt Generator rewrites the structured pawn data into an optimized,\n" +
-                      "creative image prompt. Requires a Google AI Studio API key (free).\n" +
-                      "Falls back to the compiled template if the call fails."
-                    : "Built-in template compiler builds the prompt deterministically from\n" +
-                      "pawn state. Fast, free, no extra API key. Less creative than LLM\n" +
-                      "but reliable and predictable.");
-            Text.Font = GameFont.Small;
-            listing.Gap(6f);
-
-            if (useLLMPrompt)
-            {
-                listing.Label("Prompt Generator Model:");
-                Rect modelRow = listing.GetRect(28f);
-                float modelHalfW = modelRow.width / 2f;
-                Rect btnModelFlash = new Rect(modelRow.x, modelRow.y, modelHalfW - 4f, 28f);
-                Rect btnModelGemma = new Rect(modelRow.x + modelHalfW, modelRow.y, modelHalfW - 4f, 28f);
-
-                if (llmModelType == LLMModelType.GeminiFlashLite) GUI.color = new Color(0.5f, 0.85f, 0.5f);
-                if (Widgets.ButtonText(btnModelFlash, "Gemini Flash Lite"))
-                    llmModelType = LLMModelType.GeminiFlashLite;
-                GUI.color = Color.white;
-
-                if (llmModelType == LLMModelType.Gemma26B) GUI.color = new Color(0.5f, 0.85f, 0.5f);
-                if (Widgets.ButtonText(btnModelGemma, "Gemma 4 26B"))
-                    llmModelType = LLMModelType.Gemma26B;
-                GUI.color = Color.white;
-
-                listing.Gap(8f);
-
-                listing.Label("Prompt Generation API Key:");
-                Rect llmKeyRect = listing.GetRect(24f);
-                llmApiKey = UnityEngine.GUI.PasswordField(llmKeyRect, llmApiKey, '*');
-                listing.Gap(listing.verticalSpacing);
-                listing.Gap(2f);
-                Text.Font = GameFont.Tiny;
-                bool hasPromptKey = !string.IsNullOrEmpty(llmApiKey) || !string.IsNullOrEmpty(giApiKey);
-                if (!hasPromptKey)
-                {
-                    GUI.color = new Color(0.95f, 0.8f, 0.35f);
-                    Widgets.Label(listing.GetRect(20f), "  ⚠ No key — using the in-house compiled template until you add one.");
-                }
-                else
-                {
-                    GUI.color = new Color(0.55f, 0.55f, 0.55f);
-                    Widgets.Label(listing.GetRect(20f), "  Free key at aistudio.google.com/app/apikey  •  Blank uses your Google key, else the in-house template.");
-                }
-                GUI.color = Color.white;
-                Text.Font = GameFont.Small;
-                listing.Gap(4f);
-            }
-
-            listing.Gap(8f);
             listing.GapLine();
             listing.Gap(6f);
 
@@ -967,6 +880,14 @@ namespace AIPortraits
                     Find.WindowStack.Add(new FloatMenu(provOpts));
                 }
                 listing.Gap(6f);
+
+                if (ProviderNeedsApiKey(backendType))
+                {
+                    listing.Label(ApiKeyLabel(backendType));
+                    Rect advKeyRect = listing.GetRect(24f);
+                    CurrentApiKey = UnityEngine.GUI.PasswordField(advKeyRect, CurrentApiKey, '*');
+                    listing.Gap(6f);
+                }
 
                 listing.Label("API URL");
                 CurrentApiUrl = listing.TextEntry(CurrentApiUrl);
