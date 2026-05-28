@@ -6,7 +6,20 @@ This project aspires to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-_(nothing pending)_
+### Added
+- **RimWorld 1.5 support** — multi-version build (1.5 + 1.6). `About.xml` and `LoadFolders.xml` declare both; `build.bat` refactored to compile and deploy per-version (`1.5\Assemblies/`, `1.6\Assemblies/`, `Assemblies/`).
+- **Local u2netp ONNX background removal** (image + video) — offline neural cutout via ONNX Runtime, now the primary local remover for `portrait`/`bodyshot` framings; the YCbCr flood-fill remains as a fallback. `special` framing keeps its background.
+- **Korean usage guide** ([사용방법.md](사용방법.md)) for sharing.
+
+### Changed
+- **Flat-2D art direction** — style prompts overhauled to enforce strictly flat 2D illustration (bold ink lines, cel-shaded fills) and strip photographic/realism cues (lens, depth of field).
+- Docs synced to current backends/models (automatic free-Pollinations fallback, Gemini 3.1 Flash Lite + Gemma 4 26B/31B) and de-leaked (relative links, no local paths/username).
+
+### Fixed
+- Matted video playback — transparent background + reliable mute.
+- Guard against portrait/video double-generation.
+- Veo video: dropped unsupported `generateAudio`, steer audio via prompt.
+- Matte directory-deletion race that could corrupt in-progress mattes.
 
 ## [0.2.0] — 2026-05-26
 
