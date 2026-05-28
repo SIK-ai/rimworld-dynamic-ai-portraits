@@ -1001,12 +1001,15 @@ namespace AIPortraits
             // Button 1: New — respects the per-framing [V] live toggle
             bool videoModeNew = AIPortraitsManager.IsVideoMode(pawn);
 
-            string newLabel   = videoModeNew ? "\u267b Video" : "\u267b New";
-            string newTooltip = videoModeNew ? "Regenerate the animated video for this pawn." : "Generate a new portrait using current traits and character vibe.";
-            Color  newColor   = videoModeNew ? new Color(0.2f, 0.45f, 0.7f) : new Color(0.2f, 0.55f, 0.35f);
+            GenerationStatus status = AIPortraitsManager.GetStatus(pawn);
+            bool isGenerating = status == GenerationStatus.Generating;
+
+            string newLabel   = isGenerating ? "Generating..." : (videoModeNew ? "\u267b Video" : "\u267b New");
+            string newTooltip = isGenerating ? "A portrait is currently being generated for this pawn. Please wait for it to finish." : (videoModeNew ? "Regenerate the animated video for this pawn." : "Generate a new portrait using current traits and character vibe.");
+            Color  newColor   = isGenerating ? new Color(0.3f, 0.3f, 0.3f) : (videoModeNew ? new Color(0.2f, 0.45f, 0.7f) : new Color(0.2f, 0.55f, 0.35f));
 
             DrawButton(btnNew, newLabel, newColor, newTooltip);
-            if (Widgets.ButtonInvisible(btnNew))
+            if (!isGenerating && Widgets.ButtonInvisible(btnNew))
             {
                 if (videoModeNew)
                 {
