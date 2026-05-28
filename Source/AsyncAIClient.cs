@@ -204,7 +204,7 @@ namespace AIPortraits
             // already does the (state != null ? state.framing : "portrait") dance, this one
             // didn't and would NPE if a caller passed a half-built state.
             string framingForLLM = (state != null && !string.IsNullOrEmpty(state.framing)) ? state.framing : "portrait";
-            string sysPrompt = PromptCompiler.GetLLMSystemPrompt(settings.portraitStyle, settings, framingForLLM);
+            string sysPrompt = PromptCompiler.GetLLMSystemPrompt(settings.portraitStyle, settings, framingForLLM, state != null && state.excludeHelmet);
 
             string modelName = "gemini-3.1-flash-lite";
             if (settings.llmModelType == LLMModelType.Gemma26B)
@@ -486,56 +486,63 @@ namespace AIPortraits
             string url;
             StringBuilder json = new StringBuilder();
 
+            // ONE reference image per generation, and its CONTENTS reflect the per-image toggles:
+            //   "Reference portrait image" (refPortrait) => a portrait reference is included
+            //   "Use gear reference sheet"  (useGearRef)  => the equipment sprites are included
+            // The continuity portrait (portraitBytes, also gated by refPortrait upstream) and the
+            // gear/native-portrait sheet are merged into a SINGLE combined image. With both toggles
+            // off, no image is sent at all.
+            bool wantPortrait = state != null && state.refPortrait;
+            bool wantGear     = state != null && state.useGearRef;
+            byte[] refSheetBytes = (wantPortrait || wantGear) ? BuildReferenceSheet(state) : null;
+            byte[] refImage = CombineReferenceImages(portraitBytes, refSheetBytes);
+            bool hasRef = refImage != null && refImage.Length > 0;
+
+            string framing = state != null ? state.framing : "portrait";
+            string fullPrompt = PromptCompiler.CompileImagenSystemPrompt(settings.portraitStyle, settings, framing) + "\n\n" + prompt;
+            if (hasRef)
+            {
+                if (wantPortrait && wantGear)
+                {
+                    fullPrompt += "\n\nattached is a single combined reference image for this character: it contains a reference portrait (match this exact face, hair color, hair style, skin tone, and features) together with the character's equipment and clothing items (render the character wearing/holding these exact items).";
+                }
+                else if (wantPortrait)
+                {
+                    fullPrompt += "\n\nattached is a reference portrait of this character. match this exact face, hair color, hair style, skin tone, and features.";
+                }
+                else if (wantGear)
+                {
+                    fullPrompt += "\n\nattached is a reference sheet of the character's equipment and clothing items. render the character wearing/holding these exact items.";
+                }
+                if (framing == "special")
+                {
+                    fullPrompt += " DISREGARD any solid white background of this reference image entirely; you MUST generate the detailed thematic environment background described above.";
+                }
+            }
+
+            string aspectRatio = "1:1";
+            if (state != null)
+            {
+                if (state.framing == "bodyshot") aspectRatio = "3:4";
+                else if (state.framing == "special") aspectRatio = "4:3";
+            }
+
             if (isGeminiImageModel)
             {
                 url = baseUrl + "/v1beta/models/" + apiModel + ":generateContent?key=" + (settings.CurrentApiKey ?? "");
-
-                byte[] refSheetBytes = settings.useGearReferenceSheet ? BuildReferenceSheet(state) : null;
-                string framing = state != null ? state.framing : "portrait";
-                string fullPrompt = PromptCompiler.CompileImagenSystemPrompt(settings.portraitStyle, settings, framing) + "\n\n" + prompt;
-                if (portraitBytes != null && portraitBytes.Length > 0)
-                {
-                    fullPrompt += "\n\nalso attached is a reference portrait showing the character's face. please match the character's face, hair, and features from this portrait.";
-                    if (framing == "special")
-                    {
-                        fullPrompt += " DISREGARD the solid white background of this reference portrait entirely; you MUST generate the detailed thematic environment background described above.";
-                    }
-                }
-                if (refSheetBytes != null && refSheetBytes.Length > 0)
-                {
-                    fullPrompt += "\n\nattached is a reference sheet containing the character's native in-game portrait (leftmost thumbnail) and their equipment sprites. please render the character matching the native portrait's face, hair color, hair style, skin tone, and features, and wearing/holding these exact items.";
-                }
-
-                string aspectRatio = "1:1";
-                if (state != null)
-                {
-                    if (state.framing == "bodyshot") aspectRatio = "3:4";
-                    else if (state.framing == "special") aspectRatio = "4:3";
-                }
 
                 json.Append("{");
                 json.Append("\"contents\":[{");
                 json.Append("\"parts\":[");
                 json.Append("{\"text\":\"").Append(EscapeJson(fullPrompt)).Append("\"}");
 
-                if (portraitBytes != null && portraitBytes.Length > 0)
+                if (hasRef)
                 {
-                    string base64Image = Convert.ToBase64String(portraitBytes);
+                    string base64Image = Convert.ToBase64String(refImage);
                     json.Append(",{");
                     json.Append("\"inlineData\":{");
                     json.Append("\"mimeType\":\"image/png\",");
                     json.Append("\"data\":\"").Append(base64Image).Append("\"");
-                    json.Append("}");
-                    json.Append("}");
-                }
-
-                if (refSheetBytes != null && refSheetBytes.Length > 0)
-                {
-                    string base64Ref = Convert.ToBase64String(refSheetBytes);
-                    json.Append(",{");
-                    json.Append("\"inlineData\":{");
-                    json.Append("\"mimeType\":\"image/png\",");
-                    json.Append("\"data\":\"").Append(base64Ref).Append("\"");
                     json.Append("}");
                     json.Append("}");
                 }
@@ -553,23 +560,6 @@ namespace AIPortraits
             else
             {
                 url = baseUrl + "/v1beta/models/" + apiModel + ":predict";
-                string framing = state != null ? state.framing : "portrait";
-                string fullPrompt = PromptCompiler.CompileImagenSystemPrompt(settings.portraitStyle, settings, framing) + "\n\n" + prompt;
-                if (portraitBytes != null && portraitBytes.Length > 0)
-                {
-                    fullPrompt += "\n\nalso attached is a reference portrait showing the character's face. please match the character's face, hair, and features from this portrait.";
-                    if (framing == "special")
-                    {
-                        fullPrompt += " DISREGARD the solid white background of this reference portrait entirely; you MUST generate the detailed thematic environment background described above.";
-                    }
-                }
-
-                string aspectRatio = "1:1";
-                if (state != null)
-                {
-                    if (state.framing == "bodyshot") aspectRatio = "3:4";
-                    else if (state.framing == "special") aspectRatio = "4:3";
-                }
 
                 bool isCapabilityModel = apiModel.Contains("nanobanana") || apiModel.Contains("capability") || apiModel.Contains("editing");
 
@@ -577,9 +567,9 @@ namespace AIPortraits
                 json.Append("\"instances\":[{");
                 json.Append("\"prompt\":\"").Append(EscapeJson(fullPrompt)).Append("\"");
 
-                if (isCapabilityModel && portraitBytes != null && portraitBytes.Length > 0)
+                if (isCapabilityModel && hasRef)
                 {
-                    string base64Image = Convert.ToBase64String(portraitBytes);
+                    string base64Image = Convert.ToBase64String(refImage);
                     json.Append(",\"referenceImage\":{");
                     json.Append("\"bytesBase64Encoded\":\"").Append(base64Image).Append("\",");
                     json.Append("\"mimeType\":\"image/png\"");
@@ -1204,13 +1194,13 @@ namespace AIPortraits
             return null;
         }
 
-        private static Texture2D GetReadableNativePortraitTexture(Pawn pawn)
+        private static Texture2D GetReadableNativePortraitTexture(Pawn pawn, bool excludeHelmet)
         {
             if (pawn == null) return null;
             bool wasGenerating = isGeneratingRefPortrait;
             try
             {
-                if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.excludeHelmet)
+                if (excludeHelmet)
                 {
                     isGeneratingRefPortrait = true;
                     RimWorld.PortraitsCache.SetDirty(pawn);
@@ -1241,7 +1231,7 @@ namespace AIPortraits
             }
             finally
             {
-                if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.excludeHelmet)
+                if (excludeHelmet)
                 {
                     isGeneratingRefPortrait = wasGenerating;
                     RimWorld.PortraitsCache.SetDirty(pawn);
@@ -1293,29 +1283,39 @@ namespace AIPortraits
 
                 List<Texture2D> texturesToCombine = new List<Texture2D>();
 
-                // Try to find the pawn in game and prepend its native portrait rendering
-                Pawn pawn = FindPawnById(state.pawnId);
-                if (pawn != null)
+                // The native in-game portrait is the "portrait" half of the reference sheet, so it is
+                // included ONLY when the per-image "Reference portrait image" toggle is on. This is what
+                // makes the reference image reflect that toggle (off => no portrait reference at all).
+                if (state.refPortrait)
                 {
-                    Texture2D nativeTex = GetReadableNativePortraitTexture(pawn);
-                    if (nativeTex != null)
+                    Pawn pawn = FindPawnById(state.pawnId);
+                    if (pawn != null)
                     {
-                        texturesToCombine.Add(nativeTex);
+                        Texture2D nativeTex = GetReadableNativePortraitTexture(pawn, state.excludeHelmet);
+                        if (nativeTex != null)
+                        {
+                            texturesToCombine.Add(nativeTex);
+                        }
                     }
                 }
 
+                // The gear sprites are the "gear" half of the reference sheet, gated by the per-image
+                // "Use gear reference sheet" toggle.
                 List<string> gearItems = new List<string>();
-                if (!string.IsNullOrEmpty(state.primaryWeapon))
+                if (state.useGearRef)
                 {
-                    gearItems.Add(state.primaryWeapon);
-                }
-                if (state.apparel != null)
-                {
-                    foreach (string app in state.apparel)
+                    if (!string.IsNullOrEmpty(state.primaryWeapon))
                     {
-                        if (!string.IsNullOrEmpty(app))
+                        gearItems.Add(state.primaryWeapon);
+                    }
+                    if (state.apparel != null)
+                    {
+                        foreach (string app in state.apparel)
                         {
-                            gearItems.Add(app);
+                            if (!string.IsNullOrEmpty(app))
+                            {
+                                gearItems.Add(app);
+                            }
                         }
                     }
                 }
@@ -1434,6 +1434,87 @@ namespace AIPortraits
             }
         }
 
+        // Merges the two possible reference inputs (the identity-continuity portrait and the
+        // gear/native-portrait reference sheet) into ONE image so each generation sends a single
+        // image input. Returns null if both are empty, the lone input if only one is present, and
+        // a side-by-side stitch (portrait LEFT, gear sheet RIGHT) on a white canvas when both exist.
+        private static byte[] CombineReferenceImages(byte[] a, byte[] b)
+        {
+            bool hasA = a != null && a.Length > 0;
+            bool hasB = b != null && b.Length > 0;
+            if (!hasA && !hasB) return null;
+            if (hasA && !hasB) return a;
+            if (!hasA && hasB) return b;
+
+            Texture2D ta = null;
+            Texture2D tb = null;
+            Texture2D combined = null;
+            try
+            {
+                ta = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                tb = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                if (!ImageConversion.LoadImage(ta, a) || !ImageConversion.LoadImage(tb, b))
+                {
+                    return a; // fall back to the identity portrait
+                }
+
+                int padding = 16;
+                int totalWidth = ta.width + tb.width + padding * 3;
+                int maxHeight = (ta.height > tb.height ? ta.height : tb.height) + padding * 2;
+
+                Color white = new Color(1f, 1f, 1f, 1f);
+                Color[] destPixels = new Color[totalWidth * maxHeight];
+                for (int i = 0; i < destPixels.Length; i++)
+                {
+                    destPixels[i] = white;
+                }
+
+                Texture2D[] parts = new Texture2D[] { ta, tb };
+                int currentX = padding;
+                for (int p = 0; p < parts.Length; p++)
+                {
+                    Texture2D tex = parts[p];
+                    int sw = tex.width;
+                    int sh = tex.height;
+                    Color[] src = tex.GetPixels();
+
+                    int startY = padding + (maxHeight - padding * 2 - sh) / 2;
+                    for (int y = 0; y < sh; y++)
+                    {
+                        int destRow = (startY + y) * totalWidth + currentX;
+                        int srcRow = y * sw;
+                        for (int x = 0; x < sw; x++)
+                        {
+                            Color pixel = src[srcRow + x];
+                            if (pixel.a > 0.01f)
+                            {
+                                Color blended = Color.Lerp(white, pixel, pixel.a);
+                                blended.a = 1f;
+                                destPixels[destRow + x] = blended;
+                            }
+                        }
+                    }
+                    currentX += sw + padding;
+                }
+
+                combined = new Texture2D(totalWidth, maxHeight, TextureFormat.RGBA32, false);
+                combined.SetPixels(destPixels);
+                combined.Apply();
+                return ImageConversion.EncodeToPNG(combined);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning("[Dynamic AI Portraits] Failed to combine reference images: " + ex.Message);
+                return a;
+            }
+            finally
+            {
+                if (ta != null) UnityEngine.Object.Destroy(ta);
+                if (tb != null) UnityEngine.Object.Destroy(tb);
+                if (combined != null) UnityEngine.Object.Destroy(combined);
+            }
+        }
+
         // ── Google Veo 3.1 Lite Video generation ─────────────────────────────────────
         public static void QueueVideoGeneration(Pawn pawn, PawnState state, byte[] initImageBytes, string apiKey, Action<string, string> callback)
         {
@@ -1456,14 +1537,31 @@ namespace AIPortraits
         {
             string url = "https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-lite-generate-preview:predictLongRunning?key=" + apiKey;
 
+            // Framing first — it controls both the background directive and the aspect ratio.
+            string framing = (state != null && !string.IsNullOrEmpty(state.framing)) ? state.framing : "portrait";
+
             string basePrompt = PromptCompiler.CompilePositivePrompt(state, AIPortraitsMod.settings, null);
-            string prompt = basePrompt + ", cinematic, masterpiece, character comes alive, breathing, blinking, looking at camera, subtle movement, high quality, seamless loop, start and end frames are identical, continuous looping idle animation, steady camera. Audio: silent or only soft ambient wind with faint distant birdsong, no music, no speech, no dialogue, quiet and unobtrusive.";
+            string motion = ", subtle natural idle motion only: hair and loose clothing drifting gently as if in a soft breeze, slow calm breathing, an occasional natural blink, a faint relaxed shift of weight, eyes calmly on the viewer; no large gestures, no walking, hands and any held item stay perfectly still (no waving), seamless loop with identical first and last frames, steady locked-off camera, high quality";
+            string bgDirective;
+            if (framing == "special")
+            {
+                // 'special' keeps its scenic background (it is NOT matted) — let it stay cinematic.
+                bgDirective = ", cinematic, masterpiece";
+            }
+            else
+            {
+                // portrait/bodyshot get background-removed. Veo otherwise ANIMATES the backdrop
+                // (drifting light / gradients), and that moving, non-uniform background is what
+                // makes the matte flicker and leave black/white patches. Force a perfectly STATIC,
+                // UNIFORM, MONO backdrop so background removal is clean and temporally stable.
+                bgDirective = ", solid flat uniform mono background, completely static unchanging background, the background stays perfectly still and identical in every single frame, no background motion, no background lighting changes, no gradients, no shadows cast on the background, plain seamless backdrop, only the character moves";
+            }
+            string prompt = basePrompt + bgDirective + motion + ". Audio: silent or only soft ambient wind with faint distant birdsong, no music, no speech, no dialogue, quiet and unobtrusive.";
 
             // Match aspect ratio to framing:
             // portrait / bodyshot → 9:16 (vertical, matches tall portrait images)
             // special             → 16:9 (landscape)
             // Veo 3.1 Lite only supports 9:16 and 16:9; 1:1 is not supported.
-            string framing = (state != null && !string.IsNullOrEmpty(state.framing)) ? state.framing : "portrait";
             string aspectRatio = (framing == "special") ? "16:9" : "9:16";
 
             string diskKey = AIPortraitsManager.GetActiveKeyForFraming(pawn, framing);

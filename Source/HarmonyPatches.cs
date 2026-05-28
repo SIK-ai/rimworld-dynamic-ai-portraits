@@ -12,6 +12,9 @@ namespace AIPortraits
     [HarmonyPatch(typeof(MainTabWindow_Inspect), "ExtraOnGUI")]
     public static class Patch_MainTabWindow_Inspect_ExtraOnGUI
     {
+        // Overlay toolbar: collapsed to one ⊕ button by default; ⊕/▽ toggle this.
+        private static bool overlayExpanded = false;
+
         [HarmonyPostfix]
         public static void Postfix(MainTabWindow_Inspect __instance)
         {
@@ -205,36 +208,54 @@ namespace AIPortraits
                 VideoPlaybackManager.StopPlayback();
             }
 
-            // Refresh button overlaid at the bottom-right of the portrait. Clicking
-            // re-extracts pawn state and triggers a fresh generation (clearing the
-            // cached image first). This is the equivalent of "Create New Portrait"
-            // in the Pawn Gallery, but accessible without opening settings.
+            // ── Overlay controls: collapsed to a single ⊕ button by default; click it to
+            // expand the full toolbar (P · B · S · V · ↻ · ⚙ Settings · ▽ Collapse). ──
             const float BtnSize = 28f;
             const float BtnMargin = 6f;
-            Rect refreshRect = new Rect(
-                portraitRect.xMax - BtnSize - BtnMargin,
-                portraitRect.yMax - BtnSize - BtnMargin,
-                BtnSize, BtnSize);
+            float by = portraitRect.yMax - BtnSize - BtnMargin;     // button row Y
+            float bx = portraitRect.xMax - BtnSize - BtnMargin;     // rightmost button X
 
-            Rect veoRect = new Rect(refreshRect.x - BtnSize - 4f, refreshRect.y, BtnSize, BtnSize);
-            Rect specRect = new Rect(veoRect.x - BtnSize - 4f, refreshRect.y, BtnSize, BtnSize);
-            Rect bodyRect = new Rect(specRect.x - BtnSize - 4f, refreshRect.y, BtnSize, BtnSize);
-            Rect portRect = new Rect(bodyRect.x - BtnSize - 4f, refreshRect.y, BtnSize, BtnSize);
-
-            string currentFraming = "portrait";
-            string f;
-            if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.pawnFraming != null &&
-                AIPortraitsMod.settings.pawnFraming.TryGetValue(pawn.ThingID, out f))
+            if (!overlayExpanded)
             {
-                currentFraming = f;
+                Rect addRect = new Rect(bx, by, BtnSize, BtnSize);
+                if (DrawIconButton(addRect, "⊕", "Show portrait controls"))
+                {
+                    overlayExpanded = true;
+                    SoundDefOf.Click.PlayOneShotOnCamera(null);
+                }
             }
+            else
+            {
+                string currentFraming = "portrait";
+                string f;
+                if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.pawnFraming != null &&
+                    AIPortraitsMod.settings.pawnFraming.TryGetValue(pawn.ThingID, out f))
+                {
+                    currentFraming = f;
+                }
 
-            DrawFramingButton(portRect, "P", "portrait", currentFraming, pawn, "Set framing style to standard bust-up portrait.");
-            DrawFramingButton(bodyRect, "B", "bodyshot", currentFraming, pawn, "Set framing style to full-length bodyshot.");
-            DrawFramingButton(specRect, "S", "special", currentFraming, pawn, "Set framing style to special selfie / thematic scene.");
+                // Right-aligned row; ▽ collapse sits where the ⊕ was.
+                Rect collapseRect = new Rect(bx, by, BtnSize, BtnSize);
+                Rect setRect      = new Rect(collapseRect.x - BtnSize - 4f, by, BtnSize, BtnSize);
+                Rect refreshRect  = new Rect(setRect.x      - BtnSize - 4f, by, BtnSize, BtnSize);
+                Rect veoRect      = new Rect(refreshRect.x  - BtnSize - 4f, by, BtnSize, BtnSize);
+                Rect specRect     = new Rect(veoRect.x      - BtnSize - 4f, by, BtnSize, BtnSize);
+                Rect bodyRect     = new Rect(specRect.x     - BtnSize - 4f, by, BtnSize, BtnSize);
+                Rect portRect     = new Rect(bodyRect.x     - BtnSize - 4f, by, BtnSize, BtnSize);
 
-            DrawVeoButton(veoRect, pawn);
-            DrawRefreshButton(refreshRect, pawn);
+                DrawFramingButton(portRect, "P", "portrait", currentFraming, pawn, "Set framing style to standard bust-up portrait.");
+                DrawFramingButton(bodyRect, "B", "bodyshot", currentFraming, pawn, "Set framing style to full-length bodyshot.");
+                DrawFramingButton(specRect, "S", "special", currentFraming, pawn, "Set framing style to special selfie / thematic scene.");
+                DrawVeoButton(veoRect, pawn);
+                DrawRefreshButton(refreshRect, pawn);
+                DrawSettingsButton(setRect, pawn);
+
+                if (DrawIconButton(collapseRect, "▽", "Collapse controls"))
+                {
+                    overlayExpanded = false;
+                    SoundDefOf.Click.PlayOneShotOnCamera(null);
+                }
+            }
 
             }
             catch (System.Exception ex)
@@ -356,6 +377,45 @@ namespace AIPortraits
                     }
                 }
             }
+        }
+
+        // A small overlay button (dark backdrop + glyph). Returns true when clicked.
+        private static bool DrawIconButton(Rect rect, string label, string tip)
+        {
+            bool hovered = Mouse.IsOver(rect);
+            GUI.color = hovered ? new Color(0.15f, 0.45f, 0.65f, 0.95f) : new Color(0f, 0f, 0f, 0.65f);
+            GUI.DrawTexture(rect, BaseContent.WhiteTex);
+            GUI.color = new Color(1f, 1f, 1f, 0.35f);
+            Widgets.DrawBox(rect, 1);
+            GUI.color = Color.white;
+            Text.Anchor = TextAnchor.MiddleCenter;
+            Text.Font = GameFont.Small;
+            Widgets.Label(rect, label);
+            Text.Anchor = TextAnchor.UpperLeft;
+            TooltipHandler.TipRegion(rect, tip);
+            return Widgets.ButtonInvisible(rect);
+        }
+
+        // ⚙ Settings — per-image (pawn + active framing) toggle menu. Each option shows its
+        // current state (✓/✗) and flips it on click. Settings are unique to each image.
+        private static void DrawSettingsButton(Rect rect, Pawn pawn)
+        {
+            // NOTE: the gear glyph "⚙" (U+2699) is NOT in RimWorld's UI font and rendered blank.
+            // Use a menu/list glyph from the Geometric Shapes block (same block as the working
+            // "▽" collapse arrow), which both renders and reads as "options menu".
+            if (!DrawIconButton(rect, "▤", "Per-image settings for this shot (helmet / gear ref / reference portrait)")) return;
+            string framing = AIPortraitsManager.GetActiveFraming(pawn);
+            bool helm = AIPortraitsManager.GetExcludeHelmet(pawn, framing);
+            bool gear = AIPortraitsManager.GetGearRef(pawn, framing);
+            bool refp = AIPortraitsManager.GetRefPortrait(pawn, framing);
+            System.Collections.Generic.List<FloatMenuOption> opts = new System.Collections.Generic.List<FloatMenuOption>();
+            opts.Add(new FloatMenuOption((helm ? "✓ " : "✗ ") + "Exclude helmet / headgear", delegate {
+                AIPortraitsManager.SetExcludeHelmet(pawn, framing, !helm); AIPortraitsMod.Instance.WriteSettings(); }));
+            opts.Add(new FloatMenuOption((gear ? "✓ " : "✗ ") + "Use gear reference sheet", delegate {
+                AIPortraitsManager.SetGearRef(pawn, framing, !gear); AIPortraitsMod.Instance.WriteSettings(); }));
+            opts.Add(new FloatMenuOption((refp ? "✓ " : "✗ ") + "Reference portrait image (continuity)", delegate {
+                AIPortraitsManager.SetRefPortrait(pawn, framing, !refp); AIPortraitsMod.Instance.WriteSettings(); }));
+            Find.WindowStack.Add(new FloatMenu(opts));
         }
 
         private static void DrawVeoButton(Rect rect, Pawn pawn)

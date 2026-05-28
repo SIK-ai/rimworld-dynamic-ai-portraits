@@ -6,6 +6,9 @@ namespace AIPortraits
 {
     public static class PromptCompiler
     {
+        // Picks special-shot concepts AT RANDOM (random per generation, not role-mapped).
+        private static readonly System.Random SpecialRng = new System.Random();
+
         // ──────────────────────────────────────────────────────────────────────────
         // IMAGEN SYSTEM PROMPTS (one per art style, Imagen-only)
         // ──────────────────────────────────────────────────────────────────────────
@@ -30,17 +33,20 @@ namespace AIPortraits
                 default:                              AppendKoreanRealisticHeader(p, continuityStyleToken, state, settings); break;
             }
 
+            // Hard "solo" enforcement. Cloudflare/FLUX does NOT accept a negative prompt, so the
+            // "multiple characters" negative is ignored — and FLUX loves to add a second person to
+            // full-body shots. State solo explicitly and early in the positive prompt.
+            p.Append("solo, single character, only one person, alone in frame, no other people, no second person, ");
+
             AppendRaceClass(p, state, settings);
             AppendPhysical(p, state);
             AppendGear(p, state);
             p.Append(GetExpression(state, settings) + ", ");
-            bool addictionPropShown = false;
-            bool holdingProp = AppendCuteProps(p, state, out addictionPropShown);
-            AppendSkillProps(p, state, holdingProp);
-            // Pass addictionPropShown so health modifiers skip the visual description
-            // for addictions already represented by a cute prop (avoids contradictions
-            // like "holding a beer mug" + "bloodshot eyes from alcoholism" in same prompt).
-            AppendHealthModifiers(p, state, addictionPropShown);
+            // Held cute/skill props (lollipop, beer mug, smokeleaf joint, mining ore, etc.)
+            // are intentionally DISABLED: they cluttered the portrait and animated badly in
+            // video (the pawn waving "a random stone", smoke wisps, etc.). Health modifiers
+            // now always render their own subtle facial visuals (no prop substitution).
+            AppendHealthModifiers(p, state, false);
             // (Transparency is already declared once at the top of the prompt by the style
             // header — no need to repeat it via GetBackground() and create a duplicate clause.)
             AppendLoreFlavor(p, state, settings);
@@ -152,42 +158,8 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             if (framing == "bodyshot") return "full length full body shot, head-to-toe framing showing the entire body including legs and boots, standing pose, no cropping at the knees or ankles, complete outfit visible";
             if (framing == "special")
             {
-                int hash = 0;
-                if (!string.IsNullOrEmpty(state.pawnId))
-                {
-                    for (int i = 0; i < state.pawnId.Length; i++)
-                        hash = (hash * 31) + state.pawnId[i];
-                }
-                else if (!string.IsNullOrEmpty(state.name))
-                {
-                    for (int i = 0; i < state.name.Length; i++)
-                        hash = (hash * 31) + state.name[i];
-                }
-                hash = Math.Abs(hash);
-
-                string topSkill = (state.topSkill1 ?? "").ToLower();
-                bool isCombat = topSkill.Contains("shooting") || topSkill.Contains("melee");
-
-                int option = hash % 3;
-                if (topSkill.Contains("social"))
-                {
-                    option = 1; // selfie
-                }
-                else if (isCombat)
-                {
-                    option = (hash % 2 == 0) ? 0 : 2; // backshot or action pose
-                }
-
-                switch (option)
-                {
-                    case 0:
-                        return "dynamic low-angle shot from behind showing the character's back, looking back over their shoulder at the background scene";
-                    case 1:
-                        return "dynamic wide-angle selfie shot showing the character holding the camera at arm's length with a wide-eyed expressive face";
-                    case 2:
-                    default:
-                        return "dynamic action shot showing the character in a low-stance dramatic pose interacting with the environment";
-                }
+                // Special = a random, FUNNY, trait-aware comedy scene (compiled/video path).
+                return GetFunnySpecialScene(state);
             }
             return "bust-up framing";
         }
@@ -197,24 +169,64 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             if (state.framing != "special")
                 return "isolated on a solid white background, flat clean background, no environment, no gradients, no shadows, crisp sharp edges with the background";
 
-            if (!string.IsNullOrEmpty(state.mentalState))
-                return "standing in a dramatic chaotic red-hued psychic storm background";
+            // Special: the funny comedy scene (GetFunnySpecialScene) already describes its own
+            // setting, so don't append a second, conflicting background here.
+            return "";
+        }
 
-            string topSkill = (state.topSkill1 ?? "").ToLower();
-            if (topSkill.Contains("medicine"))
-                return "standing in a sterile high-tech hospital room with medical monitors in the background";
-            if (topSkill.Contains("research") || topSkill.Contains("intellectual"))
-                return "standing in a high-tech science laboratory with glowing flasks and holographic screens in the background";
-            if (topSkill.Contains("construction") || topSkill.Contains("crafting") || topSkill.Contains("artistic"))
-                return "standing in a rustic workshop with tools and blueprints hanging on the walls in the background";
-            if (topSkill.Contains("plants") || topSkill.Contains("animals") || topSkill.Contains("cooking"))
-                return "standing in a vibrant sunlit garden with green crops and wildflowers in the background";
-            if (topSkill.Contains("mining"))
-                return "standing inside a dark cavern with glowing crystal veins on the rock walls in the background";
-            if (topSkill.Contains("shooting") || topSkill.Contains("melee"))
-                return "standing on a dramatic smoky battlefield with ruins and debris in the background";
+        // A random, FUNNY, trait-aware comedy scene for the "special" framing. ~50% of the time
+        // (when the pawn has a relevant trait/mood/skill) it picks a gag matched to them; otherwise
+        // a universal meme gag. Picked fresh each generation (SpecialRng) so re-rolls vary. PG only.
+        private static string GetFunnySpecialScene(PawnState state)
+        {
+            List<string> memes = new List<string>();
+            memes.Add("a 'this is fine' meme moment: calmly sipping a hot drink with a serene little smile while the base quietly burns down behind them");
+            memes.Add("an over-confident dating-app SELFIE held at arm's length, ring-light glow and a cheesy smolder");
+            memes.Add("a derpy candid snapshot caught mid-sneeze, comically surprised face with motion lines");
+            memes.Add("a heroic JRPG cover-art splash treating an ordinary everyday tool like a legendary weapon, wind-swept with sparkles and lens flare");
+            memes.Add("a smug gym-mirror flex selfie with a ridiculous over-the-top muscle pose");
+            memes.Add("an enthusiastic double thumbs-up straight at the viewer with a goofy grin while confetti rains down");
+            memes.Add("brooding way too dramatically in heavy rain with a single cinematic tear and excessive anime sparkles");
+            memes.Add("a stiff, awkward school-picture-day pose in front of a cheesy painted studio backdrop");
+            memes.Add("frozen mid-air doing a completely unnecessary triumphant backflip with comic impact stars");
+            memes.Add("proudly presenting a 'World's Best Colonist' mug to the camera like a grand championship trophy");
+            memes.Add("a fabulous fashion-runway model pose in mismatched, tattered survival gear with a sassy diva expression");
+            memes.Add("posing victoriously with one boot resting on a sprung deadfall trap they obviously just stepped in");
 
-            return "standing in a scenic outdoor wilderness with distant RimWorld mountains and a twin moon sky in the background";
+            List<string> matched = new List<string>();
+            if (state.traits != null)
+            {
+                foreach (string t in state.traits)
+                {
+                    string tl = t.ToLower();
+                    if (tl.Contains("pyroman")) matched.Add("cackling with a manic gleeful grin while holding a flaming torch aloft, little comedic fires and smoke puffs popping up everywhere");
+                    else if (tl.Contains("cannibal")) matched.Add("smiling far too innocently while holding a suspicious wrapped 'mystery meat' sandwich, a guilty sweat-drop on the brow");
+                    else if (tl.Contains("sloth") || tl.Contains("lazy")) matched.Add("lazily napping in a hammock with a little snore bubble, totally unbothered while comedic chaos unfolds");
+                    else if (tl.Contains("brawler") || tl.Contains("tough")) matched.Add("throwing a cocky boxing pose with a big comic 'POW' impact effect and a confident smirk");
+                    else if (tl.Contains("kind")) matched.Add("beaming warmly while joyfully swarmed by a pile of adoring cute animals");
+                    else if (tl.Contains("nimble") || tl.Contains("quick")) matched.Add("frozen mid-spin in a flashy, totally needless action-hero pose with motion lines and sparkles");
+                    else if (tl.Contains("transhuman")) matched.Add("proudly showing off a gleaming bionic limb to the camera like the hottest new gadget, smug techie grin");
+                    else if (tl.Contains("jealous") || tl.Contains("abrasive")) matched.Add("photobombing the frame with a comically exaggerated death-glare and tightly crossed arms");
+                    else if (tl.Contains("nudist")) matched.Add("a coy beach-vacation pose behind a strategically placed potted plant, cheeky wink, fully and modestly covered");
+                }
+            }
+            if (state.moodLevel > 0.65f) matched.Add("throwing a tiny one-person party with a party hat, streamers and confetti and an ecstatic grin");
+            else if (state.moodLevel < 0.35f) matched.Add("slumped under a personal little comedic rain-cloud, clutching a single wilted flower with over-dramatic gloom");
+            if (!string.IsNullOrEmpty(state.mentalState)) matched.Add("an unhinged manic grin in the middle of cartoonish chaos, googly wide eyes and comic 'BONK' stars");
+
+            string skill = (state.topSkill1 ?? "").ToLower();
+            if (skill.Contains("cook")) matched.Add("buried up to the neck in a giant mountain of lavish meals, cheeks comically stuffed, blissful expression");
+            else if (skill.Contains("min")) matched.Add("heroically hoisting a comically oversized glowing ore chunk overhead like a bodybuilding trophy");
+            else if (skill.Contains("shoot") || skill.Contains("melee")) matched.Add("an absurdly over-dramatic action-movie battle pose with explosions and big 'BOOM' text behind them");
+            else if (skill.Contains("research") || skill.Contains("intellect")) matched.Add("a bored-genius pose surrounded by floating nonsensical equations and a tiny smoking exploded beaker");
+            else if (skill.Contains("animal")) matched.Add("getting affectionately mobbed and face-licked by their own bonded animals, flailing with a delighted laugh");
+            else if (skill.Contains("plant")) matched.Add("proudly presenting a single, comically enormous prize vegetable that gleams with pride");
+            else if (skill.Contains("art")) matched.Add("dramatically unveiling a lumpy, questionable self-sculpture with way too much confidence");
+            else if (skill.Contains("social")) matched.Add("an over-the-top social-media influencer pose with sparkles and finger-hearts");
+            else if (skill.Contains("construct") || skill.Contains("craft")) matched.Add("posing like a proud handyman beside a wonky, comically lopsided homemade contraption");
+
+            List<string> pool = (matched.Count > 0 && SpecialRng.Next(2) == 0) ? matched : memes;
+            return pool[SpecialRng.Next(pool.Count)];
         }
 
         // ──────────────────────────────────────────────────────────────────────────
@@ -229,7 +241,7 @@ Content: Render the character's appearance, clean expression, and gear exactly a
 
             string introText = "portrait of a ";
             if (state.framing == "bodyshot") introText = "full length body shot of a ";
-            else if (state.framing == "special") introText = "dynamic selfie portrait of a ";
+            else if (state.framing == "special") introText = "fun dynamic scene of a ";
 
             p.Append(introText + state.bioAge + " year old " + race + " " + genderNoun);
             if (!string.IsNullOrEmpty(role))
@@ -462,11 +474,11 @@ Content: Render the character's appearance, clean expression, and gear exactly a
                 }
                 else
                 {
-                    // For helmets/hats, choose pose deterministically based on pawn ID
-                    int seed = GetPawnSeed(state);
+                    // Always wear the helmet/hat ON THE HEAD. The previous code rotated through
+                    // "held under arm / hanging from shoulder / off the weapon" poses, which read
+                    // as "hat off" — especially bad in video. Force the worn-on-head pose.
                     bool hasRanged = !string.IsNullOrEmpty(state.primaryWeapon) && state.weaponType == "ranged";
-                    int maxPoses = hasRanged ? 5 : 4;
-                    int poseChoice = seed % maxPoses;
+                    int poseChoice = 0;
 
                     if (poseChoice == 0)
                     {
@@ -560,7 +572,7 @@ Content: Render the character's appearance, clean expression, and gear exactly a
                 {
                     if (IsHeadgearLabel(app))
                     {
-                        if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.excludeHelmet)
+                        if (state.excludeHelmet)   // per-image setting
                         {
                             // Exclude headgear entirely
                         }
@@ -1041,7 +1053,7 @@ Content: Render the character's appearance, clean expression, and gear exactly a
                 {
                     if (IsHeadgearLabel(app))
                     {
-                        if (settings == null || !settings.excludeHelmet)
+                        if (!state.excludeHelmet)   // per-image setting
                             headgear.Add(app);
                     }
                     else
@@ -1117,7 +1129,7 @@ Content: Render the character's appearance, clean expression, and gear exactly a
         /// Returns the Gemini Flash system prompt for the given art style.
         /// This tells the model exactly what kind of image-generation prompt to produce.
         /// </summary>
-        public static string GetLLMSystemPrompt(PortraitStyle style, AIPortraitsSettings settings, string framing = "portrait")
+        public static string GetLLMSystemPrompt(PortraitStyle style, AIPortraitsSettings settings, string framing = "portrait", bool excludeHelmet = false)
         {
             string styleDesc;
             switch (style)
@@ -1151,13 +1163,32 @@ Content: Render the character's appearance, clean expression, and gear exactly a
             }
             else if (framing == "special")
             {
-                framingTask = "write one optimized image generation prompt for a dynamic scene capturing a key theme, environment, or interesting camera angle for the character (such as a backshot looking over the shoulder at the background, a wide-angle selfie, or a dynamic action pose in their environment).";
-                rule5 = "Always end with: a detailed thematic background reflecting their role, skill, or environment (no transparent background), dynamic camera framing and angle (like a dramatic backshot, wide-angle selfie, or low-angle action shot).";
-                rule7 = "FACE COVERS & SPECIALS: If a face-covering mask is listed, describe it worn on the face, hiding any beard. If framing is 'special', design a highly expressive and interesting shot (like a selfie, a low-angle action pose, or a backshot looking over their shoulder at the background) reflecting their mood, traits, or primary skill (e.g. medical bay for doctor, science lab for researcher, workshop for crafter, battlefield for soldier, psychic storm for active mental states) instead of a transparent background.";
+                string[] specialConcepts = new string[] {
+                    "a realistic modern smartphone SELFIE (arm's-length, candid expression, slight wide-angle lens look, casual everyday setting)",
+                    "a POKEMON / TCG holographic TRADING CARD (full card layout: foil border, a name banner at the top, the character as dramatic hero art, a small role/'type' tag and a short flavour/stat line)",
+                    "an IMITATION OF EDVARD MUNCH'S 'THE SCREAM' recreated with THIS character (iconic open-mouthed screaming pose, hands to cheeks, swirling blood-orange and blue painterly sky)",
+                    "an IMITATION OF DA VINCI'S 'MONA LISA' recreated with THIS character (enigmatic half-smile, three-quarter pose, Renaissance oil-painting style)",
+                    "an IMITATION OF GRANT WOOD'S 'AMERICAN GOTHIC' recreated with THIS character",
+                    "a heroic BAROQUE / RENAISSANCE OIL PORTRAIT of THIS character",
+                    "a dramatic ACTION MOVIE POSTER featuring THIS character with bold poster styling",
+                    "a glossy MAGAZINE COVER featuring THIS character with cover text",
+                    "a dramatic BACKSHOT looking over the shoulder at their environment",
+                    "a low-angle dynamic ACTION pose in their environment",
+                    "a 'THIS IS FINE' meme: the character sitting calmly with a serene little smile and a hot drink while the room behind them is on fire",
+                    "a goofy over-confident DATING-APP SELFIE: arm's-length, ring-light glow, cheesy smolder and a wink",
+                    "a smug GYM-MIRROR FLEX selfie with a ridiculous over-the-top muscle pose",
+                    "the character proudly holding a 'WORLD'S BEST COLONIST' mug to camera like a grand championship trophy",
+                    "a derpy CANDID snapshot caught mid-sneeze with a comically surprised face and motion lines",
+                    "an over-the-top INFLUENCER pose bursting with sparkles, finger-hearts and confetti"
+                };
+                string specialPick = specialConcepts[SpecialRng.Next(specialConcepts.Length)];
+                framingTask = "write one optimized image generation prompt for a SPECIAL creative key-art scene. Use EXACTLY this concept — it was chosen AT RANDOM for variety, so do NOT swap it for one that 'fits' the character better and do NOT pick a different one: " + specialPick + ". Commit to it fully and make it expressive and instantly readable as that concept.";
+                rule5 = "Always end with the chosen concept's own framing plus a FILLED background that fits it (NEVER transparent or plain white) - e.g. the holographic card frame for a trading card, the swirling sky for The Scream, the casual setting for a selfie, the gallery/canvas for an oil painting, or a role-appropriate environment.";
+                rule7 = "FACE COVERS & SPECIALS: If a face-covering mask is listed, describe it worn on the face, hiding any beard. Commit fully to the randomly-assigned special concept above; do NOT substitute a different concept based on the character's role or mood.";
             }
 
             string rule6 = "HEADGEAR/HELMET MANDATE: If a helmet, hat, hood, cap, cowl, or mask is in the apparel list, you ABSOLUTELY MUST include it in the prompt. Describe it prominently as worn on their head/face, or held under one arm.";
-            if (settings != null && settings.excludeHelmet)
+            if (excludeHelmet)
             {
                 rule6 = "HEADGEAR/HELMET EXCLUSION: Do NOT include any helmet, hat, hood, cap, cowl, or mask in the prompt. Ensure the character's hair, hair style, face, and head are fully visible and not covered.";
             }
@@ -1187,7 +1218,8 @@ Content: Render the character's appearance, clean expression, and gear exactly a
                 "9. STRICT SAFETY: Do NOT use any sexually suggestive, nude, naked, topless, bare-chested, or NSFW-sensitive keywords. The output must be strictly PG-rated and safe for work. Ensure the character is always described as wearing clothing (e.g., if no specific apparel is listed, specify simple modest clothes like a plain tunic or fabric wraps).\n" +
                 "10. Keep total output under 350 words.\n" +
                 "11. Output ONLY the prompt — no explanations, no headers, no quotes.\n" +
-                "12. 2D ARTWORK ONLY (MANDATORY): The result is a flat 2D graphic drawing/illustration. Your prompt must NOT contain any photography, 3D, or realism terms. Do not use words like photo, photograph, photorealistic, hyperrealistic, realistic, lens, focal length, mm, depth of field, bokeh, studio lighting, cinematic, volumetric, 3d render, octane. Describe everything as drawn, inked, cel-shaded, flat-colored illustration art.";
+                "12. 2D ARTWORK ONLY (MANDATORY): The result is a flat 2D graphic drawing/illustration. Your prompt must NOT contain any photography, 3D, or realism terms. Do not use words like photo, photograph, photorealistic, hyperrealistic, realistic, lens, focal length, mm, depth of field, bokeh, studio lighting, cinematic, volumetric, 3d render, octane. Describe everything as drawn, inked, cel-shaded, flat-colored illustration art.\n" +
+                "13. SOLO SUBJECT (MANDATORY): Depict EXACTLY ONE single character, alone in the frame — never two or more people. Even for a pawn with a spouse, lover, or followers, show only this one character. Begin the prompt with 'solo, single character, one person alone' and never describe a companion, partner, couple, crowd, or any other person.";
         }
     }
 }

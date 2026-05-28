@@ -212,6 +212,40 @@ namespace AIPortraits
             AIPortraitsMod.settings.pawnVideoToggles[VideoToggleKey(pawn)] = on;
         }
 
+        // ── Per-image generation Settings (helmet / gear-ref / reference-portrait) ────────
+        // Keyed per pawn+framing so each portrait/bodyshot/special keeps its own values.
+        private static string ImgKey(Pawn pawn, string framing) { return pawn.ThingID + "_" + framing; }
+
+        public static bool GetExcludeHelmet(Pawn pawn, string framing)
+        {
+            bool v;
+            if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.pawnExcludeHelmet != null &&
+                AIPortraitsMod.settings.pawnExcludeHelmet.TryGetValue(ImgKey(pawn, framing), out v)) return v;
+            return AIPortraitsMod.settings != null && AIPortraitsMod.settings.excludeHelmet;   // global fallback
+        }
+        public static void SetExcludeHelmet(Pawn pawn, string framing, bool on)
+        { if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.pawnExcludeHelmet != null) AIPortraitsMod.settings.pawnExcludeHelmet[ImgKey(pawn, framing)] = on; }
+
+        public static bool GetGearRef(Pawn pawn, string framing)
+        {
+            bool v;
+            if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.pawnGearRef != null &&
+                AIPortraitsMod.settings.pawnGearRef.TryGetValue(ImgKey(pawn, framing), out v)) return v;
+            return AIPortraitsMod.settings == null || AIPortraitsMod.settings.useGearReferenceSheet;   // global fallback (default on)
+        }
+        public static void SetGearRef(Pawn pawn, string framing, bool on)
+        { if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.pawnGearRef != null) AIPortraitsMod.settings.pawnGearRef[ImgKey(pawn, framing)] = on; }
+
+        public static bool GetRefPortrait(Pawn pawn, string framing)
+        {
+            bool v;
+            if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.pawnRefPortrait != null &&
+                AIPortraitsMod.settings.pawnRefPortrait.TryGetValue(ImgKey(pawn, framing), out v)) return v;
+            return framing != "portrait";   // default: bodyshot + special ON, portrait OFF
+        }
+        public static void SetRefPortrait(Pawn pawn, string framing, bool on)
+        { if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.pawnRefPortrait != null) AIPortraitsMod.settings.pawnRefPortrait[ImgKey(pawn, framing)] = on; }
+
         public static PawnState GetCachedPawnState(Pawn pawn)
         {
             if (pawn == null) return null;
@@ -493,13 +527,23 @@ namespace AIPortraits
             requestError[pawnKey]   = null;
             DebugLog.Log("FSM", "image GEN start key=" + pawnKey + " -> Generating  backend=" + AIPortraitsMod.settings.backendType + " style=" + currentStyle);
 
+            // Apply this image's per-image Settings (helmet / gear-ref / reference-portrait)
+            // onto the state so the prompt, reference sheet, and img2img input all honour them.
+            if (state != null)
+            {
+                state.excludeHelmet = GetExcludeHelmet(pawn, framing);
+                state.useGearRef    = GetGearRef(pawn, framing);
+                state.refPortrait   = GetRefPortrait(pawn, framing);
+            }
+
             string positivePrompt = PromptCompiler.CompilePositivePrompt(state, AIPortraitsMod.settings, continuityToken);
             Log.Message("[Dynamic AI Portraits] PROMPT for " + pawn.LabelShortCap + " (" + framing + "):\n" + positivePrompt);
 
-            // Portrait generates fresh (no continuity image).
-            // Bodyshot and special anchor to the latest portrait image for consistency.
+            // When "reference portrait image" is on for this image, feed the pawn's existing
+            // portrait to the generator as an img2img reference (continuity). Default: on for
+            // bodyshot/special, off for portrait.
             byte[] portraitBytes = null;
-            if (framing == "bodyshot" || framing == "special")
+            if (state != null && state.refPortrait)
             {
                 portraitBytes = GetActivePortraitBytesForFraming(pawn, "portrait");
             }
@@ -527,8 +571,8 @@ namespace AIPortraits
                             string promptFile = System.IO.Path.ChangeExtension(savedPath, ".txt");
                             System.IO.File.WriteAllText(promptFile, promptUsed ?? positivePrompt);
 
-                            // Save references if they were used during generation
-                            if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.useGearReferenceSheet)
+                            // Save the gear reference sheet only if this image used it
+                            if (state != null && state.useGearRef)
                             {
                                 byte[] refSheet = AsyncAIClient.BuildReferenceSheet(state);
                                 if (refSheet != null && refSheet.Length > 0)
@@ -615,12 +659,18 @@ namespace AIPortraits
                 state.framing = framing;
             }
 
+            if (state != null)
+            {
+                state.excludeHelmet = GetExcludeHelmet(pawn, framing);
+                state.useGearRef    = GetGearRef(pawn, framing);
+                state.refPortrait   = GetRefPortrait(pawn, framing);
+            }
+
             Log.Message("[Dynamic AI Portraits] CUSTOM PROMPT for " + pawn.LabelShortCap + " (" + framing + "):\n" + customPrompt);
 
-            // Portrait generates fresh (no continuity image).
-            // Bodyshot and special anchor to the latest portrait image for consistency.
+            // "reference portrait image" -> feed the existing portrait as an img2img reference.
             byte[] portraitBytes = null;
-            if (framing == "bodyshot" || framing == "special")
+            if (state != null && state.refPortrait)
             {
                 portraitBytes = GetActivePortraitBytesForFraming(pawn, "portrait");
             }
@@ -648,8 +698,8 @@ namespace AIPortraits
                             string promptFile = System.IO.Path.ChangeExtension(savedPath, ".txt");
                             System.IO.File.WriteAllText(promptFile, promptUsed ?? customPrompt);
 
-                            // Save references if they were used during generation
-                            if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.useGearReferenceSheet)
+                            // Save the gear reference sheet only if this image used it
+                            if (state != null && state.useGearRef)
                             {
                                 byte[] refSheet = AsyncAIClient.BuildReferenceSheet(state);
                                 if (refSheet != null && refSheet.Length > 0)

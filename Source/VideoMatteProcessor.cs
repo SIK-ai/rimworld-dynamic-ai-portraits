@@ -170,25 +170,20 @@ namespace AIPortraits
             int n = keys.Count;
             int npix = width * height;
 
-            // ── Pass 1: matte every frame and accumulate a per-pixel UNION (max) alpha. ──
-            // u2netp segments each frame independently and, on these animated clips, drops
-            // the torso/body on many frames (it works on some, fails on others) — which made
-            // the body flicker in and out. Taking the max alpha across all frames keeps any
-            // region that was correctly detected in at least one frame, so the body stays
-            // present and stable on every frame. Veo portrait/bodyshot clips are near-static,
-            // so the union is tight (minimal ghosting).
+            // ── Pass 1: matte EVERY frame independently into a per-frame alpha mask. ──
+            // We used to take a whole-clip UNION/max alpha to stop the body flickering when
+            // u2netp drops the torso on some frames. But the union keeps every pixel the subject
+            // occupied in ANY frame, so wherever the subject moves it leaves the background
+            // showing — measured at ~4-6% of the frame on real clips ("still some background").
+            // Instead we keep per-frame masks and, in pass 2, take only a small ±Window temporal
+            // max: that still fills brief u2netp dropouts (stable body, no flicker) while cutting
+            // the leftover background to ~0.1%.
             int wpx = width, hpx = height;
-            byte[] unionAlpha = new byte[npix];
-            // Near-static idle clips: matte every Nth frame (plus the last) and union them,
-            // instead of running u2netp on all ~96 frames. Cuts the (invisible) matte time
-            // ~3x so it is far likelier to finish before the game closes, with negligible
-            // loss in union coverage — fewer samples also means a tighter, less-ghosted union.
-            const int SampleStride = 3;
-            Log.Message("[Dynamic AI Portraits] Video matte START: " + n + " frames, sampling every " + SampleStride + " -> " + outDir);
+            const byte AlphaFloor = 48;   // faint low-confidence alpha below this -> transparent
+            Log.Message("[Dynamic AI Portraits] Video matte START: " + n + " frames (per-frame, temporal window) -> " + outDir);
+            List<byte[]> alphas = new List<byte[]>(n);
             for (int i = 0; i < n; i++)
             {
-                if ((i % SampleStride) != 0 && i != n - 1) continue;
-
                 Color32[] frame = captured[keys[i]];
                 float[] alpha = null;
                 bool threadDone = false;
@@ -200,36 +195,83 @@ namespace AIPortraits
                 });
                 while (!threadDone) yield return null;      // keep the game responsive
 
+                byte[] a = new byte[npix];
                 if (alpha != null)
                 {
                     int lim = npix < alpha.Length ? npix : alpha.Length;
                     for (int p = 0; p < lim; p++)
                     {
                         byte na = (byte)Mathf.Clamp(Mathf.RoundToInt(alpha[p] * 255f), 0, 255);
-                        if (na > unionAlpha[p]) unionAlpha[p] = na;
+                        a[p] = na < AlphaFloor ? (byte)0 : na;   // floor faint background bleed
                     }
                 }
+                alphas.Add(a);
                 if ((i % 24) == 0) Log.Message("[Dynamic AI Portraits] matte alpha pass " + i + "/" + n);
                 yield return null;
             }
 
-            // Kill faint low-confidence background halos: any union alpha below the floor is
-            // snapped to fully transparent. Validated offline on real clips — this removes the
-            // faint bleed/halo around the subject without touching the solid body or soft edges
-            // (foreground coverage above the floor is unchanged).
-            const byte AlphaFloor = 48;
-            for (int p = 0; p < npix; p++)
-                if (unionAlpha[p] < AlphaFloor) unionAlpha[p] = 0;
-
-            // ── Pass 2: apply the stabilized union alpha to every frame and write PNGs. ──
+            // ── Pass 2: build a clean cutout that KEEPS hands/fingers. ──
+            // u2netp detects hands/fingers only intermittently (they're small/thin), so we must
+            // NOT punish intermittent detections:
+            // (1) Temporal MAX over a ±Window window -> any frame that catches a hand keeps it.
+            //     This is what stops hands/fingers vanishing.
+            // (2) Reliable "core" = majority vote (the body detected in most frames). Keep only
+            //     MAX-blobs that TOUCH the core: hands stay (connected to the body via the arm),
+            //     while disconnected false-positive patches are dropped.
+            // (3) Defringe the semi-transparent rim (repaint it with neighbouring subject color)
+            //     instead of eroding -> the white-contaminated edge goes WITHOUT shrinking the
+            //     subject or chewing off fingers. Then a light 1px feather.
+            const int Window = 4;           // ±4 (9-frame) temporal MAX: bridges longer u2netp
+                                            // dropouts so hands AND clothing/torso that vanish
+                                            // for several frames are still recovered.
+            const byte BinThresh = 140;     // confidence for the reliable body "core"
+            const byte KeepFloor = 48;      // MAX kept above this (matches the pass-1 floor)
+            byte[] mx = new byte[npix];
+            byte[] core = new byte[npix];
+            byte[] keep = new byte[npix];
+            byte[] soft = new byte[npix];
+            int[] ccVisited = new int[npix];
+            int[] ccStack = new int[npix];
+            int[] ccComp = new int[npix];
             int written = 0;
             for (int i = 0; i < n; i++)
             {
+                // Boundary-stable window: keep the full (2*Window+1)-frame span even at the
+                // start/end by SHIFTING instead of clamping. Otherwise the last frames see only a
+                // few frames and lose hands/parts that u2netp drops "towards the end" of the clip.
+                int lo = i - Window;
+                int hi = i + Window;
+                if (lo < 0) { hi -= lo; lo = 0; }
+                if (hi > n - 1) { lo -= (hi - (n - 1)); hi = n - 1; if (lo < 0) lo = 0; }
+                int need = ((hi - lo + 1) / 2) + 1;
+                for (int p = 0; p < npix; p++)
+                {
+                    byte m = 0; int c = 0;
+                    for (int j = lo; j <= hi; j++)
+                    {
+                        byte av = alphas[j][p];
+                        if (av > m) m = av;
+                        if (av >= BinThresh) c++;
+                    }
+                    mx[p] = m;
+                    core[p] = (c >= need) ? (byte)255 : (byte)0;
+                    keep[p] = (m >= KeepFloor) ? (byte)255 : (byte)0;
+                }
+
+                // Keep blobs that touch the body core OR are sizeable (a real hand/limb that
+                // briefly disconnects when u2netp drops the connecting wrist); drop only tiny
+                // disconnected false-positive patches.
+                KeepComponentsTouchingCore(keep, core, width, height, ccVisited, ccStack, ccComp, npix / 500);
+                for (int p = 0; p < npix; p++) soft[p] = (keep[p] != 0) ? mx[p] : (byte)0;
+
                 Color32[] frame = captured[keys[i]];
-                int lim = frame.Length < unionAlpha.Length ? frame.Length : unionAlpha.Length;
+                DefringeRGB(frame, soft, width, height, 4);
+                byte[] feathered = BoxBlur(soft, width, height, 1);
+
+                int lim = frame.Length < npix ? frame.Length : npix;
                 for (int p = 0; p < lim; p++)
                 {
-                    if (unionAlpha[p] < frame[p].a) frame[p].a = unionAlpha[p];
+                    if (feathered[p] < frame[p].a) frame[p].a = feathered[p];
                 }
 
                 Texture2D ft = new Texture2D(width, height, TextureFormat.RGBA32, false);
@@ -253,6 +295,102 @@ namespace AIPortraits
             catch { }
             Log.Message("[Dynamic AI Portraits] Video matte complete: " + written + " frames -> " + outDir);
             Finish();
+        }
+
+        // Keep only the connected blobs (4-connectivity) that OVERLAP the reliable `core`,
+        // in-place on `mask`. Hands/extremities stay (connected to the body core via the arm);
+        // disconnected false-positive patches are dropped. `visited`/`stack`/`comp` are caller
+        // scratch buffers (length width*height) so we don't allocate per frame.
+        private static void KeepComponentsTouchingCore(byte[] mask, byte[] core, int w, int h, int[] visited, int[] stack, int[] comp, int minKeepSize)
+        {
+            int n = w * h;
+            for (int i = 0; i < n; i++) visited[i] = 0;
+            for (int start = 0; start < n; start++)
+            {
+                if (mask[start] == 0 || visited[start] != 0) continue;
+                int sp = 0, cn = 0; bool touches = false;
+                stack[sp++] = start; visited[start] = 1;
+                while (sp > 0)
+                {
+                    int idx = stack[--sp]; comp[cn++] = idx;
+                    if (core[idx] != 0) touches = true;
+                    int x = idx % w, y = idx / w;
+                    if (x > 0)     { int nb = idx - 1; if (mask[nb] != 0 && visited[nb] == 0) { visited[nb] = 1; stack[sp++] = nb; } }
+                    if (x < w - 1) { int nb = idx + 1; if (mask[nb] != 0 && visited[nb] == 0) { visited[nb] = 1; stack[sp++] = nb; } }
+                    if (y > 0)     { int nb = idx - w; if (mask[nb] != 0 && visited[nb] == 0) { visited[nb] = 1; stack[sp++] = nb; } }
+                    if (y < h - 1) { int nb = idx + w; if (mask[nb] != 0 && visited[nb] == 0) { visited[nb] = 1; stack[sp++] = nb; } }
+                }
+                // Drop a blob only if it neither touches the core NOR is large enough to be a real
+                // (briefly-disconnected) hand/limb — i.e. drop only small disconnected patches.
+                if (!touches && cn < minKeepSize) for (int c = 0; c < cn; c++) mask[comp[c]] = 0;
+            }
+        }
+
+        // Edge colour decontamination: repaint every visible-but-not-fully-opaque pixel with the
+        // colour of nearby trusted-subject pixels, so the anti-aliased rim can't show the clip's
+        // (white) background — without eroding, so hands/fingers are untouched. Grows opaque
+        // colour outward `iters` px. Modifies `frame` RGB only; `alpha` is left as-is.
+        private static void DefringeRGB(Color32[] frame, byte[] alpha, int w, int h, int iters)
+        {
+            int n = w * h;
+            if (frame.Length < n) return;
+            byte[] filled = new byte[n];
+            byte[] r = new byte[n]; byte[] g = new byte[n]; byte[] b = new byte[n];
+            for (int i = 0; i < n; i++)
+            {
+                r[i] = frame[i].r; g[i] = frame[i].g; b[i] = frame[i].b;
+                filled[i] = (byte)(alpha[i] >= 200 ? 1 : 0);
+            }
+            for (int pass = 0; pass < iters; pass++)
+            {
+                byte[] nf = (byte[])filled.Clone();
+                for (int y = 0; y < h; y++)
+                    for (int x = 0; x < w; x++)
+                    {
+                        int idx = y * w + x;
+                        if (filled[idx] != 0 || alpha[idx] == 0) continue;   // already clean, or fully transparent
+                        int sr = 0, sg = 0, sb = 0, cnt = 0;
+                        if (x > 0     && filled[idx - 1] != 0) { sr += r[idx - 1]; sg += g[idx - 1]; sb += b[idx - 1]; cnt++; }
+                        if (x < w - 1 && filled[idx + 1] != 0) { sr += r[idx + 1]; sg += g[idx + 1]; sb += b[idx + 1]; cnt++; }
+                        if (y > 0     && filled[idx - w] != 0) { sr += r[idx - w]; sg += g[idx - w]; sb += b[idx - w]; cnt++; }
+                        if (y < h - 1 && filled[idx + w] != 0) { sr += r[idx + w]; sg += g[idx + w]; sb += b[idx + w]; cnt++; }
+                        if (cnt > 0) { r[idx] = (byte)(sr / cnt); g[idx] = (byte)(sg / cnt); b[idx] = (byte)(sb / cnt); nf[idx] = 1; }
+                    }
+                filled = nf;
+            }
+            for (int i = 0; i < n; i++) { frame[i].r = r[i]; frame[i].g = g[i]; frame[i].b = b[i]; }
+        }
+
+        // Separable box blur (radius r) on an 8-bit mask -> fresh buffer. Feathers the alpha edge.
+        private static byte[] BoxBlur(byte[] src, int w, int h, int r)
+        {
+            int n = w * h;
+            int win = 2 * r + 1;
+            int[] acc = new int[n];
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    int s = 0;
+                    for (int dx = -r; dx <= r; dx++)
+                    {
+                        int nx = x + dx; if (nx < 0) nx = 0; else if (nx >= w) nx = w - 1;
+                        s += src[y * w + nx];
+                    }
+                    acc[y * w + x] = s / win;
+                }
+            byte[] outm = new byte[n];
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    int s = 0;
+                    for (int dy = -r; dy <= r; dy++)
+                    {
+                        int ny = y + dy; if (ny < 0) ny = 0; else if (ny >= h) ny = h - 1;
+                        s += acc[ny * w + x];
+                    }
+                    outm[y * w + x] = (byte)(s / win);
+                }
+            return outm;
         }
 
         private void Finish()

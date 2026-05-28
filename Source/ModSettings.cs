@@ -183,6 +183,12 @@ namespace AIPortraits
         public Dictionary<string, string> pawnFraming = new Dictionary<string, string>();
         public Dictionary<string, bool> pawnVideoToggles = new Dictionary<string, bool>();
 
+        // Per-image generation Settings (keyed by ThingID + "_" + framing) so each portrait/
+        // bodyshot/special of each pawn keeps its own helmet / gear-ref / reference-portrait.
+        public Dictionary<string, bool> pawnExcludeHelmet = new Dictionary<string, bool>();
+        public Dictionary<string, bool> pawnGearRef       = new Dictionary<string, bool>();
+        public Dictionary<string, bool> pawnRefPortrait   = new Dictionary<string, bool>();
+
         // Debug Mode — opt-in structured logging to AIPortraitsCache/DebugLogs (see DebugLog.cs).
         public bool debugMode = false;
 
@@ -258,6 +264,9 @@ namespace AIPortraits
             Scribe_Collections.Look(ref activePortraits, "activePortraits", LookMode.Value, LookMode.Value);
             Scribe_Collections.Look(ref pawnFraming, "pawnFraming", LookMode.Value, LookMode.Value);
             Scribe_Collections.Look(ref pawnVideoToggles, "pawnVideoToggles", LookMode.Value, LookMode.Value);
+            Scribe_Collections.Look(ref pawnExcludeHelmet, "pawnExcludeHelmet", LookMode.Value, LookMode.Value);
+            Scribe_Collections.Look(ref pawnGearRef, "pawnGearRef", LookMode.Value, LookMode.Value);
+            Scribe_Collections.Look(ref pawnRefPortrait, "pawnRefPortrait", LookMode.Value, LookMode.Value);
 
             if (activePortraits == null)
                 activePortraits = new Dictionary<string, string>();
@@ -265,6 +274,9 @@ namespace AIPortraits
                 pawnFraming = new Dictionary<string, string>();
             if (pawnVideoToggles == null)
                 pawnVideoToggles = new Dictionary<string, bool>();
+            if (pawnExcludeHelmet == null) pawnExcludeHelmet = new Dictionary<string, bool>();
+            if (pawnGearRef == null) pawnGearRef = new Dictionary<string, bool>();
+            if (pawnRefPortrait == null) pawnRefPortrait = new Dictionary<string, bool>();
 
             if (Scribe.mode == LoadSaveMode.PostLoadInit)
             {

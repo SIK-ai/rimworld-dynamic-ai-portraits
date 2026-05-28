@@ -21,6 +21,13 @@ namespace AIPortraits
         public string headShape;        // from headTypeDef label (Narrow, Average, Wide, etc.)
         public string framing;          // portrait / bodyshot / special
 
+        // Per-image generation options, set at generation time from the per-image Settings
+        // (so each portrait/bodyshot/special of each pawn can differ). Defaults match the
+        // legacy global behaviour.
+        public bool excludeHelmet = false;   // hide helmets/headgear in the prompt + ref sheet
+        public bool useGearRef = true;       // build a gear reference sheet for this image
+        public bool refPortrait = false;     // use the pawn's existing portrait as an image reference
+
         // ── Appearance ──────────────────────────────────────────────────────────
         public string hairStyle;
         public string hairColor;
@@ -406,15 +413,10 @@ namespace AIPortraits
                                           (string.IsNullOrEmpty(colorDesc) ? "" : colorDesc + " ") +
                                           itemLabel + damageSuffix).Trim();
 
-                    bool isHelmet = PromptCompiler.IsHeadgear(item);
-                    if (AIPortraitsMod.settings != null && AIPortraitsMod.settings.excludeHelmet && isHelmet)
-                    {
-                        // Exclude headgear from being listed
-                    }
-                    else
-                    {
-                        s.apparel.Add(apparelDesc);
-                    }
+                    // Always include headgear here; the per-image "exclude helmet" choice is
+                    // applied later at prompt time (BuildGearLine / GetLLMSystemPrompt read
+                    // state.excludeHelmet), so it can differ per portrait/bodyshot/special.
+                    s.apparel.Add(apparelDesc);
 
                     if (defLc.Contains("armor") || defLc.Contains("plate") || defLc.Contains("marine"))
                         armorCount++;
