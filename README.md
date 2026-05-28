@@ -1,4 +1,4 @@
-# Dynamic AI Portraits — RimWorld 1.6 Mod
+# Dynamic AI Portraits — RimWorld 1.5 / 1.6 Mod
 
 Generates AI portraits and looping animated previews of your colonists that reflect their real-time state: apparel, weapons, health, injuries, mental breaks, xenotype, ideology role, mood, royal title, addictions, pregnancy, and more. The portrait floats above the inspect pane as a clean transparent overlay whenever a colonist is selected and no inspect tab is open.
 
@@ -147,7 +147,7 @@ In API Settings → **Prompt Generation** section, switch from `No — Compiled 
 
 ## Building from Source
 
-Requirements: Windows, .NET Framework 4.x (`csc.exe` at the standard path), RimWorld 1.6.
+Requirements: Windows, .NET Framework 4.x (`csc.exe` at the standard path), RimWorld 1.5 or 1.6.
 
 To compile the mod locally without polluting your Git status with machine-specific file paths:
 
@@ -159,7 +159,7 @@ To compile the mod locally without polluting your Git status with machine-specif
    set "HARMONY_PATH=C:\Program Files (x86)\Steam\steamapps\common\RimWorld\Mods\Harmony\Current\Assemblies\0Harmony.dll"
    set "RIMWORLD_MODS_DIR=C:\Program Files (x86)\Steam\steamapps\common\RimWorld\Mods"
    ```
-3. Run [build.bat](build.bat). The build script will automatically detect and load your settings from `build_local.bat`, compile `AIPortraits.dll`, output it to `1.6\Assemblies/` and `Assemblies/`, and optionally deploy it straight to your game's `Mods` folder if `RIMWORLD_MODS_DIR` is set.
+3. Run [build.bat](build.bat). The build script will automatically detect and load your settings from `build_local.bat`, compile `AIPortraits.dll` for **RimWorld 1.5 and 1.6**, output it to `1.5\Assemblies/`, `1.6\Assemblies/`, and `Assemblies/`, and optionally deploy it straight to your game's `Mods` folder if `RIMWORLD_MODS_DIR` is set.
 
 For a deeper dive into the mod's internal systems, codebase structure, and algorithms, see the [Developer Architecture Guide](DEVELOPER.md).
 
@@ -167,7 +167,7 @@ For a deeper dive into the mod's internal systems, codebase structure, and algor
 
 ## Compatibility
 
-- RimWorld **1.6** only
+- RimWorld **1.5** and **1.6**
 - Requires **Harmony**
 - Compatible with **Biotech**, **Ideology**, **Royalty**, and **Anomaly** DLCs (xenotypes, genes, ideology roles, royal titles, psylink, ghoul/inhumanized states)
 - Patches `MainTabWindow_Inspect.ExtraOnGUI` (postfix) only — minimal mod surface area
