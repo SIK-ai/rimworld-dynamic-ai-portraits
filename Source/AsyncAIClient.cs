@@ -249,7 +249,9 @@ namespace AIPortraits
                 else
                 {
                     string errBody = (request.downloadHandler != null) ? request.downloadHandler.text : "";
-                    callback(null, "HTTP Error " + request.responseCode + " " + request.error + " - " + errBody);
+                    string errMsg = "HTTP Error " + request.responseCode + " " + request.error + " - " + errBody;
+                    if (!string.IsNullOrEmpty(apiKey)) errMsg = errMsg.Replace(apiKey, "[REDACTED]");
+                    callback(null, errMsg);
                 }
             }
         }
@@ -1720,7 +1722,7 @@ namespace AIPortraits
                     else if (videoUri != null)
                     {
                         string downloadUrl = videoUri.Contains("?") ? (videoUri + "&key=" + apiKey) : (videoUri + "?key=" + apiKey);
-                        CoroutineRunner.Instance.StartCoroutine(DownloadVideoBytes(downloadUrl, delegate(byte[] videoBytes, string dlErr)
+                        CoroutineRunner.Instance.StartCoroutine(DownloadVideoBytes(downloadUrl, apiKey, delegate(byte[] videoBytes, string dlErr)
                         {
                             if (dlErr != null)
                             {
@@ -1823,7 +1825,7 @@ namespace AIPortraits
             callback(null, "Veo video generation timed out after " + (maxAttempts * 10) + " seconds.");
         }
 
-        private static IEnumerator DownloadVideoBytes(string downloadUrl, Action<byte[], string> callback)
+        private static IEnumerator DownloadVideoBytes(string downloadUrl, string apiKey, Action<byte[], string> callback)
         {
             using (UnityWebRequest request = UnityWebRequest.Get(downloadUrl))
             {
@@ -1832,7 +1834,9 @@ namespace AIPortraits
 
                 if (!IsSuccess(request))
                 {
-                    callback(null, "Failed to download video file: " + request.error);
+                    string errMsg = "Failed to download video file: " + request.error;
+                    if (!string.IsNullOrEmpty(apiKey)) errMsg = errMsg.Replace(apiKey, "[REDACTED]");
+                    callback(null, errMsg);
                     yield break;
                 }
 
