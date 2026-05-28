@@ -49,7 +49,7 @@ namespace AIPortraits
                 {
                     // Help Mono's P/Invoke find the native onnxruntime.dll that ships next to our managed DLL.
                     string asmDir = null;
-                    try { asmDir = Path.GetDirectoryName(typeof(U2NetRemover).Assembly.Location); } catch { }
+                    try { asmDir = Path.GetDirectoryName(typeof(U2NetRemover).Assembly.Location); } catch (System.Exception ex) { if (Verse.Prefs.DevMode) Verse.Log.Warning("[Dynamic AI Portraits] Silent exception: " + ex.Message); }
                     if (!string.IsNullOrEmpty(asmDir))
                     {
                         SetDllDirectory(asmDir);
@@ -70,7 +70,7 @@ namespace AIPortraits
                     foreach (string k in session.InputMetadata.Keys) { inputName = k; break; }
                     initOk = !string.IsNullOrEmpty(inputName);
                     if (initOk)
-                        Log.Message("[Dynamic AI Portraits] u2netp ONNX background remover initialized.");
+                        if (Prefs.DevMode) Log.Message("[Dynamic AI Portraits] u2netp ONNX background remover initialized.");
                 }
                 catch (Exception ex)
                 {
@@ -91,7 +91,7 @@ namespace AIPortraits
                     if (File.Exists(p)) return p;
                 }
             }
-            catch { }
+            catch (System.Exception ex) { if (Verse.Prefs.DevMode) Verse.Log.Warning("[Dynamic AI Portraits] Silent exception: " + ex.Message); }
             if (!string.IsNullOrEmpty(asmDir))
             {
                 string p1 = Path.Combine(Path.Combine(asmDir, "Models"), "u2netp.onnx");

@@ -49,7 +49,7 @@ namespace AIPortraits.StoryEngine
                     GenerateComicPanels(jsonResponse, storyFile);
                 }
 
-                Log.Message("[Story Engine] Story chapter written to: " + storyFile);
+                if (Prefs.DevMode) Log.Message("[Story Engine] Story chapter written to: " + storyFile);
             }
             catch (Exception ex)
             {
@@ -77,7 +77,7 @@ namespace AIPortraits.StoryEngine
 
                     // Queue the image generation
                     string panelId = "Panel_" + panelIndex;
-                    Log.Message("[Story Engine] Queueing Panel: " + fullPrompt);
+                    if (Prefs.DevMode) Log.Message("[Story Engine] Queueing Panel: " + fullPrompt);
                     
                     // We don't have a state for the panel, so we pass a dummy or null state
                     // The AsyncAIClient queueing handles the API call

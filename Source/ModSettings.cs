@@ -1927,7 +1927,7 @@ namespace AIPortraits
                     if (lastActualFile != null) lastActualPrompt = File.ReadAllText(lastActualFile);
                 }
             }
-            catch (Exception) { }
+            catch (System.Exception ex) { if (Verse.Prefs.DevMode) Verse.Log.Warning("[Dynamic AI Portraits] Silent exception: " + ex.Message); }
 
             float rw = rightInner.width - 16f;
             float dataH = Text.CalcHeight(dataSheet, rw - 12f);
