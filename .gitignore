@@ -42,3 +42,7 @@ Sprites/
 # Agent tooling (skills CLI) — not part of the mod
 .agents/
 skills-lock.json
+
+# Local video-matte debug output (frame strips / preview gifs) — not part of the mod
+matte_*.gif
+matte_*.png

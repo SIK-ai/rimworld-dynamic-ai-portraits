@@ -10,6 +10,8 @@ This project aspires to [Semantic Versioning](https://semver.org/).
 - **RimWorld 1.5 support** — multi-version build (1.5 + 1.6). `About.xml` and `LoadFolders.xml` declare both; `build.bat` refactored to compile and deploy per-version (`1.5\Assemblies/`, `1.6\Assemblies/`, `Assemblies/`).
 - **Local u2netp ONNX background removal** (image + video) — offline neural cutout via ONNX Runtime, now the primary local remover for `portrait`/`bodyshot` framings; the YCbCr flood-fill remains as a fallback. `special` framing keeps its background.
 - **Korean usage guide** ([사용방법.md](사용방법.md)) for sharing.
+- **Opt-in Debug Mode** — structured per-session logging that bookends game start / clean-shutdown, for backtracking issues ([DebugLog.cs](Source/DebugLog.cs)).
+- **Per-image settings + combined reference image** — generation settings can be tuned per image, and matched gear sprites are stitched into a single reference image for the backend.
 
 ### Changed
 - **Flat-2D art direction** — style prompts overhauled to enforce strictly flat 2D illustration (bold ink lines, cel-shaded fills) and strip photographic/realism cues (lens, depth of field).
@@ -20,6 +22,9 @@ This project aspires to [Semantic Versioning](https://semver.org/).
 - Guard against portrait/video double-generation.
 - Veo video: dropped unsupported `generateAudio`, steer audio via prompt.
 - Matte directory-deletion race that could corrupt in-progress mattes.
+- **Log leak**: `videoApiKey` and `cfBgRemovalKey` are now scrubbed by `SanitizeLog` (the Veo key was previously not sanitized).
+- Background-removal mask dilation (`DilateMask`) — grows the cutout so arms/clothing aren't clipped at the edges.
+- Per-frame video matting hardened for portrait/bodyshot reliability.
 
 ## [0.2.0] — 2026-05-26
 
