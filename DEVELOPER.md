@@ -6,7 +6,7 @@ This document provides a detailed technical breakdown of the mod's internal syst
 
 ## 1. Architectural Diagram
 
-The mod hooks into RimWorld's startup sequence and UI loop, routing pawn metadata extraction, prompt generation, async image generation, post-processing, and caching.
+The mod hooks into RimWorld's startup sequence and UI loop, routing pawn metadata extraction, prompt generation, async image generation, post-processing, caching, and the Colony Story Engine.
 
 ```mermaid
 graph TD
@@ -34,27 +34,44 @@ graph TD
     CacheManager --> Memory[In-Memory Textures]
     
     UIOverlay --> UI[UI_AIPortraitCard & Dialogs]
+    
+    %% Story Engine Flow
+    RimWorld --> StoryOrchestrator[StoryOrchestrator GameComponent]
+    StoryOrchestrator --> StoryLogTracker[StoryLogTracker]
+    StoryLogTracker --> nativeLogs[(Find.PlayLog / Find.BattleLog)]
+    StoryLogTracker --> externalLogs[(Desktop rimlog.txt)]
+    
+    StoryOrchestrator --> AsyncAIClient
+    AsyncAIClient --> StoryArtDirector[StoryArtDirector]
+    StoryArtDirector --> StoryMD[Storybooks/Story_timestamp.md]
+    StoryArtDirector --> ComicImg[Storybooks/Story_timestamp_Panel_X.png]
+    
+    UIOverlay --> UI_StoryBook[UI_StoryBook Window]
+    UI_StoryBook --> StoryMD
+    UI_StoryBook --> ComicImg
 ```
 
 ---
 
 ## 2. Core Codebase Modules
 
-The mod's source code is organized into modular files within the [Source/](Source) directory:
+The mod's source code is organized into modular files within the [Source/](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source) directory:
 
 | Module | Location | Responsibility |
 |---|---|---|
-| **Bootstrapping** | [ModController.cs](Source/ModController.cs) | The initialization entry point. Extends `Verse.Mod` to load the settings model and applies Harmony patch definitions during startup. |
-| **Settings Model** | [ModSettings.cs](Source/ModSettings.cs) | Declares `AIPortraitsSettings` which inherits from `Verse.ModSettings`. Manages serialization of configurations (credentials, styles, offsets, active portrait maps) using RimWorld's `Scribe` framework and defines the Mod Settings UI. |
-| **State Extraction** | [PawnStateExtractor.cs](Source/PawnStateExtractor.cs) | Translates live game pawn objects into a serializable [PawnState](Source/PawnStateExtractor.cs#L13-L110) model. Collects physical descriptors, physical and mental health status, bionics, equipment, roles, and backstory. |
-| **Prompt Compiler** | [PromptCompiler.cs](Source/PromptCompiler.cs) | Compiles standard structural prompts and formatting rules from extracted pawn states. Contains token guidelines for styles (Korean Webtoon, Rick & Morty Cartoon, 16-bit JRPG Pixel) and configures overrides. |
-| **Async Client** | [AsyncAIClient.cs](Source/AsyncAIClient.cs) | Coordinates non-blocking HTTP requests using Unity's `UnityWebRequest` wrapped inside coroutines. Implements interfaces for all 6 backends, handles Gemini Flash Lite prompt expansions, and requests Google Veo 3.1 Lite video generations. |
-| **Local BG Removal (primary)** | [U2NetRemover.cs](Source/U2NetRemover.cs) | Offline neural background removal using the **u2netp ONNX model** (via `Microsoft.ML.OnnxRuntime`). Default cutout path for `portrait` / `bodyshot` framings. Transparently falls back to `BackgroundRemover` if the native ONNX runtime or model can't load. |
-| **Local BG Removal (legacy fallback)** | [BackgroundRemover.cs](Source/BackgroundRemover.cs) | CPU fallback used only when ONNX is unavailable. Multi-pass perceptual YCbCr flood-fill that extracts transparent overlays from solid background outputs. |
-| **Video Matting** | [VideoMatteProcessor.cs](Source/VideoMatteProcessor.cs) | Post-processes generated `.mp4` loops by running u2netp per-frame background removal off the main thread (`special` framing skipped), then reassembling a matted video for transparent playback. |
-| **UI Rendering** | [UI_AIPortraitCard.cs](Source/UI_AIPortraitCard.cs) | Implements custom UI windows including the inspect overlay card, the prompt debugging sheet, the saved portrait/video gallery, and the custom video player [VideoPlaybackManager](Source/UI_AIPortraitCard.cs#L954-L1038). |
-| **Harmony Hooks** | [HarmonyPatches.cs](Source/HarmonyPatches.cs) | Modifies RimWorld UI, stops video playback on inspect window close, and intercepts apparel render nodes to bypass helmet sprites on active portrait matches. |
-| **File Management** | [CacheManager.cs](Source/CacheManager.cs) | Dictates filesystem layout. Saves images and companion text summaries in standard user directories (`Documents/RimWorld Portraits/`) isolated by pawn and world save files. |
+| **Bootstrapping** | [ModController.cs](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/ModController.cs) | The initialization entry point. Extends `Verse.Mod` to load the settings model and applies Harmony patch definitions during startup. |
+| **Settings Model** | [ModSettings.cs](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/ModSettings.cs) | Declares `AIPortraitsSettings` which inherits from `Verse.ModSettings`. Manages serialization of configurations (credentials, styles, offsets, active portrait maps, story options) using RimWorld's `Scribe` framework and defines the Mod Settings UI. |
+| **State Extraction** | [PawnStateExtractor.cs](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/PawnStateExtractor.cs) | Translates live game pawn objects into a serializable [PawnState](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/PawnStateExtractor.cs#L13-L110) model. Collects physical descriptors, physical and mental health status, bionics, equipment, roles, and backstory. |
+| **Prompt Compiler** | [PromptCompiler.cs](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/PromptCompiler.cs) | Compiles standard structural prompts and formatting rules from extracted pawn states. Contains token guidelines for styles (Korean Webtoon, Rick & Morty Cartoon, 16-bit JRPG Pixel) and configures overrides. |
+| **Async Client** | [AsyncAIClient.cs](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/AsyncAIClient.cs) | Coordinates non-blocking HTTP requests using Unity's `UnityWebRequest` wrapped inside coroutines. Implements interfaces for all 6 backends, handles Gemini Flash Lite prompt expansions, requests Google Veo 3.1 Lite video generations, and manages LLM prompts for the Storybook. |
+| **Local Post-Process** | [BackgroundRemover.cs](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/BackgroundRemover.cs) | Provides local CPU fallback background removal. Uses a multi-pass perceptual YCbCr flood-fill algorithm to extract transparent overlays from solid background outputs. |
+| **UI Rendering** | [UI_AIPortraitCard.cs](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/UI_AIPortraitCard.cs) | Implements custom UI windows including the inspect overlay card, the prompt debugging sheet, the saved portrait/video gallery, and the custom video player [VideoPlaybackManager](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/UI_AIPortraitCard.cs#L954-L1038). |
+| **Harmony Hooks** | [HarmonyPatches.cs](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/HarmonyPatches.cs) | Modifies RimWorld UI, stops video playback on inspect window close, and intercepts apparel render nodes to bypass helmet sprites on active portrait matches. |
+| **File Management** | [CacheManager.cs](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/CacheManager.cs) | Dictates filesystem layout. Saves images and companion text summaries in standard user directories (`Documents/RimWorld Portraits/`) isolated by pawn and world save files. |
+| **Story Orchestrator** | [StoryOrchestrator.cs](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/StoryEngine/StoryOrchestrator.cs) | Extends `Verse.GameComponent` to track colony playtime, poll logs periodically, and submit logs to Gemini at configured day intervals to generate stories. |
+| **Story Logger** | [StoryLogTracker.cs](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/StoryEngine/StoryLogTracker.cs) | Aggregates event history from native play logs, battle logs, tales, and external text files (`rimlog.txt` on desktop). Excludes duplicate listings on game load. |
+| **Story Director** | [StoryArtDirector.cs](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/StoryEngine/StoryArtDirector.cs) | Parses JSON responses returned by Gemini, writes markdown chronicles to disk, and queues image generations for generated comic panel layouts. |
+| **Storybook UI** | [UI_StoryBook.cs](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/StoryEngine/UI_StoryBook.cs) | Renders the colony's generated novel chapters and automatically parses and draws comic panel illustrations inline with appropriate scaling. |
 
 ---
 
@@ -78,15 +95,12 @@ The lifecycle of creating, cleaning, caching, and showing a portrait follows thi
        │
        ▼
 [AsyncAIClient posts payload to chosen Image Generation backend]
-       │   (no key / runtime failure on a paid source → auto-retry on free Pollinations)
        │
        ▼
 [Download & decode raw image bytes into Texture2D]
        │
        ▼
-[Run Background Removal — portrait/bodyshot only:
-   Cloudflare Bria RMBG (cloud, if enabled) → u2netp ONNX (local) → legacy YCbCr (fallback);
-   'special' framing keeps its background]
+[Run Background Removal (Bria RMBG or local flood fill)]
        │
        ▼
 [Save outputs to persistent directories & pin to active pawn slots]
@@ -162,7 +176,7 @@ It parses the status response to verify whether:
 3. A Responsible AI (RAI) safety filter blocked the generation (parsed from the response's RAI/safety block).
 
 ### C. In-Game Playback Engine
-The video playback is handled by the [VideoPlaybackManager](Source/UI_AIPortraitCard.cs#L954-L1038) class:
+The video playback is handled by the [VideoPlaybackManager](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/UI_AIPortraitCard.cs#L954-L1038) class:
 - Instantiates a persistent Unity `GameObject` (`AIPortraits_VideoPlayer_<PawnID>`) marked with `DontDestroyOnLoad`.
 - Attaches a `VideoPlayer` component, configures it to loop, and routes the video path (`.mp4`) as its URL source.
 - Sets the audio output to `VideoAudioOutputMode.None` to mute any sound effects.
@@ -173,12 +187,7 @@ The video playback is handled by the [VideoPlaybackManager](Source/UI_AIPortrait
 
 ## 5. Background Removal Implementations
 
-The mod uses a **three-tier** approach to background removal for `portrait` / `bodyshot` framings (the `special` framing always keeps its scenic background). Each tier degrades into the next, so a cutout is always produced even fully offline.
-
-The runtime order (see `AsyncAIClient.DeliverImage` → `DeliverImageLocal`):
-1. **Cloudflare Bria RMBG 1.4** (cloud) — only when *Use AI Background Removal* is enabled and a key is set.
-2. **u2netp ONNX** (local, offline) — the default path when the cloud remover is off or fails.
-3. **Perceptual YCbCr flood-fill** (legacy) — used only if the ONNX runtime/model can't load.
+The mod features a dual-pipeline approach to background removal, ensuring high-quality cutouts while maintaining offline reliability.
 
 ### A. Cloud-Based Pipeline: Cloudflare Bria RMBG Integration
 If **AI Background Removal** is enabled in settings and the active pawn framing is `portrait` or `bodyshot`:
@@ -189,17 +198,8 @@ If **AI Background Removal** is enabled in settings and the active pawn framing 
 4. Cloudflare runs the **Bria RMBG v1.4** model (a deep learning matting network) and returns the processed image containing an alpha channel (transparency).
 5. If the request fails, the mod logs a sanitized warning and automatically redirects the image into the local C# processing pipeline.
 
-### B. Local Primary Pipeline: u2netp ONNX
-The default local remover ([U2NetRemover.cs](Source/U2NetRemover.cs)) runs the **u2netp** salient-object-detection model through ONNX Runtime, entirely offline:
-1. The source texture is resized to 320×320 and normalized with ImageNet mean/std into a `1×3×320×320` tensor.
-2. `InferenceSession.Run` produces a single-channel saliency mask, which is min–max normalized to `0..1`.
-3. The mask is bilinearly upsampled back to the source resolution and written to the alpha channel — alpha is only ever *reduced*, never added, so an already-transparent input is preserved.
-4. The native `onnxruntime.dll` is located next to the managed assembly via `SetDllDirectory` + `LoadLibrary`; the `u2netp.onnx` weights resolve from the mod's `Models/` folder. If init or inference throws, the call transparently falls back to the YCbCr remover below.
-
-`ComputeAlpha` touches no Unity objects, so the video matte pipeline ([VideoMatteProcessor.cs](Source/VideoMatteProcessor.cs)) can call it from a background thread to matte `.mp4` frames.
-
-### C. Legacy Fallback Pipeline: Perceptual YCbCr Flood-Fill
-The CPU fallback ([BackgroundRemover.cs](Source/BackgroundRemover.cs)) processes images on the CPU in a few milliseconds without using heavy machine-learning libraries, and is used only when ONNX is unavailable.
+### B. Local Offline Pipeline: Perceptual YCbCr Flood-Fill
+The local background extractor ([BackgroundRemover.cs](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/BackgroundRemover.cs)) processes images on the CPU in a few milliseconds without using heavy machine-learning libraries.
 
 #### Step 1: Color Space Conversion (YCbCr)
 Standard RGB color spaces are poor at representing human visual similarity. The algorithm converts each pixel to **YCbCr** to separate Luma (brightness $Y$) from Chroma (color coordinates $Cb, Cr$):
@@ -238,7 +238,7 @@ This creates a smooth, anti-aliased edge.
 
 ## 6. PawnState Data Extraction Model
 
-The [PawnState](Source/PawnStateExtractor.cs#L13-L110) model extracts character attributes from live game objects:
+The [PawnState](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/PawnStateExtractor.cs#L13-L110) model extracts character attributes from live game objects:
 
 1. **Identity & Demographics**: `pawnId`, `name`, `gender`, `bioAge`, `bodyType` (Thin, Female, Male, Hulk, Fat), `headShape`.
 2. **Appearance & Aesthetics**: `hairStyle`, `hairColor` (RGB), `skinColor` (RGB), `beardStyle`, `tattooDef`, `furColor` (Biotech fur types).
@@ -264,10 +264,10 @@ Previously, searching for a cached portrait texture in the UI overlay used strin
 ```csharp
 string cacheKey = pawn.ThingID + "|" + framing;
 ```
-This allocation of new string instances every single frame created tens of megabytes of GC pressure per minute.
+This allocation of new string instances every single frame created tens of megabytes of GC memory pressure per minute.
 
 ### Struct-Based Cache Key Resolution
-To solve this, the mod uses the [PawnFramingKey](Source/UI_AIPortraitCard.cs#L23) struct as the dictionary lookup key. 
+To solve this, the mod uses the [PawnFramingKey](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/UI_AIPortraitCard.cs#L23) struct as the dictionary lookup key. 
 - Structs are allocated on the stack (generating **zero GC memory** on the heap).
 - Implements `IEquatable<PawnFramingKey>` to ensure fast, hash-based lookups without boxing.
 - Custom `GetHashCode()` matches compiler constraints:
@@ -299,15 +299,15 @@ public struct PawnFramingKey : IEquatable<PawnFramingKey>
 
 ## 8. Harmony Patches Hook Architecture
 
-The mod uses [HarmonyPatches.cs](Source/HarmonyPatches.cs) to intercept RimWorld methods:
+The mod uses [HarmonyPatches.cs](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/HarmonyPatches.cs) to intercept RimWorld methods:
 
-1. **[Patch_MainTabWindow_Inspect_ExtraOnGUI](Source/HarmonyPatches.cs#L12-L345) (Postfix)**:
+1. **[Patch_MainTabWindow_Inspect_ExtraOnGUI](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/HarmonyPatches.cs#L12-L345) (Postfix)**:
    - Hooks into `MainTabWindow_Inspect.ExtraOnGUI` to overlay the character portrait.
    - Restricts drawing to when a single pawn is selected, is not destroyed, belongs to the player faction, and the inspect window has **no open tabs** (Log, Health, Social, etc.).
    - Leaves `36px` clearance above the inspect pane to avoid covering the tab-selection bar.
-2. **[Patch_Window_PostClose](Source/HarmonyPatches.cs#L347-L358) (Postfix)**:
+2. **[Patch_Window_PostClose](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/HarmonyPatches.cs#L347-L358) (Postfix)**:
    - Detects when the inspect window is closed and signals `VideoPlaybackManager.StopPlayback()` to clean up memory, textures, and video players.
-3. **[Patch_PawnRenderNode_Apparel_AppendRequests](Source/HarmonyPatches.cs#L360-L375) (Prefix)**:
+3. **[Patch_PawnRenderNode_Apparel_AppendRequests](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/HarmonyPatches.cs#L360-L375) (Prefix)**:
    - Intercepts apparel drawing requests on characters when generating reference sheets.
    - If `AsyncAIClient.isGeneratingRefPortrait` is active and the setting `excludeHelmet` is set to `true`, it suppresses headgear drawing requests, allowing the exporter to render a helmet-free native pawn sprite.
 
@@ -318,14 +318,57 @@ The mod uses [HarmonyPatches.cs](Source/HarmonyPatches.cs) to intercept RimWorld
 The mod implements several systems to ensure user credentials and local folder structures are never leaked during code sharing, logging, or game streaming:
 
 ### Log Sanitization
-[AsyncAIClient.SanitizeLog](Source/AsyncAIClient.cs) intercepts all API response and error logs. It runs string replacements on all fields containing user-configured keys (`apiKey`, `cfApiKey`, `giApiKey`, `diApiKey`, `hfApiKey`, `llmApiKey`, `cfBgRemovalKey`).
+[AsyncAIClient.SanitizeLog](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/AsyncAIClient.cs) intercepts all API response and error logs. It runs string replacements on all fields containing user-configured keys (`apiKey`, `cfApiKey`, `giApiKey`, `diApiKey`, `hfApiKey`, `llmApiKey`, `cfBgRemovalKey`).
 - It parses combined Cloudflare credentials (`account_id:token`), splitting the values on the colon and redacting both the Account ID and Token separately.
 - This prevents credentials from being exposed if a user shares their `Player.log` file while reporting bugs.
 
 ### UI Field Masking
-In the mod settings page ([ModSettings.cs](Source/ModSettings.cs)), all text fields that input keys use `UnityEngine.GUI.PasswordField('*')` to prevent credentials from being shown on screen, protecting privacy during video streaming or screen sharing.
+In the mod settings page ([ModSettings.cs](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/ModSettings.cs)), all text fields that input keys use `UnityEngine.GUI.PasswordField('*')` to prevent credentials from being shown on screen, protecting privacy during video streaming or screen sharing.
 
 ### Portable Compilations
 To keep compilation paths private and prevent Windows username leakage in the repository:
-- All developer-specific local paths are moved to a git-ignored [build_local.bat](build_local.bat) file.
-- The tracked [build.bat](build.bat) remains generic and reads settings from `build_local.bat` at runtime, keeping local setups private and portable.
+- All developer-specific local paths are moved to a git-ignored [build_local.bat](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/build_local.bat) file.
+- The tracked [build.bat](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/build.bat) remains generic and reads settings from `build_local.bat` at runtime, keeping local setups private and portable.
+
+---
+
+## 10. Colony Story Engine Pipeline
+
+The **Colony Story Engine** tracks gameplay history, compiles event histories, and automatically publishes structured chronicles and graphic novel illustrations.
+
+### A. Events Logging and Harvesting
+The [StoryLogTracker](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/StoryEngine/StoryLogTracker.cs) class executes periodically to capture historical log data:
+- **PlayLog**: Captures general colonist interactions and social exchanges.
+- **BattleLog**: Harvests details of skirmishes, wounds, and combat accomplishments.
+- **TaleManager**: Captures major historical events (e.g. raw tales of art creations, deaths, marriages).
+- **Desktop Logs**: Intercepts external logs written to `rimlog.txt` on the user's desktop folder.
+- **Session Load Guard**: Implements `InitializeIfNecessary()` to register all existing logs on game loading, ensuring historic entries are not duplicated into the buffer during reload events.
+
+### B. Storybook Generation
+Every day, [StoryOrchestrator](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/StoryEngine/StoryOrchestrator.cs) determines if the scheduled interval has passed.
+1. The accumulated raw event logs are extracted and cleared.
+2. A structured JSON formatting schema is generated:
+   ```json
+   {
+     "novel_chapter": "A narrative chapter detailing the colony's events...",
+     "comic_panels": [
+       {
+         "scene_description": "A visual scene depicting the action...",
+         "pawn_names": ["ColonistA", "ColonistB"],
+         "dialogue": "Speech balloon bubble content..."
+       }
+     ]
+   }
+   ```
+3. A content request is routed to the configured LLM API using [AsyncAIClient.QueueLLMPrompt](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/AsyncAIClient.cs#L202).
+4. The output is processed by [StoryArtDirector](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/StoryEngine/StoryArtDirector.cs):
+   - The chapter text is appended to a markdown document (`Documents/RimWorld Portraits/Storybooks/Story_timestamp.md`).
+   - If panel generation is enabled, the director compiles prompt strings combining the panel scene descriptions and the manhwa style configuration, queueing image generations via `AsyncAIClient.QueueCustomGeneration`.
+   - Generated panels are saved as PNGs next to the markdown files and appended to the markdown document.
+
+### C. In-Game Storybook Reader
+The custom window [UI_StoryBook](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/StoryEngine/UI_StoryBook.cs) handles in-game playback:
+- Loads the latest markdown file from the user's documents directory.
+- Parses the document using custom line parsing and regex match filters to isolate text paragraphs and image tags.
+- Loads panel illustrations as `Texture2D` instances, scaling and drawing them centered within the scroll view dynamically.
+- Frees all loaded texture memory on window close to avoid memory leaks.

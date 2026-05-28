@@ -7,6 +7,8 @@ This project aspires to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Colony Storybook & Comic Generator** — Integrates play logs, battle events, major tales, and desktop `rimlog.txt` logs. Generates narrative novel chapters and comic book panel layouts via Gemini. Includes an in-game reader panel that parses markdown and renders comic panel illustrations inline.
+- **Open Colony Storybook Button** — Added a direct button in [ModSettings.cs](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/Source/ModSettings.cs) to open the Storybook UI dynamically.
 - **RimWorld 1.5 support** — multi-version build (1.5 + 1.6). `About.xml` and `LoadFolders.xml` declare both; `build.bat` refactored to compile and deploy per-version (`1.5\Assemblies/`, `1.6\Assemblies/`, `Assemblies/`).
 - **Local u2netp ONNX background removal** (image + video) — offline neural cutout via ONNX Runtime, now the primary local remover for `portrait`/`bodyshot` framings; the YCbCr flood-fill remains as a fallback. `special` framing keeps its background.
 - **Korean usage guide** ([사용방법.md](사용방법.md)) for sharing.

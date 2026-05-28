@@ -10,6 +10,7 @@ Generates AI portraits and looping animated previews of your colonists that refl
 - **3 art styles** — Korean Webtoon (Manhwa), Rick & Morty Cartoon, 16-bit Pixel JRPG.
 - **Per-pawn framing** — portrait, full-body shot, or special themed scene; each cached independently.
 - **Animated Looping Previews** — Powered by **Google Veo 3.1 Lite**, converting static portraits into 4-second looping videos.
+- **Colony Storybook & Comic Generator** — Aggregates in-game play logs, battles, tales, and desktop `rimlog.txt` logs. Generates narrative novel chapters and comic book panel layouts via Gemini. Includes an in-game illustrated reader.
 - **Optional Gemini Flash prompt engineering** — LLM rewrites pawn data into a creative image prompt.
 - **ModSettings Controls** — Adjust horizontal offset, vertical offset, portrait scale, and toggle helmet exclusion directly from the settings panel.
 - **Refresh button on the overlay** — Regenerate any portrait in one click.
@@ -38,8 +39,6 @@ Generates AI portraits and looping animated previews of your colonists that refl
 ## Backend / Provider Selection
 
 The mod's **API Settings** tab allows configuring your preferred provider and model parameters.
-
-> **Automatic free fallback:** if your chosen paid provider has no API key set — or fails mid-request — the mod silently retries on free **Pollinations**, so you always end up with a portrait.
 
 ### 🆓 Pollinations — Free, no signup
 - Truly free, no account or key required.
@@ -100,6 +99,20 @@ You can animate static pawn portraits into 4-second looping videos using Google 
 
 ---
 
+## 📖 Colony Storybook & Comic Generator
+
+You can compile your colony's live event history (interactions, battle events, major tales, and desktop `rimlog.txt` logs) into narrative chapters and generated comic book panels.
+
+### Setup & Usage
+1. Open **Mod Settings** and check **Enable Story Engine**.
+2. Configure your desired **Generate Story Every (Days)** interval (e.g. `15` days equals 1 Quadrum).
+3. (Optional) Check **Generate Comic Panels** to also trigger image generations for comic book layouts.
+4. Set your LLM model (e.g. `gemini-2.5-flash`) and API Key under the **Prompt Generation** settings.
+5. In game, once the configured interval days have passed, the engine generates a story chapter.
+6. Click the **Open Colony Storybook** button in Mod Settings to read your story chapters and view the generated comic panels inline in the game.
+
+---
+
 ## Advanced UI Settings & Options
 
 The mod features a toggle to access advanced options in Mod Settings:
@@ -147,11 +160,11 @@ In API Settings → **Prompt Generation** section, switch from `No — Compiled 
 
 ## Building from Source
 
-Requirements: Windows, .NET Framework 4.x (`csc.exe` at the standard path), RimWorld 1.5 or 1.6.
+Requirements: Windows, .NET Framework 4.x (`csc.exe` at the standard path), RimWorld 1.5/1.6.
 
 To compile the mod locally without polluting your Git status with machine-specific file paths:
 
-1. Create a local configuration file named [build_local.bat](build_local.bat) in the repository root (this file is already ignored by `.gitignore`).
+1. Create a local configuration file named [build_local.bat](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/build_local.bat) in the repository root (this file is already ignored by `.gitignore`).
 2. Add your local game and dependency paths to `build_local.bat`. For example:
    ```bat
    @echo off
@@ -159,7 +172,7 @@ To compile the mod locally without polluting your Git status with machine-specif
    set "HARMONY_PATH=C:\Program Files (x86)\Steam\steamapps\common\RimWorld\Mods\Harmony\Current\Assemblies\0Harmony.dll"
    set "RIMWORLD_MODS_DIR=C:\Program Files (x86)\Steam\steamapps\common\RimWorld\Mods"
    ```
-3. Run [build.bat](build.bat). The build script will automatically detect and load your settings from `build_local.bat`, compile `AIPortraits.dll` for **RimWorld 1.5 and 1.6**, output it to `1.5\Assemblies/`, `1.6\Assemblies/`, and `Assemblies/`, and optionally deploy it straight to your game's `Mods` folder if `RIMWORLD_MODS_DIR` is set.
+3. Run [build.bat](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/build.bat). The build script will automatically detect and load your settings from `build_local.bat`, compile `AIPortraits.dll`, output it to target folders, and optionally deploy it straight to your game's `Mods` folder if `RIMWORLD_MODS_DIR` is set.
 
 For a deeper dive into the mod's internal systems, codebase structure, and algorithms, see the [Developer Architecture Guide](DEVELOPER.md).
 
@@ -167,7 +180,7 @@ For a deeper dive into the mod's internal systems, codebase structure, and algor
 
 ## Compatibility
 
-- RimWorld **1.5** and **1.6**
+- RimWorld **1.5 / 1.6**
 - Requires **Harmony**
 - Compatible with **Biotech**, **Ideology**, **Royalty**, and **Anomaly** DLCs (xenotypes, genes, ideology roles, royal titles, psylink, ghoul/inhumanized states)
 - Patches `MainTabWindow_Inspect.ExtraOnGUI` (postfix) only — minimal mod surface area
@@ -177,4 +190,4 @@ For a deeper dive into the mod's internal systems, codebase structure, and algor
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Free to use, modify, and redistribute with attribution.
+MIT — see [LICENSE](file:///C:/Users/SIK/Documents/antigravity/mysterious-carson/LICENSE). Free to use, modify, and redistribute with attribution.

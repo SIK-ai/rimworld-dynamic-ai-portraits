@@ -183,6 +183,12 @@ namespace AIPortraits
         public Dictionary<string, string> pawnFraming = new Dictionary<string, string>();
         public Dictionary<string, bool> pawnVideoToggles = new Dictionary<string, bool>();
 
+        // ── STORY ENGINE SETTINGS ──────────────────────────────────────────────
+        public bool enableStoryEngine = false;
+        public int storyGenerationIntervalDays = 15; // 15 days = 1 Quadrum
+        public bool storyIncludeComicPanels = true;
+        public string storyLlmModel = "gemini-2.5-flash"; // Default LLM model for story generation
+
         // Per-image generation Settings (keyed by ThingID + "_" + framing) so each portrait/
         // bodyshot/special of each pawn keeps its own helmet / gear-ref / reference-portrait.
         public Dictionary<string, bool> pawnExcludeHelmet = new Dictionary<string, bool>();
@@ -259,8 +265,14 @@ namespace AIPortraits
             Scribe_Values.Look(ref llmApiKey,          "llmApiKey",        "");
             Scribe_Values.Look(ref videoApiKey,        "videoApiKey",      "");
             Scribe_Values.Look(ref useAIBgRemoval,     "useAIBgRemoval",   false);
-            Scribe_Values.Look(ref debugMode,          "debugMode",        false);
             Scribe_Values.Look(ref cfBgRemovalKey,     "cfBgRemovalKey",   "");
+
+            Scribe_Values.Look(ref enableStoryEngine,  "enableStoryEngine", false);
+            Scribe_Values.Look(ref storyGenerationIntervalDays, "storyGenerationIntervalDays", 15);
+            Scribe_Values.Look(ref storyIncludeComicPanels, "storyIncludeComicPanels", true);
+            Scribe_Values.Look(ref storyLlmModel, "storyLlmModel", "gemini-2.5-flash");
+
+            Scribe_Values.Look(ref debugMode,          "debugMode",        false);
             Scribe_Collections.Look(ref activePortraits, "activePortraits", LookMode.Value, LookMode.Value);
             Scribe_Collections.Look(ref pawnFraming, "pawnFraming", LookMode.Value, LookMode.Value);
             Scribe_Collections.Look(ref pawnVideoToggles, "pawnVideoToggles", LookMode.Value, LookMode.Value);
@@ -885,6 +897,26 @@ namespace AIPortraits
                 Text.Font = GameFont.Small;
             }
 
+            listing.Gap(8f);
+            listing.GapLine();
+            listing.Gap(6f);
+
+            // ── STORY ENGINE ──────────────────────────────────────────────────────
+            listing.Label("Story Engine (Novelist & Comic Creator)");
+            listing.Gap(4f);
+            listing.CheckboxLabeled("Enable Story Engine", ref enableStoryEngine, "Automatically write a novel and generate comic panels based on your colony's events.");
+            if (enableStoryEngine)
+            {
+                listing.Label("Generate Story Every (Days): " + storyGenerationIntervalDays.ToString("F0") + "  (15 = 1 Quadrum)");
+                storyGenerationIntervalDays = (int)listing.Slider(storyGenerationIntervalDays, 1f, 60f);
+                listing.CheckboxLabeled("Generate Comic Panels", ref storyIncludeComicPanels, "If true, will also generate image prompts and render comic book panels.");
+                
+                listing.Gap(4f);
+                if (listing.ButtonText("Open Colony Storybook"))
+                {
+                    Find.WindowStack.Add(new AIPortraits.StoryEngine.UI_StoryBook());
+                }
+            }
             listing.Gap(8f);
             listing.GapLine();
             listing.Gap(6f);

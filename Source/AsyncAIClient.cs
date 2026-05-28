@@ -199,6 +199,61 @@ namespace AIPortraits
         /// Falls back to the compiled template on any failure so portrait generation
         /// always succeeds even without a valid LLM key.
         /// </summary>
+        public static void QueueLLMPrompt(string fullPrompt, string modelName, string apiKey, Action<string, string> callback)
+        {
+            if (string.IsNullOrEmpty(apiKey))
+            {
+                callback(null, "No LLM API Key provided");
+                return;
+            }
+            CoroutineRunner.Instance.StartCoroutine(RunLLMPrompt(fullPrompt, modelName, apiKey, callback));
+        }
+
+        private static IEnumerator RunLLMPrompt(string fullPrompt, string modelName, string apiKey, Action<string, string> callback)
+        {
+            // Defaulting to gemini flash endpoint mapping
+            string actualModelName = "gemini-2.5-flash";
+            if (modelName.Contains("gemma")) actualModelName = modelName;
+
+            string llmUrl = "https://generativelanguage.googleapis.com/v1beta/models/" + actualModelName + ":generateContent?key=" + apiKey;
+
+            StringBuilder json = new StringBuilder();
+            json.Append("{");
+            json.Append("\"contents\":[{\"parts\":[{\"text\":\"").Append(EscapeJson(fullPrompt)).Append("\"}]}],");
+            json.Append("\"generationConfig\":{\"maxOutputTokens\":2000,\"temperature\":0.75}");
+            json.Append("}");
+
+            byte[] jsonBytes = Encoding.UTF8.GetBytes(json.ToString());
+
+            using (UnityWebRequest request = new UnityWebRequest(llmUrl, "POST"))
+            {
+                request.uploadHandler = new UploadHandlerRaw(jsonBytes);
+                request.downloadHandler = new DownloadHandlerBuffer();
+                request.SetRequestHeader("Content-Type", "application/json");
+                request.timeout = 60;
+
+                yield return request.SendWebRequest();
+
+                if (IsSuccess(request))
+                {
+                    string text = ExtractGeminiText(request.downloadHandler.text);
+                    if (!string.IsNullOrEmpty(text))
+                    {
+                        callback(text, null);
+                    }
+                    else
+                    {
+                        callback(null, "Failed to parse LLM response: " + request.downloadHandler.text);
+                    }
+                }
+                else
+                {
+                    string errBody = (request.downloadHandler != null) ? request.downloadHandler.text : "";
+                    callback(null, "HTTP Error " + request.responseCode + " " + request.error + " - " + errBody);
+                }
+            }
+        }
+
         private static IEnumerator GenerateLLMThenDispatch(PawnState state, AIPortraitsSettings settings,
                                                             string continuityToken, byte[] portraitBytes, PortraitCallback callback)
         {
