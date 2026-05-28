@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<LanguageData>
+    <DAP_StoryBook_Title>Colony Storybook</DAP_StoryBook_Title>
+    <DAP_StoryBook_OpenFolder>Open Folder</DAP_StoryBook_OpenFolder>
+    <DAP_StoryBook_ReloadStory>Reload Story</DAP_StoryBook_ReloadStory>
+    <DAP_StoryBook_NoStories>No stories generated yet. Enable the Story Engine in Mod Settings and wait for a day to pass.</DAP_StoryBook_NoStories>
+    <DAP_StoryBook_NoFilesFound>No story files found in </DAP_StoryBook_NoFilesFound>
+    <DAP_StoryBook_ErrorLoading>Error loading story: </DAP_StoryBook_ErrorLoading>
+    <DAP_StoryBook_MissingPanel>[Missing Panel: {0}]</DAP_StoryBook_MissingPanel>
+</LanguageData>

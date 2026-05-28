@@ -19,10 +19,15 @@ namespace AIPortraits.StoryEngine
             public string text;
             public string imagePath;
             public Texture2D texture;
+            public string missingText;
         }
 
         private List<ContentElement> elements = new List<ContentElement>();
         private Dictionary<string, Texture2D> loadedTextures = new Dictionary<string, Texture2D>();
+
+        private string titleText;
+        private string openFolderText;
+        private string reloadStoryText;
 
         public override Vector2 InitialSize { get { return new Vector2(850f, 650f); } }
 
@@ -32,6 +37,10 @@ namespace AIPortraits.StoryEngine
             this.forcePause = false;
             this.absorbInputAroundWindow = false;
             
+            titleText = "DAP_StoryBook_Title".Translate();
+            openFolderText = "DAP_StoryBook_OpenFolder".Translate();
+            reloadStoryText = "DAP_StoryBook_ReloadStory".Translate();
+
             string docsDir = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             storyDir = Path.Combine(docsDir, "RimWorld Portraits", "Storybooks");
             
@@ -44,7 +53,7 @@ namespace AIPortraits.StoryEngine
             
             if (!Directory.Exists(storyDir))
             {
-                rawStoryText = "No stories generated yet. Enable the Story Engine in Mod Settings and wait for a day to pass.";
+                rawStoryText = "DAP_StoryBook_NoStories".Translate();
                 elements.Add(new ContentElement { isImage = false, text = rawStoryText });
                 return;
             }
@@ -52,7 +61,7 @@ namespace AIPortraits.StoryEngine
             string[] files = Directory.GetFiles(storyDir, "*.md");
             if (files.Length == 0)
             {
-                rawStoryText = "No story files found in " + storyDir;
+                rawStoryText = "DAP_StoryBook_NoFilesFound".Translate() + storyDir;
                 elements.Add(new ContentElement { isImage = false, text = rawStoryText });
                 return;
             }
@@ -67,7 +76,7 @@ namespace AIPortraits.StoryEngine
             }
             catch (Exception ex)
             {
-                rawStoryText = "Error loading story: " + ex.Message;
+                rawStoryText = "DAP_StoryBook_ErrorLoading".Translate() + ex.Message;
                 elements.Add(new ContentElement { isImage = false, text = rawStoryText });
             }
         }
@@ -122,7 +131,8 @@ namespace AIPortraits.StoryEngine
                         isImage = true, 
                         imagePath = absolutePath, 
                         texture = tex,
-                        text = match.Groups[1].Value // Alt text (e.g. Panel_1)
+                        text = match.Groups[1].Value, // Alt text (e.g. Panel_1)
+                        missingText = string.Format("DAP_StoryBook_MissingPanel".Translate(), Path.GetFileName(absolutePath))
                     });
                 }
                 else
@@ -140,7 +150,7 @@ namespace AIPortraits.StoryEngine
         public override void DoWindowContents(Rect inRect)
         {
             Text.Font = GameFont.Medium;
-            Widgets.Label(new Rect(inRect.x, inRect.y, inRect.width, 40f), "Colony Storybook");
+            Widgets.Label(new Rect(inRect.x, inRect.y, inRect.width, 40f), titleText);
             Text.Font = GameFont.Small;
 
             Rect outRect = new Rect(inRect.x, inRect.y + 50f, inRect.width, inRect.height - 100f);
@@ -194,7 +204,7 @@ namespace AIPortraits.StoryEngine
                     {
                         Rect missingRect = new Rect(0f, currentY, elementWidth, 25f);
                         GUI.color = new Color(0.7f, 0.3f, 0.3f);
-                        Widgets.Label(missingRect, "[Missing Panel: " + Path.GetFileName(el.imagePath) + "]");
+                        Widgets.Label(missingRect, el.missingText);
                         GUI.color = Color.white;
                         currentY += 25f;
                     }
@@ -213,7 +223,7 @@ namespace AIPortraits.StoryEngine
             // Footer actions
             Rect footerRect = new Rect(inRect.x, inRect.yMax - 40f, inRect.width, 30f);
             
-            if (Widgets.ButtonText(new Rect(footerRect.x, footerRect.y, 150f, 30f), "Open Folder"))
+            if (Widgets.ButtonText(new Rect(footerRect.x, footerRect.y, 150f, 30f), openFolderText))
             {
                 if (Directory.Exists(storyDir))
                 {
@@ -221,7 +231,7 @@ namespace AIPortraits.StoryEngine
                 }
             }
 
-            if (Widgets.ButtonText(new Rect(footerRect.x + 160f, footerRect.y, 150f, 30f), "Reload Story"))
+            if (Widgets.ButtonText(new Rect(footerRect.x + 160f, footerRect.y, 150f, 30f), reloadStoryText))
             {
                 LoadLatestStory();
             }
