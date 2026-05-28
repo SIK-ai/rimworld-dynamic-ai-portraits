@@ -80,7 +80,7 @@ namespace AIPortraits
             lock (gate)
             {
                 try { EnsureSession(); WriteRaw(DateTime.Now.ToString("HH:mm:ss.fff") + " [" + category + "] " + message); }
-                catch { }
+                catch (System.Exception ex) { if (Verse.Prefs.DevMode) Verse.Log.Warning("[Dynamic AI Portraits] Silent exception: " + ex.Message); }
             }
         }
 
@@ -98,7 +98,7 @@ namespace AIPortraits
                 if (lastByKey.TryGetValue(dedupKey, out prev) && prev == message) return;
                 lastByKey[dedupKey] = message;
                 try { EnsureSession(); WriteRaw(DateTime.Now.ToString("HH:mm:ss.fff") + " [" + category + "] " + message); }
-                catch { }
+                catch (System.Exception ex) { if (Verse.Prefs.DevMode) Verse.Log.Warning("[Dynamic AI Portraits] Silent exception: " + ex.Message); }
             }
         }
 
@@ -131,7 +131,7 @@ namespace AIPortraits
                 File.AppendAllText(sessionFile, "... [debug log size cap reached; further entries suppressed] ..." + Environment.NewLine);
         }
 
-        private static void TryWrite(string line) { try { WriteRaw(line); } catch { } }
+        private static void TryWrite(string line) { try { WriteRaw(line); } catch (System.Exception ex) { if (Verse.Prefs.DevMode) Verse.Log.Warning("[Dynamic AI Portraits] Silent exception: " + ex.Message); } }
 
         private static void Prune(string dir)
         {
@@ -141,11 +141,11 @@ namespace AIPortraits
                 files.Sort();   // names are timestamp-sortable
                 while (files.Count > KeepSessions)
                 {
-                    try { File.Delete(files[0]); } catch { }
+                    try { File.Delete(files[0]); } catch (System.Exception ex) { if (Verse.Prefs.DevMode) Verse.Log.Warning("[Dynamic AI Portraits] Silent exception: " + ex.Message); }
                     files.RemoveAt(0);
                 }
             }
-            catch { }
+            catch (System.Exception ex) { if (Verse.Prefs.DevMode) Verse.Log.Warning("[Dynamic AI Portraits] Silent exception: " + ex.Message); }
         }
     }
 }

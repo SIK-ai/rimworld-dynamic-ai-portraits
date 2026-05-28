@@ -180,7 +180,7 @@ namespace AIPortraits
                 if (!string.IsNullOrEmpty(fallbackPath) && System.IO.File.Exists(fallbackPath))
                 {
                     try { return System.IO.File.ReadAllBytes(fallbackPath); }
-                    catch { }
+                    catch (System.Exception ex) { if (Verse.Prefs.DevMode) Verse.Log.Warning("[Dynamic AI Portraits] Silent exception: " + ex.Message); }
                 }
             }
             return null;
@@ -537,7 +537,7 @@ namespace AIPortraits
             }
 
             string positivePrompt = PromptCompiler.CompilePositivePrompt(state, AIPortraitsMod.settings, continuityToken);
-            Log.Message("[Dynamic AI Portraits] PROMPT for " + pawn.LabelShortCap + " (" + framing + "):\n" + positivePrompt);
+            if (Prefs.DevMode) Log.Message("[Dynamic AI Portraits] PROMPT for " + pawn.LabelShortCap + " (" + framing + "):\n" + positivePrompt);
 
             // When "reference portrait image" is on for this image, feed the pawn's existing
             // portrait to the generator as an img2img reference (continuity). Default: on for
@@ -666,7 +666,7 @@ namespace AIPortraits
                 state.refPortrait   = GetRefPortrait(pawn, framing);
             }
 
-            Log.Message("[Dynamic AI Portraits] CUSTOM PROMPT for " + pawn.LabelShortCap + " (" + framing + "):\n" + customPrompt);
+            if (Prefs.DevMode) Log.Message("[Dynamic AI Portraits] CUSTOM PROMPT for " + pawn.LabelShortCap + " (" + framing + "):\n" + customPrompt);
 
             // "reference portrait image" -> feed the existing portrait as an img2img reference.
             byte[] portraitBytes = null;
@@ -824,7 +824,7 @@ namespace AIPortraits
                 {
                     videoStatus.Remove(key);
                     videoError.Remove(key);
-                    Log.Message("[Dynamic AI Portraits] Veo Video Generation Succeeded for " + pawn.LabelShortCap);
+                    if (Prefs.DevMode) Log.Message("[Dynamic AI Portraits] Veo Video Generation Succeeded for " + pawn.LabelShortCap);
                     DebugLog.Log("FSM", "video GEN done key=" + key + " -> Idle  file=" + (string.IsNullOrEmpty(videoPath) ? "?" : System.IO.Path.GetFileName(videoPath)));
                     // Kick off background removal immediately so it runs while the player is
                     // still here, rather than waiting until the clip is next drawn. No-op for
@@ -1385,7 +1385,7 @@ namespace AIPortraits
                         Texture2D t = new Texture2D(2, 2, TextureFormat.RGBA32, false);
                         if (ImageConversion.LoadImage(t, bytes)) e.thumb = t;
                     }
-                    catch { }
+                    catch (System.Exception ex) { if (Verse.Prefs.DevMode) Verse.Log.Warning("[Dynamic AI Portraits] Silent exception: " + ex.Message); }
                     e.thumbLoaded = true;
                     entries[idx] = e;
                 }

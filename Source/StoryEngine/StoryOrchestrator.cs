@@ -69,7 +69,7 @@ Output a valid JSON object with the following schema:
 }";
             string finalPrompt = systemPrompt + "\n\nLOGS:\n" + logs;
             
-            Log.Message("[Story Engine] Triggering LLM Story Generation for " + logs.Length + " chars of log.");
+            if (Prefs.DevMode) Log.Message("[Story Engine] Triggering LLM Story Generation for " + logs.Length + " chars of log.");
 
             // Use the LLM integration in AsyncAIClient
             AsyncAIClient.QueueLLMPrompt(finalPrompt, AIPortraitsMod.settings.storyLlmModel, AIPortraitsMod.settings.llmApiKey, (response, err) =>

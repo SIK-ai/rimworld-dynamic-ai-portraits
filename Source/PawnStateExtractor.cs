@@ -725,7 +725,7 @@ namespace AIPortraits
                 if (pawn.kindDef != null)
                     s.pawnKind = pawn.kindDef.label;
             }
-            catch (Exception) { }
+            catch (System.Exception ex) { if (Verse.Prefs.DevMode) Verse.Log.Warning("[Dynamic AI Portraits] Silent exception: " + ex.Message); }
 
             // ── ROMANCE ──────────────────────────────────────────────────────────
             if (pawn.relations != null)
@@ -740,7 +740,7 @@ namespace AIPortraits
                         else if (r == "lover" || r == "fiance" || r == "fiancee") s.hasLover = true;
                     }
                 }
-                catch (Exception) { }
+                catch (System.Exception ex) { if (Verse.Prefs.DevMode) Verse.Log.Warning("[Dynamic AI Portraits] Silent exception: " + ex.Message); }
             }
 
             // ── CAPTIVITY (Prisoner / Slave) ─────────────────────────────────────
@@ -749,7 +749,7 @@ namespace AIPortraits
                 s.isPrisoner = pawn.IsPrisoner;
                 s.isSlave    = pawn.IsSlave;
             }
-            catch (Exception) { }
+            catch (System.Exception ex) { if (Verse.Prefs.DevMode) Verse.Log.Warning("[Dynamic AI Portraits] Silent exception: " + ex.Message); }
 
             // ── ANOMALY: ghoul / mutant ──────────────────────────────────────────
             try
@@ -758,7 +758,7 @@ namespace AIPortraits
                     pawn.kindDef.defName.ToLower().Contains("ghoul"))
                     s.isGhoul = true;
             }
-            catch (Exception) { }
+            catch (System.Exception ex) { if (Verse.Prefs.DevMode) Verse.Log.Warning("[Dynamic AI Portraits] Silent exception: " + ex.Message); }
 
             return s;
         }

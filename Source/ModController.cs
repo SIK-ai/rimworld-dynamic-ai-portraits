@@ -24,7 +24,7 @@ namespace AIPortraits
             try
             {
                 harmony.PatchAll();
-                Log.Message("[Dynamic AI Portraits] Initialized successfully. Harmony patches applied.");
+                if (Prefs.DevMode) Log.Message("[Dynamic AI Portraits] Initialized successfully. Harmony patches applied.");
             }
             catch (System.Exception e)
             {
