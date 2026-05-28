@@ -498,23 +498,29 @@ namespace AIPortraits
             // off, no image is sent at all.
             bool wantPortrait = state != null && state.refPortrait;
             bool wantGear     = state != null && state.useGearRef;
-            byte[] refSheetBytes = (wantPortrait || wantGear) ? BuildReferenceSheet(state) : null;
+            bool sheetHasPortrait = false;
+            bool sheetHasGear     = false;
+            byte[] refSheetBytes = (wantPortrait || wantGear) ? BuildReferenceSheet(state, out sheetHasPortrait, out sheetHasGear) : null;
             byte[] refImage = CombineReferenceImages(portraitBytes, refSheetBytes);
             bool hasRef = refImage != null && refImage.Length > 0;
+            // Describe ONLY what the combined image actually contains — an off-map pawn or an
+            // unrecognised loadout can leave out a portrait/gear half that a toggle asked for.
+            bool imgHasPortrait = (portraitBytes != null && portraitBytes.Length > 0) || sheetHasPortrait;
+            bool imgHasGear     = sheetHasGear;
 
             string framing = state != null ? state.framing : "portrait";
             string fullPrompt = PromptCompiler.CompileImagenSystemPrompt(settings.portraitStyle, settings, framing) + "\n\n" + prompt;
             if (hasRef)
             {
-                if (wantPortrait && wantGear)
+                if (imgHasPortrait && imgHasGear)
                 {
                     fullPrompt += "\n\nattached is a single combined reference image for this character: it contains a reference portrait (match this exact face, hair color, hair style, skin tone, and features) together with the character's equipment and clothing items (render the character wearing/holding these exact items).";
                 }
-                else if (wantPortrait)
+                else if (imgHasPortrait)
                 {
                     fullPrompt += "\n\nattached is a reference portrait of this character. match this exact face, hair color, hair style, skin tone, and features.";
                 }
-                else if (wantGear)
+                else if (imgHasGear)
                 {
                     fullPrompt += "\n\nattached is a reference sheet of the character's equipment and clothing items. render the character wearing/holding these exact items.";
                 }
@@ -1259,6 +1265,18 @@ namespace AIPortraits
 
         public static byte[] BuildReferenceSheet(PawnState state)
         {
+            bool includedPortrait;
+            bool includedGear;
+            return BuildReferenceSheet(state, out includedPortrait, out includedGear);
+        }
+
+        // Overload that also reports which halves actually made it into the sheet, so callers can
+        // describe the combined reference image honestly (a portrait toggle can still yield no
+        // portrait when the pawn is off-map; a gear toggle can yield no gear when nothing matched).
+        public static byte[] BuildReferenceSheet(PawnState state, out bool includedPortrait, out bool includedGear)
+        {
+            includedPortrait = false;
+            includedGear = false;
             if (state == null) return null;
             try
             {
@@ -1299,6 +1317,7 @@ namespace AIPortraits
                         if (nativeTex != null)
                         {
                             texturesToCombine.Add(nativeTex);
+                            includedPortrait = true;
                         }
                     }
                 }
@@ -1316,10 +1335,11 @@ namespace AIPortraits
                     {
                         foreach (string app in state.apparel)
                         {
-                            if (!string.IsNullOrEmpty(app))
-                            {
-                                gearItems.Add(app);
-                            }
+                            if (string.IsNullOrEmpty(app)) continue;
+                            // Honor the per-image "Exclude helmet" toggle here too, so the gear sheet
+                            // doesn't paste a helmet that the prompt and native portrait deliberately drop.
+                            if (state.excludeHelmet && PromptCompiler.IsHeadgearLabel(app)) continue;
+                            gearItems.Add(app);
                         }
                     }
                 }
@@ -1355,6 +1375,7 @@ namespace AIPortraits
                                 if (ImageConversion.LoadImage(tex, data))
                                 {
                                     texturesToCombine.Add(tex);
+                                    includedGear = true;
                                 }
                                 else
                                 {

@@ -234,14 +234,31 @@ namespace AIPortraits
                     currentFraming = f;
                 }
 
-                // Right-aligned row; ▽ collapse sits where the ⊕ was.
-                Rect collapseRect = new Rect(bx, by, BtnSize, BtnSize);
-                Rect setRect      = new Rect(collapseRect.x - BtnSize - 4f, by, BtnSize, BtnSize);
-                Rect refreshRect  = new Rect(setRect.x      - BtnSize - 4f, by, BtnSize, BtnSize);
-                Rect veoRect      = new Rect(refreshRect.x  - BtnSize - 4f, by, BtnSize, BtnSize);
-                Rect specRect     = new Rect(veoRect.x      - BtnSize - 4f, by, BtnSize, BtnSize);
-                Rect bodyRect     = new Rect(specRect.x     - BtnSize - 4f, by, BtnSize, BtnSize);
-                Rect portRect     = new Rect(bodyRect.x     - BtnSize - 4f, by, BtnSize, BtnSize);
+                // Right-aligned row of 7 buttons (▽ collapse sits where the ⊕ was). Scale the
+                // button size/gap down to fit narrow portraits (Display Size can be as small as
+                // 100px) so the row never overflows off the left edge of the portrait.
+                const int RowCount = 7;
+                float rowGap = 4f;
+                float rowAvail = portraitRect.width - BtnMargin * 2f;
+                float ebtn = (rowAvail - (RowCount - 1) * rowGap) / RowCount;
+                if (ebtn > BtnSize) ebtn = BtnSize;
+                if (ebtn < 12f)
+                {
+                    ebtn = 12f;
+                    rowGap = (rowAvail - RowCount * ebtn) / (RowCount - 1);
+                    if (rowGap < 1f) rowGap = 1f;
+                }
+                float eby = portraitRect.yMax - ebtn - BtnMargin;
+                float ebx = portraitRect.xMax - ebtn - BtnMargin;
+                float estep = ebtn + rowGap;
+
+                Rect collapseRect = new Rect(ebx,              eby, ebtn, ebtn);
+                Rect setRect      = new Rect(ebx - estep,      eby, ebtn, ebtn);
+                Rect refreshRect  = new Rect(ebx - estep * 2f, eby, ebtn, ebtn);
+                Rect veoRect      = new Rect(ebx - estep * 3f, eby, ebtn, ebtn);
+                Rect specRect     = new Rect(ebx - estep * 4f, eby, ebtn, ebtn);
+                Rect bodyRect     = new Rect(ebx - estep * 5f, eby, ebtn, ebtn);
+                Rect portRect     = new Rect(ebx - estep * 6f, eby, ebtn, ebtn);
 
                 DrawFramingButton(portRect, "P", "portrait", currentFraming, pawn, "Set framing style to standard bust-up portrait.");
                 DrawFramingButton(bodyRect, "B", "bodyshot", currentFraming, pawn, "Set framing style to full-length bodyshot.");

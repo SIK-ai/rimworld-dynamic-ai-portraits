@@ -1874,7 +1874,7 @@ namespace AIPortraits
             if (pstate == null) pstate = PawnStateExtractor.ExtractState(selectedPawn);
             string dataSheet = pstate != null ? PromptCompiler.CompilePawnStateDescription(pstate, this) : "(could not extract pawn data)";
             string framing2  = AIPortraitsManager.GetActiveFraming(selectedPawn);
-            string llmSystem = (useLLMPrompt && promptEngShowLlmSystem) ? PromptCompiler.GetLLMSystemPrompt(portraitStyle, this, framing2) : null;
+            string llmSystem = (useLLMPrompt && promptEngShowLlmSystem) ? PromptCompiler.GetLLMSystemPrompt(portraitStyle, this, framing2, AIPortraitsManager.GetExcludeHelmet(selectedPawn, framing2)) : null;
 
             if (string.IsNullOrEmpty(promptEngBuffer)) SeedPromptEngBuffer();
 
