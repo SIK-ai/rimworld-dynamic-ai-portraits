@@ -123,6 +123,13 @@ namespace AIPortraits
                 float[] alpha = ComputeAlpha(px, w, h);
                 if (alpha == null) return BackgroundRemover.Process(source);
 
+                // The raw u2netp mask under-segments these generated images and shaves off thin
+                // subject parts (arms, clothing edges). Grow the foreground mask a few pixels so
+                // the matte keeps the whole character — a thin background halo is far better than
+                // amputated arms/clothes. (Images only; the video pipeline calls ComputeAlpha
+                // directly and does its own temporal-window handling.)
+                alpha = DilateMask(alpha, w, h, 8);
+
                 for (int i = 0; i < px.Length; i++)
                 {
                     byte na = (byte)Mathf.Clamp(Mathf.RoundToInt(alpha[i] * 255f), 0, 255);
@@ -138,6 +145,39 @@ namespace AIPortraits
                 Log.Warning("[Dynamic AI Portraits] u2netp Process failed (" + ex.Message + "); using legacy remover.");
                 return BackgroundRemover.Process(source);
             }
+        }
+
+        // Separable max-dilation of a 0..1 alpha mask by 'r' pixels — grows the foreground so
+        // background removal does not shave off thin subject parts. Square structuring element.
+        private static float[] DilateMask(float[] a, int w, int h, int r)
+        {
+            if (a == null || r <= 0 || w <= 0 || h <= 0) return a;
+            float[] tmp = new float[w * h];
+            for (int y = 0; y < h; y++)
+            {
+                int row = y * w;
+                for (int x = 0; x < w; x++)
+                {
+                    int x0 = x - r; if (x0 < 0) x0 = 0;
+                    int x1 = x + r; if (x1 > w - 1) x1 = w - 1;
+                    float m = 0f;
+                    for (int xx = x0; xx <= x1; xx++) { float v = a[row + xx]; if (v > m) m = v; }
+                    tmp[row + x] = m;
+                }
+            }
+            float[] outp = new float[w * h];
+            for (int x = 0; x < w; x++)
+            {
+                for (int y = 0; y < h; y++)
+                {
+                    int y0 = y - r; if (y0 < 0) y0 = 0;
+                    int y1 = y + r; if (y1 > h - 1) y1 = h - 1;
+                    float m = 0f;
+                    for (int yy = y0; yy <= y1; yy++) { float v = tmp[yy * w + x]; if (v > m) m = v; }
+                    outp[y * w + x] = m;
+                }
+            }
+            return outp;
         }
 
         /// <summary>
