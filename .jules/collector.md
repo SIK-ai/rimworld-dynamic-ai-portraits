@@ -1,0 +1,1 @@
+Replaced string concatenations for cache lookup keys (`pawn.ThingID + "_" + framing`) with a lightweight `PawnFramingKey` struct in `Source/UI_AIPortraitCard.cs`. This eliminates GC allocations on per-frame UI updates for caches like `loadedTextures`, `activeRequests`, `requestStatus`, and `requestError`.
