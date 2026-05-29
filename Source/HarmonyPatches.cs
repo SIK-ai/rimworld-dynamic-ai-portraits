@@ -15,9 +15,26 @@ namespace AIPortraits
         // Overlay toolbar: collapsed to one ⊕ button by default; ⊕/▽ toggle this.
         private static bool overlayExpanded = false;
 
+        private static string strMakingAlive;
+        private static string strVeoError;
+        private static string strClickToAnimate;
+        private static string strPainting;
+        private static string strError;
+        private static string strNoPortraitClickToGenerate;
+
+
         [HarmonyPostfix]
         public static void Postfix(MainTabWindow_Inspect __instance)
         {
+            if (strMakingAlive == null)
+            {
+                strMakingAlive = "AIPortraits_MakingAlive".Translate();
+                strVeoError = "AIPortraits_VeoError".Translate();
+                strClickToAnimate = "AIPortraits_ClickToAnimate".Translate();
+                strPainting = "AIPortraits_Painting".Translate();
+                strError = "AIPortraits_Error".Translate();
+                strNoPortraitClickToGenerate = "AIPortraits_NoPortraitClickToGenerate".Translate();
+            }
             // Centralised early-return guard: if any of these conditions fail, we both
             // stop any active video playback AND skip overlay drawing. Collapsed from
             // four near-identical early-return blocks.
@@ -142,7 +159,7 @@ namespace AIPortraits
                         Widgets.DrawBoxSolid(portraitRect, new Color(0f, 0f, 0f, 0.4f));
                         Text.Anchor = TextAnchor.MiddleCenter;
                         GUI.color = new Color(0.6f, 0.85f, 1f);
-                        Widgets.Label(portraitRect, "Making alive...");
+                        Widgets.Label(portraitRect, strMakingAlive);
                         GUI.color = Color.white;
                         Text.Anchor = TextAnchor.UpperLeft;
                     }
@@ -152,7 +169,7 @@ namespace AIPortraits
                         Text.Anchor = TextAnchor.MiddleCenter;
                         GUI.color = Color.red;
                         Text.Font = GameFont.Tiny;
-                        Widgets.Label(portraitRect, "\u2716 " + (vError ?? "Veo Error"));
+                        Widgets.Label(portraitRect, "\u2716 " + (vError ?? strVeoError));
                         GUI.color = Color.white;
                         Text.Anchor = TextAnchor.UpperLeft;
                         Text.Font = GameFont.Small;
@@ -163,7 +180,7 @@ namespace AIPortraits
                         Text.Anchor = TextAnchor.LowerCenter;
                         Text.Font = GameFont.Tiny;
                         GUI.color = new Color(0.6f, 0.85f, 1f, 0.9f);
-                        Widgets.Label(portraitRect, "Click \u21bb to animate");
+                        Widgets.Label(portraitRect, strClickToAnimate);
                         GUI.color = Color.white;
                         Text.Font = GameFont.Small;
                         Text.Anchor = TextAnchor.UpperLeft;
@@ -188,18 +205,18 @@ namespace AIPortraits
                     if (status == GenerationStatus.Generating)
                     {
                         GUI.color = new Color(0.6f, 0.85f, 1f);
-                        Widgets.Label(portraitRect, "Painting...");
+                        Widgets.Label(portraitRect, strPainting);
                     }
                     else if (status == GenerationStatus.Error)
                     {
                         GUI.color = Color.red;
                         Text.Font = GameFont.Tiny;
-                        Widgets.Label(portraitRect, "\u2716 " + (error ?? "Error"));
+                        Widgets.Label(portraitRect, "\u2716 " + (error ?? strError));
                     }
                     else
                     {
                         GUI.color = new Color(0.45f, 0.45f, 0.45f);
-                        Widgets.Label(portraitRect, "No portrait\nClick \u21BB to generate");
+                        Widgets.Label(portraitRect, strNoPortraitClickToGenerate);
                     }
                     GUI.color = Color.white;
                     Text.Anchor = TextAnchor.UpperLeft;

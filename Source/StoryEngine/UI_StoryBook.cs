@@ -24,6 +24,12 @@ namespace AIPortraits.StoryEngine
         private List<ContentElement> elements = new List<ContentElement>();
         private Dictionary<string, Texture2D> loadedTextures = new Dictionary<string, Texture2D>();
 
+        private static string strColonyStorybook;
+        private static string strMissingPanel;
+        private static string strOpenFolder;
+        private static string strReloadStory;
+
+
         public override Vector2 InitialSize { get { return new Vector2(850f, 650f); } }
 
         public UI_StoryBook()
@@ -139,8 +145,15 @@ namespace AIPortraits.StoryEngine
 
         public override void DoWindowContents(Rect inRect)
         {
+            if (strColonyStorybook == null)
+            {
+                strColonyStorybook = "AIPortraits_ColonyStorybook".Translate();
+                strMissingPanel = "AIPortraits_MissingPanel".Translate();
+                strOpenFolder = "AIPortraits_OpenFolder".Translate();
+                strReloadStory = "AIPortraits_ReloadStory".Translate();
+            }
             Text.Font = GameFont.Medium;
-            Widgets.Label(new Rect(inRect.x, inRect.y, inRect.width, 40f), "Colony Storybook");
+            Widgets.Label(new Rect(inRect.x, inRect.y, inRect.width, 40f), strColonyStorybook);
             Text.Font = GameFont.Small;
 
             Rect outRect = new Rect(inRect.x, inRect.y + 50f, inRect.width, inRect.height - 100f);
@@ -194,7 +207,7 @@ namespace AIPortraits.StoryEngine
                     {
                         Rect missingRect = new Rect(0f, currentY, elementWidth, 25f);
                         GUI.color = new Color(0.7f, 0.3f, 0.3f);
-                        Widgets.Label(missingRect, "[Missing Panel: " + Path.GetFileName(el.imagePath) + "]");
+                        Widgets.Label(missingRect, strMissingPanel + " " + Path.GetFileName(el.imagePath) + "]");
                         GUI.color = Color.white;
                         currentY += 25f;
                     }
@@ -213,7 +226,7 @@ namespace AIPortraits.StoryEngine
             // Footer actions
             Rect footerRect = new Rect(inRect.x, inRect.yMax - 40f, inRect.width, 30f);
             
-            if (Widgets.ButtonText(new Rect(footerRect.x, footerRect.y, 150f, 30f), "Open Folder"))
+            if (Widgets.ButtonText(new Rect(footerRect.x, footerRect.y, 150f, 30f), strOpenFolder))
             {
                 if (Directory.Exists(storyDir))
                 {
@@ -221,7 +234,7 @@ namespace AIPortraits.StoryEngine
                 }
             }
 
-            if (Widgets.ButtonText(new Rect(footerRect.x + 160f, footerRect.y, 150f, 30f), "Reload Story"))
+            if (Widgets.ButtonText(new Rect(footerRect.x + 160f, footerRect.y, 150f, 30f), strReloadStory))
             {
                 LoadLatestStory();
             }
