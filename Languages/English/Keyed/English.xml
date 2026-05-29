@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LanguageData>
+  <AIPortraits_MakingAlive>Making alive...</AIPortraits_MakingAlive>
+  <AIPortraits_VeoError>Veo Error</AIPortraits_VeoError>
+  <AIPortraits_ClickToAnimate>Click ↻ to animate</AIPortraits_ClickToAnimate>
+  <AIPortraits_Painting>Painting...</AIPortraits_Painting>
+  <AIPortraits_Error>Error</AIPortraits_Error>
+  <AIPortraits_NoPortraitClickToGenerate>No portrait
+Click ↻ to generate</AIPortraits_NoPortraitClickToGenerate>
+
+  <AIPortraits_ColonyStorybook>Colony Storybook</AIPortraits_ColonyStorybook>
+  <AIPortraits_MissingPanel>[Missing Panel:</AIPortraits_MissingPanel>
+  <AIPortraits_OpenFolder>Open Folder</AIPortraits_OpenFolder>
+  <AIPortraits_ReloadStory>Reload Story</AIPortraits_ReloadStory>
+</LanguageData>
