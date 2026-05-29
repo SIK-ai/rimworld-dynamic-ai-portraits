@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Video;
 using Verse;
+using Verse.Sound;
 using RimWorld;
 
 namespace AIPortraits
@@ -1005,8 +1006,7 @@ namespace AIPortraits
             string newTooltip = videoModeNew ? "Regenerate the animated video for this pawn." : "Generate a new portrait using current traits and character vibe.";
             Color  newColor   = videoModeNew ? new Color(0.2f, 0.45f, 0.7f) : new Color(0.2f, 0.55f, 0.35f);
 
-            DrawButton(btnNew, newLabel, newColor, newTooltip);
-            if (Widgets.ButtonInvisible(btnNew))
+            if (DrawButton(btnNew, newLabel, newColor, newTooltip))
             {
                 if (videoModeNew)
                 {
@@ -1023,8 +1023,7 @@ namespace AIPortraits
             }
 
             // Button 2: Save
-            DrawButton(btnSave, "💾 Save", new Color(0.2f, 0.45f, 0.6f), "Save the current portrait permanently to your Documents folder.");
-            if (Widgets.ButtonInvisible(btnSave))
+            if (DrawButton(btnSave, "💾 Save", new Color(0.2f, 0.45f, 0.6f), "Save the current portrait permanently to your Documents folder."))
             {
                 string path = AIPortraitsManager.SaveCurrentPortrait(pawn);
                 if (path != null)
@@ -1038,35 +1037,57 @@ namespace AIPortraits
             }
 
             // Button 3: Gallery
-            DrawButton(btnFolder, "🎬 Gallery", new Color(0.35f, 0.28f, 0.5f), "Browse saved portraits and videos for this pawn.");
-            if (Widgets.ButtonInvisible(btnFolder))
+            if (DrawButton(btnFolder, "🎬 Gallery", new Color(0.35f, 0.28f, 0.5f), "Browse saved portraits and videos for this pawn."))
             {
                 Find.WindowStack.Add(new Dialog_PawnGallery(pawn));
             }
         }
 
-        private static void DrawButton(Rect rect, string label, Color bgColor, string tooltip)
+        private static bool DrawButton(Rect rect, string label, Color bgColor, string tooltip)
         {
-            // Hover brightness boost (Jules-bot palette/add-hover-states)
-            if (Mouse.IsOver(rect))
-            {
-                bgColor.r += 0.1f;
-                bgColor.g += 0.1f;
-                bgColor.b += 0.1f;
-            }
             Widgets.DrawBoxSolid(rect, bgColor);
+            Widgets.DrawHighlightIfMouseover(rect);
+
             GUI.color = new Color(1f, 1f, 1f, 0.15f); Widgets.DrawBox(rect, 1); GUI.color = Color.white;
-            Text.Font = GameFont.Tiny; Text.Anchor = TextAnchor.MiddleCenter;
-            Widgets.Label(rect, label);
-            Text.Anchor = TextAnchor.UpperLeft; Text.Font = GameFont.Small;
+
+            TextAnchor oldAnchor = Text.Anchor;
+            GameFont oldFont = Text.Font;
+            try
+            {
+                Text.Font = GameFont.Tiny;
+                Text.Anchor = TextAnchor.MiddleCenter;
+                Widgets.Label(rect, label);
+            }
+            finally
+            {
+                Text.Anchor = oldAnchor;
+                Text.Font = oldFont;
+            }
+
             TooltipHandler.TipRegion(rect, tooltip);
+
+            bool clicked = Widgets.ButtonInvisible(rect);
+            if (clicked) SoundDefOf.Click.PlayOneShotOnCamera(null);
+            return clicked;
         }
 
         private static void DrawCenteredLabel(Rect rect, string text, GameFont font, Color color)
         {
-            Text.Font = font; Text.Anchor = TextAnchor.MiddleCenter;
-            GUI.color = color; Widgets.Label(rect, text); GUI.color = Color.white;
-            Text.Anchor = TextAnchor.UpperLeft; Text.Font = GameFont.Small;
+            TextAnchor oldAnchor = Text.Anchor;
+            GameFont oldFont = Text.Font;
+            try
+            {
+                Text.Font = font;
+                Text.Anchor = TextAnchor.MiddleCenter;
+                GUI.color = color;
+                Widgets.Label(rect, text);
+            }
+            finally
+            {
+                GUI.color = Color.white;
+                Text.Anchor = oldAnchor;
+                Text.Font = oldFont;
+            }
         }
     }
 
@@ -1415,6 +1436,7 @@ namespace AIPortraits
             // Click
             if (Widgets.ButtonInvisible(tile))
             {
+                SoundDefOf.Click.PlayOneShotOnCamera(null);
                 if (e.isVideo)
                     PlayGalleryVideo(e.path);
                 else if (e.thumb != null)
