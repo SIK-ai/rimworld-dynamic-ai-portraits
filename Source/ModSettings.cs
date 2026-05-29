@@ -195,6 +195,20 @@ namespace AIPortraits
         public Dictionary<string, bool> pawnGearRef       = new Dictionary<string, bool>();
         public Dictionary<string, bool> pawnRefPortrait   = new Dictionary<string, bool>();
 
+        // Working lists for Scribe_Collections
+        private List<string> activePortraitsKeys;
+        private List<string> activePortraitsValues;
+        private List<string> pawnFramingKeys;
+        private List<string> pawnFramingValues;
+        private List<string> pawnVideoTogglesKeys;
+        private List<bool> pawnVideoTogglesValues;
+        private List<string> pawnExcludeHelmetKeys;
+        private List<bool> pawnExcludeHelmetValues;
+        private List<string> pawnGearRefKeys;
+        private List<bool> pawnGearRefValues;
+        private List<string> pawnRefPortraitKeys;
+        private List<bool> pawnRefPortraitValues;
+
         // Debug Mode — opt-in structured logging to AIPortraitsCache/DebugLogs (see DebugLog.cs).
         public bool debugMode = false;
 
@@ -273,25 +287,22 @@ namespace AIPortraits
             Scribe_Values.Look(ref storyLlmModel, "storyLlmModel", "gemini-2.5-flash");
 
             Scribe_Values.Look(ref debugMode,          "debugMode",        false);
-            Scribe_Collections.Look(ref activePortraits, "activePortraits", LookMode.Value, LookMode.Value);
-            Scribe_Collections.Look(ref pawnFraming, "pawnFraming", LookMode.Value, LookMode.Value);
-            Scribe_Collections.Look(ref pawnVideoToggles, "pawnVideoToggles", LookMode.Value, LookMode.Value);
-            Scribe_Collections.Look(ref pawnExcludeHelmet, "pawnExcludeHelmet", LookMode.Value, LookMode.Value);
-            Scribe_Collections.Look(ref pawnGearRef, "pawnGearRef", LookMode.Value, LookMode.Value);
-            Scribe_Collections.Look(ref pawnRefPortrait, "pawnRefPortrait", LookMode.Value, LookMode.Value);
-
-            if (activePortraits == null)
-                activePortraits = new Dictionary<string, string>();
-            if (pawnFraming == null)
-                pawnFraming = new Dictionary<string, string>();
-            if (pawnVideoToggles == null)
-                pawnVideoToggles = new Dictionary<string, bool>();
-            if (pawnExcludeHelmet == null) pawnExcludeHelmet = new Dictionary<string, bool>();
-            if (pawnGearRef == null) pawnGearRef = new Dictionary<string, bool>();
-            if (pawnRefPortrait == null) pawnRefPortrait = new Dictionary<string, bool>();
+            Scribe_Collections.Look(ref activePortraits, "activePortraits", LookMode.Value, LookMode.Value, ref activePortraitsKeys, ref activePortraitsValues);
+            Scribe_Collections.Look(ref pawnFraming, "pawnFraming", LookMode.Value, LookMode.Value, ref pawnFramingKeys, ref pawnFramingValues);
+            Scribe_Collections.Look(ref pawnVideoToggles, "pawnVideoToggles", LookMode.Value, LookMode.Value, ref pawnVideoTogglesKeys, ref pawnVideoTogglesValues);
+            Scribe_Collections.Look(ref pawnExcludeHelmet, "pawnExcludeHelmet", LookMode.Value, LookMode.Value, ref pawnExcludeHelmetKeys, ref pawnExcludeHelmetValues);
+            Scribe_Collections.Look(ref pawnGearRef, "pawnGearRef", LookMode.Value, LookMode.Value, ref pawnGearRefKeys, ref pawnGearRefValues);
+            Scribe_Collections.Look(ref pawnRefPortrait, "pawnRefPortrait", LookMode.Value, LookMode.Value, ref pawnRefPortraitKeys, ref pawnRefPortraitValues);
 
             if (Scribe.mode == LoadSaveMode.PostLoadInit)
             {
+                if (activePortraits == null) activePortraits = new Dictionary<string, string>();
+                if (pawnFraming == null) pawnFraming = new Dictionary<string, string>();
+                if (pawnVideoToggles == null) pawnVideoToggles = new Dictionary<string, bool>();
+                if (pawnExcludeHelmet == null) pawnExcludeHelmet = new Dictionary<string, bool>();
+                if (pawnGearRef == null) pawnGearRef = new Dictionary<string, bool>();
+                if (pawnRefPortrait == null) pawnRefPortrait = new Dictionary<string, bool>();
+
                 if (manhwaStylePrompt != null && (manhwaStylePrompt.Contains("no realistic skin texture") || manhwaStylePrompt.Contains("non-photorealistic")))
                 {
                     manhwaStylePrompt = "flat 2D webtoon manhwa drawing, hand-drawn digital illustration, bold clean inked outlines, flat cel-shaded color fills, hard-edged anime shadows, bright saturated CMYK print-style colors, expressive stylized anime eyes, glossy stylized hair, crisp clean line art, masterpiece webtoon key visual, strictly 2D flat art, smooth flat skin rendering, no lens blur, no depth of field";
