@@ -984,6 +984,7 @@ namespace AIPortraits
 
             if (Widgets.ButtonInvisible(btn))
             {
+                SoundDefOf.Click.PlayOneShotOnCamera(null);
                 AIPortraitsMod.settings.portraitStyle = style;
                 AIPortraitsMod.Instance.WriteSettings();
             }
@@ -1008,6 +1009,7 @@ namespace AIPortraits
             DrawButton(btnNew, newLabel, newColor, newTooltip);
             if (Widgets.ButtonInvisible(btnNew))
             {
+                SoundDefOf.Click.PlayOneShotOnCamera(null);
                 if (videoModeNew)
                 {
                     byte[] imgBytes = AIPortraitsManager.GetActivePortraitBytes(pawn);
@@ -1026,6 +1028,7 @@ namespace AIPortraits
             DrawButton(btnSave, "💾 Save", new Color(0.2f, 0.45f, 0.6f), "Save the current portrait permanently to your Documents folder.");
             if (Widgets.ButtonInvisible(btnSave))
             {
+                SoundDefOf.Click.PlayOneShotOnCamera(null);
                 string path = AIPortraitsManager.SaveCurrentPortrait(pawn);
                 if (path != null)
                 {
@@ -1041,6 +1044,7 @@ namespace AIPortraits
             DrawButton(btnFolder, "🎬 Gallery", new Color(0.35f, 0.28f, 0.5f), "Browse saved portraits and videos for this pawn.");
             if (Widgets.ButtonInvisible(btnFolder))
             {
+                SoundDefOf.Click.PlayOneShotOnCamera(null);
                 Find.WindowStack.Add(new Dialog_PawnGallery(pawn));
             }
         }
@@ -1415,6 +1419,7 @@ namespace AIPortraits
             // Click
             if (Widgets.ButtonInvisible(tile))
             {
+                SoundDefOf.Click.PlayOneShotOnCamera(null);
                 if (e.isVideo)
                     PlayGalleryVideo(e.path);
                 else if (e.thumb != null)

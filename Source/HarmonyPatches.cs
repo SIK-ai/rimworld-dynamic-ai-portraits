@@ -314,6 +314,7 @@ namespace AIPortraits
 
             if (Widgets.ButtonInvisible(rect))
             {
+                SoundDefOf.Click.PlayOneShotOnCamera(null);
                 if (AIPortraitsMod.settings != null)
                 {
                     if (AIPortraitsMod.settings.pawnFraming == null) AIPortraitsMod.settings.pawnFraming = new System.Collections.Generic.Dictionary<string, string>();
@@ -351,6 +352,7 @@ namespace AIPortraits
 
             if (Widgets.ButtonInvisible(rect))
             {
+                SoundDefOf.Click.PlayOneShotOnCamera(null);
                 if (videoActive)
                 {
                     // Video mode: regenerate ONLY the video, reusing the existing portrait
@@ -410,7 +412,11 @@ namespace AIPortraits
             Widgets.Label(rect, label);
             Text.Anchor = TextAnchor.UpperLeft;
             TooltipHandler.TipRegion(rect, tip);
-            return Widgets.ButtonInvisible(rect);
+            if (Widgets.ButtonInvisible(rect)) {
+                SoundDefOf.Click.PlayOneShotOnCamera(null);
+                return true;
+            }
+            return false;
         }
 
         // ⚙ Settings — per-image (pawn + active framing) toggle menu. Each option shows its
@@ -466,6 +472,7 @@ namespace AIPortraits
 
             if (Widgets.ButtonInvisible(rect))
             {
+                SoundDefOf.Click.PlayOneShotOnCamera(null);
                 bool newState = !active;
                 if (AIPortraitsMod.settings != null)
                 {
