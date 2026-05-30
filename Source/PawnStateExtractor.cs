@@ -711,9 +711,10 @@ namespace AIPortraits
                     if (psylinkHediff != null)
                         s.psylinkLevel = (int)psylinkHediff.Severity;
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
                     // PsychicAmplifier may not exist on this version — silently skip
+                    if (Prefs.DevMode) Log.Warning("[Dynamic AI Portraits] Ignored exception checking for psylink: " + ex);
                 }
             }
 
@@ -725,7 +726,7 @@ namespace AIPortraits
                 if (pawn.kindDef != null)
                     s.pawnKind = pawn.kindDef.label;
             }
-            catch (Exception) { }
+            catch (Exception ex) { if (Prefs.DevMode) Log.Warning("[Dynamic AI Portraits] Ignored exception: " + ex); }
 
             // ── ROMANCE ──────────────────────────────────────────────────────────
             if (pawn.relations != null)
@@ -740,7 +741,7 @@ namespace AIPortraits
                         else if (r == "lover" || r == "fiance" || r == "fiancee") s.hasLover = true;
                     }
                 }
-                catch (Exception) { }
+                catch (Exception ex) { if (Prefs.DevMode) Log.Warning("[Dynamic AI Portraits] Ignored exception: " + ex); }
             }
 
             // ── CAPTIVITY (Prisoner / Slave) ─────────────────────────────────────
@@ -749,7 +750,7 @@ namespace AIPortraits
                 s.isPrisoner = pawn.IsPrisoner;
                 s.isSlave    = pawn.IsSlave;
             }
-            catch (Exception) { }
+            catch (Exception ex) { if (Prefs.DevMode) Log.Warning("[Dynamic AI Portraits] Ignored exception: " + ex); }
 
             // ── ANOMALY: ghoul / mutant ──────────────────────────────────────────
             try
@@ -758,7 +759,7 @@ namespace AIPortraits
                     pawn.kindDef.defName.ToLower().Contains("ghoul"))
                     s.isGhoul = true;
             }
-            catch (Exception) { }
+            catch (Exception ex) { if (Prefs.DevMode) Log.Warning("[Dynamic AI Portraits] Ignored exception: " + ex); }
 
             return s;
         }

@@ -1,0 +1,3 @@
+## 2024-05-15 - [Log hygiene]
+**Action:** Wrapped all unconditional `Log.Message` calls in `if (Prefs.DevMode)` across 8 files (`ModController.cs`, `UI_AIPortraitCard.cs`, `U2NetRemover.cs`, `VideoMatteProcessor.cs`, `CacheManager.cs`, `AsyncAIClient.cs`, `StoryOrchestrator.cs`, `StoryArtDirector.cs`). Updated empty silent `catch (Exception)` blocks in `PawnStateExtractor.cs` and `ModSettings.cs` to use `Log.Warning` when `Prefs.DevMode` is active. Converted an overlay draw `Log.Warning` in `HarmonyPatches.cs` to `Log.WarningOnce`. Added `if (Prefs.DevMode)` wrapper for a few returned silent `catch` in `AsyncAIClient.cs`.
+**Learning:** Verified C# syntax with `mcs --parse`. Prevented log spam and exposed silent errors behind DevMode.
