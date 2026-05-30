@@ -53,10 +53,10 @@ The mod's **API Settings** tab allows configuring your preferred provider and mo
 - **Setup:** sign up at [dash.cloudflare.com](https://dash.cloudflare.com), retrieve your **Account ID** from the dashboard, create an **API Token** with `Workers AI Read` permission, and paste both into the API Key field as `account_id:token` (separated by a single colon).
 - Best for: most users.
 
-### 💎 Google Imagen 4 — Best quality
+### 💎 Google Imagen 4 & Gemini (Nano Banana) — Best quality
 - $0.02 per image (Fast tier).
 - ~3s per portrait, **true transparent PNG output**.
-- Models: `imagen-4.0-fast`, `imagen-4.0-generate`, `imagen-4.0-ultra`.
+- Models: `imagen-4.0-fast`, `imagen-4.0-generate`, `imagen-4.0-ultra`, `imagen-3.0-fast`, `nanobanana-2` (Gemini 3.1 Flash Image), `nanobanana` (Gemini 2.5 Flash Image), `nanobanana-pro` (Gemini 3 Pro Image).
 - **Setup:** get a free API key at [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey), paste it.
 - Best for: high-quality style adherence and native transparency.
 
