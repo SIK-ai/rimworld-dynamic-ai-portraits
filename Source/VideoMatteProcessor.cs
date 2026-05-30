@@ -75,7 +75,7 @@ namespace AIPortraits
                 UnityEngine.Object.DontDestroyOnLoad(go);
                 VideoMatteProcessor proc = go.AddComponent<VideoMatteProcessor>();
                 proc.Begin(mp4Path, delegate { lock (inProgress) { inProgress.Remove(mp4Path); } });
-                Log.Message("[Dynamic AI Portraits] Video matte queued (" + framing + "): " + Path.GetFileName(mp4Path));
+                if (Prefs.DevMode) Log.Message("[Dynamic AI Portraits] Video matte queued (" + framing + "): " + Path.GetFileName(mp4Path));
             }
             catch (Exception ex)
             {
@@ -180,7 +180,7 @@ namespace AIPortraits
             // the leftover background to ~0.1%.
             int wpx = width, hpx = height;
             const byte AlphaFloor = 48;   // faint low-confidence alpha below this -> transparent
-            Log.Message("[Dynamic AI Portraits] Video matte START: " + n + " frames (per-frame, temporal window) -> " + outDir);
+            if (Prefs.DevMode) Log.Message("[Dynamic AI Portraits] Video matte START: " + n + " frames (per-frame, temporal window) -> " + outDir);
             List<byte[]> alphas = new List<byte[]>(n);
             for (int i = 0; i < n; i++)
             {
@@ -206,7 +206,7 @@ namespace AIPortraits
                     }
                 }
                 alphas.Add(a);
-                if ((i % 24) == 0) Log.Message("[Dynamic AI Portraits] matte alpha pass " + i + "/" + n);
+                if (Prefs.DevMode && (i % 24) == 0) Log.Message("[Dynamic AI Portraits] matte alpha pass " + i + "/" + n);
                 yield return null;
             }
 
@@ -286,14 +286,14 @@ namespace AIPortraits
                 }
                 catch (Exception ex) { Log.Warning("[Dynamic AI Portraits] frame write failed: " + ex.Message); }
 
-                if ((i % 24) == 0) Log.Message("[Dynamic AI Portraits] matte write pass " + i + "/" + n);
+                if (Prefs.DevMode && (i % 24) == 0) Log.Message("[Dynamic AI Portraits] matte write pass " + i + "/" + n);
                 yield return null;
             }
 
             double fps = (vp != null && vp.frameRate > 0f) ? vp.frameRate : 24.0;
             try { File.WriteAllText(Path.Combine(outDir, "manifest.txt"), written + "\n" + fps.ToString("0.###")); }
             catch { }
-            Log.Message("[Dynamic AI Portraits] Video matte complete: " + written + " frames -> " + outDir);
+            if (Prefs.DevMode) Log.Message("[Dynamic AI Portraits] Video matte complete: " + written + " frames -> " + outDir);
             Finish();
         }
 

@@ -70,7 +70,7 @@ namespace AIPortraits
                     foreach (string k in session.InputMetadata.Keys) { inputName = k; break; }
                     initOk = !string.IsNullOrEmpty(inputName);
                     if (initOk)
-                        Log.Message("[Dynamic AI Portraits] u2netp ONNX background remover initialized.");
+                        if (Prefs.DevMode) Log.Message("[Dynamic AI Portraits] u2netp ONNX background remover initialized.");
                 }
                 catch (Exception ex)
                 {

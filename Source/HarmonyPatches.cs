@@ -280,7 +280,7 @@ namespace AIPortraits
                 // An unhandled exception in this IMGUI postfix can blank the whole overlay
                 // (and spam the log). Catch it, record it for backtracking, and keep going.
                 DebugLog.Log("DRAW", "EXCEPTION pawn=" + (pawn != null ? pawn.LabelShortCap : "?") + ": " + ex.Message);
-                Log.Warning("[Dynamic AI Portraits] overlay draw exception: " + ex);
+                Log.WarningOnce("[Dynamic AI Portraits] overlay draw exception: " + ex, 847291);
             }
         }
 
