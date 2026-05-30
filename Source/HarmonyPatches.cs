@@ -12,6 +12,11 @@ namespace AIPortraits
     [HarmonyPatch(typeof(MainTabWindow_Inspect), "ExtraOnGUI")]
     public static class Patch_MainTabWindow_Inspect_ExtraOnGUI
     {
+        private static string cachedMakingAlive;
+        private static string cachedClickToAnimate;
+        private static string cachedPainting;
+        private static string cachedNoPortrait;
+
         // Overlay toolbar: collapsed to one ⊕ button by default; ⊕/▽ toggle this.
         private static bool overlayExpanded = false;
 
@@ -142,7 +147,7 @@ namespace AIPortraits
                         Widgets.DrawBoxSolid(portraitRect, new Color(0f, 0f, 0f, 0.4f));
                         Text.Anchor = TextAnchor.MiddleCenter;
                         GUI.color = new Color(0.6f, 0.85f, 1f);
-                        Widgets.Label(portraitRect, "Making alive...");
+                        Widgets.Label(portraitRect, cachedMakingAlive ?? (cachedMakingAlive = "DynamicAIPortraits_MakingAlive".Translate()));
                         GUI.color = Color.white;
                         Text.Anchor = TextAnchor.UpperLeft;
                     }
@@ -163,7 +168,7 @@ namespace AIPortraits
                         Text.Anchor = TextAnchor.LowerCenter;
                         Text.Font = GameFont.Tiny;
                         GUI.color = new Color(0.6f, 0.85f, 1f, 0.9f);
-                        Widgets.Label(portraitRect, "Click \u21bb to animate");
+                        Widgets.Label(portraitRect, cachedClickToAnimate ?? (cachedClickToAnimate = "DynamicAIPortraits_ClickToAnimate".Translate()));
                         GUI.color = Color.white;
                         Text.Font = GameFont.Small;
                         Text.Anchor = TextAnchor.UpperLeft;
@@ -188,7 +193,7 @@ namespace AIPortraits
                     if (status == GenerationStatus.Generating)
                     {
                         GUI.color = new Color(0.6f, 0.85f, 1f);
-                        Widgets.Label(portraitRect, "Painting...");
+                        Widgets.Label(portraitRect, cachedPainting ?? (cachedPainting = "DynamicAIPortraits_Painting".Translate()));
                     }
                     else if (status == GenerationStatus.Error)
                     {
@@ -199,7 +204,7 @@ namespace AIPortraits
                     else
                     {
                         GUI.color = new Color(0.45f, 0.45f, 0.45f);
-                        Widgets.Label(portraitRect, "No portrait\nClick \u21BB to generate");
+                        Widgets.Label(portraitRect, cachedNoPortrait ?? (cachedNoPortrait = "DynamicAIPortraits_NoPortrait".Translate()));
                     }
                     GUI.color = Color.white;
                     Text.Anchor = TextAnchor.UpperLeft;
