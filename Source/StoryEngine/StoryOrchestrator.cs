@@ -20,10 +20,13 @@ namespace AIPortraits.StoryEngine
             if (AIPortraitsMod.settings == null || !AIPortraitsMod.settings.enableStoryEngine)
                 return;
 
-            // Run once every 2000 ticks (~30 seconds of normal speed) to avoid heavy polling
+            // Stagger polling across different ticks to avoid CPU spikes during tick loops
             if (Find.TickManager.TicksGame % 2000 == 0)
             {
                 StoryLogTracker.PollNativeLogs();
+            }
+            else if (Find.TickManager.TicksGame % 2000 == 1000)
+            {
                 StoryLogTracker.PollExternalLogs();
             }
 
