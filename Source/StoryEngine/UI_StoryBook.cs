@@ -149,8 +149,9 @@ namespace AIPortraits.StoryEngine
             float totalHeight = 0f;
             float elementWidth = outRect.width - 24f; // subtract scrollbar width
 
-            foreach (var el in elements)
+            for (int i = 0; i < elements.Count; i++)
             {
+                var el = elements[i];
                 if (el.isImage)
                 {
                     if (el.texture != null)
@@ -174,8 +175,9 @@ namespace AIPortraits.StoryEngine
             Widgets.BeginScrollView(outRect, ref scrollPos, viewRect);
 
             float currentY = 0f;
-            foreach (var el in elements)
+            for (int i = 0; i < elements.Count; i++)
             {
+                var el = elements[i];
                 if (el.isImage)
                 {
                     if (el.texture != null)
